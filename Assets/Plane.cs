@@ -40,7 +40,7 @@ public class Plane : MonoBehaviour
         transform.localRotation = Quaternion.Euler(new Vector3(0, 0, curRot + rotAmount));
 
         // stabilization
-        Debug.Log($"STABILIZATION: {rotCounter}");
+        //Debug.Log($"STABILIZATION: {rotCounter}");
 
         if ((rotCounter >= 2) && (rotCounter > 0)) {
             rotCounter -= 2;
