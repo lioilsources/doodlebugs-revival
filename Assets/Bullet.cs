@@ -11,20 +11,7 @@ public class Bullet : MonoBehaviour
         Debug.Log("Bullet");
     }
 
-    // not triggered why?
-    void OnCollisionEnter2D(Collision2D other) {
-        var effect = Instantiate(hitEffect, transform.position, Quaternion.identity);
-        Destroy(effect, 0.8f);
-        Destroy(gameObject);
-
-        Debug.Log("Bullet collision");
-    }
-
     void OnTriggerEnter2D(Collider2D other) {
-
-        Debug.Log($"{other.GetComponent<GameObject>().GetInstanceID()}");
-        Debug.Log($"{GameObject.Find("Cloud").GetInstanceID()}");
-
         if (other.gameObject.name != "Plane") {
             var effect = Instantiate(hitEffect, transform.position, Quaternion.identity);
             Destroy(effect, 0.8f);
