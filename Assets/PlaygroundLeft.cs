@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Cloud : MonoBehaviour
+public class PlaygroundLeft : MonoBehaviour
 {
     public GameObject player;
     void OnTriggerEnter2D() {

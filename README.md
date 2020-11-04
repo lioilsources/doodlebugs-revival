@@ -1,3 +1,10 @@
+4/11/2020
+- fix rotation on reverse direction
+- GameObject.SendMessage() instead of sharing  variables between scripts or even have some globals
+
+03/11/2020
+- playground by left and right border collider triggers show off bug in rotation code
+
 02/11/2020
 - explosion animation
 - ground and cloud explosion on trigger
@@ -16,8 +23,8 @@
 
 28/10/2020
 - plane asset
-- plane movement
-- cloud colision rotation
+- plane movement: `rb.velocity = rb.transform.right * speed;`
+- cloud colision rotation: `rb.transform.localRotation *= Quaternion.Euler(0, 180, 0);`
 
 Types:
 - functional (game development)
