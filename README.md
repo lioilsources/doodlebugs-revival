@@ -1,3 +1,10 @@
+7/11/2020
+- movement restriction
+- space: speed = 0
+- left, right: delayed flip, rotation = 0
+- ground: explosion
+- speed incerementation on fall down
+
 4/11/2020
 - fix rotation on reverse direction
 - GameObject.SendMessage() instead of sharing  variables between scripts or even have some globals

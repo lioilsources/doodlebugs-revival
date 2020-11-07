@@ -7,7 +7,7 @@ public class Plane : MonoBehaviour
 {
     public Rigidbody2D rb;
 
-    public float speed = 10f;
+    public float speed = 5f;
 
     // private
     float rotCounter;
@@ -60,10 +60,42 @@ public class Plane : MonoBehaviour
         } else if ((rotCounter > -2) && (rotCounter < 2)) {
             rotCounter = 0;
         }
+
+        // engines on on 270 rotation
+        //Debug.Log($"ROTATION: {curRot}");
+        //Debug.Log($"ROTATION: {rotCounter}");
+        Debug.Log($"SPEED: {speed}");
+        Debug.Log($"GRAVITY: {rb.gravityScale}");
+
+        if (speed == 0 && (curRot > 265 && curRot < 270)) {
+            speed = 10;
+        }
+        // speedup on head down
+        if (curRot > 265 && curRot < 270) {
+            speed += 1;
+        }
     }
 
     public void Flip() {
         rb.transform.localRotation *= Quaternion.Euler(0, 180, 0);
         isReversed = !isReversed;
+
+        // back from edge with normalized values
+        if (isReversed) {
+            transform.localRotation = Quaternion.Euler(new Vector3(0, 180, 0));
+        } else {
+            transform.localRotation = Quaternion.Euler(new Vector3(0, 0, 0));
+        }
+        speed = 5;
+    }
+
+    public void EngineOff() {
+        speed = 0;
+        rb.gravityScale = 5;
+    }
+
+    public void EngineOn() {
+        speed = 5;
+        rb.gravityScale = 0;
     }
 }
