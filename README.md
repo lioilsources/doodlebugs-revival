@@ -1,3 +1,6 @@
+8/11/2020
+- speed control: down => speed up, up => speed down
+
 7/11/2020
 - movement restriction
 - space: speed = 0

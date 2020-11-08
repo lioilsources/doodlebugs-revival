@@ -24,10 +24,10 @@ public class Plane : MonoBehaviour
     void Update() {
         // rotation amount/movement
         if (Input.GetKey(KeyCode.LeftArrow)) {
-            rotCounter += 1;
+            rotCounter += 30;
         }
         if (Input.GetKey(KeyCode.RightArrow)) {
-            rotCounter -= 1;
+            rotCounter -= 30;
         }
 
         if (Input.GetKeyDown(KeyCode.DownArrow)) {
@@ -52,14 +52,15 @@ public class Plane : MonoBehaviour
         }
 
         // stabilization
-        //Debug.Log($"STABILIZATION: {rotCounter}");
-        if ((rotCounter >= 2) && (rotCounter > 0)) {
-            rotCounter -= 2;
-        } else if ((rotCounter <= -2) && (rotCounter < 0)) {
-            rotCounter += 2;
-        } else if ((rotCounter > -2) && (rotCounter < 2)) {
-            rotCounter = 0;
-        }
+        Debug.Log($"STABILIZATION: {rotCounter}");
+        // if ((rotCounter >= 2) && (rotCounter > 0)) {
+        //     rotCounter -= 2;
+        // } else if ((rotCounter <= -2) && (rotCounter < 0)) {
+        //     rotCounter += 2;
+        // } else if ((rotCounter > -2) && (rotCounter < 2)) {
+        //     rotCounter = 0;
+        // }
+        rotCounter = 0;
 
         // engines on on 270 rotation
         //Debug.Log($"ROTATION: {curRot}");
@@ -68,7 +69,7 @@ public class Plane : MonoBehaviour
         Debug.Log($"GRAVITY: {rb.gravityScale}");
 
         if (speed == 0 && (curRot > 265 && curRot < 270)) {
-            speed = 10;
+            EngineOn();
         }
         // speedup on head down
         if (curRot > 265 && curRot < 270) {

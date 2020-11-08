@@ -12,7 +12,7 @@ public class Bullet : MonoBehaviour
     }
 
     void OnTriggerEnter2D(Collider2D other) {
-        if (other.gameObject.name != "Plane") {
+        if (other.gameObject.name != "Plane" && other.gameObject.name != "Space") {
             var effect = Instantiate(hitEffect, transform.position, Quaternion.identity);
             Destroy(effect, 0.8f);
             Destroy(gameObject);
