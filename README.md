@@ -1,3 +1,7 @@
+15/7/2023
+- move + camera rework based on
+- https://github.com/oussamabonnor1/ChasingPlanes_Unity3D
+
 8/11/2020
 - speed control: down => speed up, up => speed down
 
