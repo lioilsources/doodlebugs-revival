@@ -1,3 +1,43 @@
+16/7/2023
+- (t) GameDevHQ - How to Calculate Angles in Unity - A Unity Math Tutorial
+- https://www.youtube.com/watch?v=s-Ho5hF2Yww
+- direction
+```
+// calculate direction = destination - source
+Vector3 direction = enemy.position - transform.position
+```
+- angle
+``` 
+// calculate the angle using the inverse tangent method
+// Unity eagle system is clockwise (0 on top) oriented; shifted -90 from regular
+float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90;
+// #1 define the rotation along a specific axis using angle
+Quaterion angleAxis = Quaterion.AngleAxis(angle, Vector3.forward);
+// slerp from our current rotation to the new specific rotation
+transform.rotation = Quaterion.Slerp(transform.rotation, angleAxis, Time.deltaTime * 50);
+// or
+// #2 take our current euler angles and we just add our new angle to it
+transform.eulerAngles = Vector3.forward * angle
+```
+- mouse mapping (mouse pointer is enemy now)
+```
+// camera is placed Z = -10
+Vector3 direction = Camera.main.ScreenToWorldPoint(new Vector3(Input.mousePosition.x, Input.mousePosition.y, 10)) - transform.position
+```
+- debug commands
+```
+Debug.DrawRay(transform.position, direction, Color.green);
+Debug.Log("Angle: " + angle);
+```
+- (n) Visual Studio Code reads all projects
+    - cmd + shift + p: shell (Install 'code' command in PATH)
+- (n) Unity Settings: External Tools; generate .csproj files (all)
+- (n) VSCode keyboard mapping
+  - Navigate Forward [ctrl + option + cmd + right arrow]
+  - Navigate Backward [ctrl + option + cmd + left arrow]
+  - Go to Definition [ctrl + option + cmd + enter]
+  - All References [ctrl + option + cmd + space]
+
 15/7/2023
 - move + camera rework based on
 - https://github.com/oussamabonnor1/ChasingPlanes_Unity3D
