@@ -4,10 +4,10 @@ using UnityEngine;
 
 public class Space : MonoBehaviour
 {
-    public GameObject player;
+    public GameObject bird;
     void OnTriggerEnter2D(Collider2D other) {
-        // if (other.gameObject.name == "Plane") {
-        //     player.SendMessage("EngineOff");
-        // }
+        if (other.gameObject.name == "Bird") {
+            bird.SendMessage("EngineOff");
+        }
     }
 }

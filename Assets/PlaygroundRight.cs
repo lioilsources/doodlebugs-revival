@@ -4,10 +4,10 @@ using UnityEngine;
 
 public class PlaygroundRight : MonoBehaviour
 {
-    public GameObject player;
+    public GameObject bird;
     void OnTriggerEnter2D(Collider2D other) {
-        // if (other.gameObject.name == "Plane") {
-        //     player.SendMessage("Flip");
-        // }
+        if (other.gameObject.name == "Bird") {
+            bird.SendMessage("Flip");
+        }
     }
 }
