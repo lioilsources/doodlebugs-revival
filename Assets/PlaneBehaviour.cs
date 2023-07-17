@@ -10,6 +10,9 @@ public class PlaneBehaviour : MonoBehaviour
 	Rigidbody2D rb;
 	public float speed = 5f, rotateSpeed = 50f;
 
+    // debug
+    public Transform cloud;
+
     // Start is called before the first frame update
     void Start()
     {
@@ -21,6 +24,17 @@ public class PlaneBehaviour : MonoBehaviour
     {
         movePlane();
         rotatePlane(Input.GetAxis("Horizontal"));
+
+        // Debug
+        Debug.DrawRay(rb.position, DevMath.CalculateDirection(leftPoint.position, rb.position), Color.red);
+        Debug.DrawRay(rb.position, DevMath.CalculateDirection(rightPoint.position, rb.position), Color.green);
+        Debug.DrawRay(rb.position, DevMath.CalculateDirection(forwardPoint.position, rb.position), Color.blue);
+
+        var cloudDirection = DevMath.CalculateDirection(cloud.position, rb.position);
+        Debug.Log("Cloud direction: " + cloudDirection);
+        Debug.DrawRay(rb.position, cloudDirection, Color.white);
+
+        Debug.Log("Plane position: " + rb.position);
     }
 
     void movePlane(){
