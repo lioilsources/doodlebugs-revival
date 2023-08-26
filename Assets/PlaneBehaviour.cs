@@ -4,14 +4,14 @@ using UnityEngine;
 
 public class PlaneBehaviour : MonoBehaviour
 {
-    public Camera cam;
+    //public Camera cam;
 	public Transform plane;
     public Transform leftPoint, rightPoint, forwardPoint;
 	Rigidbody2D rb;
 	public float speed = 5f, rotateSpeed = 50f;
 
     // debug
-    public Transform cloud;
+    //public Transform cloud;
 
     // Start is called before the first frame update
     void Start()
@@ -30,9 +30,9 @@ public class PlaneBehaviour : MonoBehaviour
         Debug.DrawRay(rb.position, DevMath.CalculateDirection(rightPoint.position, rb.position), Color.green);
         Debug.DrawRay(rb.position, DevMath.CalculateDirection(forwardPoint.position, rb.position), Color.blue);
 
-        var cloudDirection = DevMath.CalculateDirection(cloud.position, rb.position);
-        Debug.Log("Cloud direction: " + cloudDirection);
-        Debug.DrawRay(rb.position, cloudDirection, Color.white);
+        // var cloudDirection = DevMath.CalculateDirection(cloud.position, rb.position);
+        // Debug.Log("Cloud direction: " + cloudDirection);
+        // Debug.DrawRay(rb.position, cloudDirection, Color.white);
 
         Debug.Log("Plane position: " + rb.position);
     }

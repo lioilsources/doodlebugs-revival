@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Space : MonoBehaviour
+public class DoodlebugsSpace : MonoBehaviour
 {
     public GameObject bird;
     void OnTriggerEnter2D(Collider2D other) {

@@ -1,3 +1,17 @@
+1/8/2023
+- (t) Code Monkey: COMPLETE Unity Multiplayer Tutorial (Netcode for Game Objects)
+- https://www.youtube.com/watch?v=3yuBOB3VrCk&t=540s
+- PackageManager add com.unity.netcode.gameobjects
+- PackageManager add com.unity.multiplayer.tools
+- (update) NetworkManager.Network Prefabs Lists += NetworkPrefabList
+- (bug) fonts in TextMesh Pro, you need to import package
+- (bug) NetworkManagerUi [SerializeField] private does not show in editor
+- Quantum Console is not free
+- (logs) macOS ~/Library/Company/Project$ tail -f Player.log
+- NetworkManager host, client, server
+- NetworkBehaviour server authority
+- ClientNetworkTransform client authority
+
 16/7/2023
 - (t) GameDevHQ - How to Calculate Angles in Unity - A Unity Math Tutorial
 - https://www.youtube.com/watch?v=s-Ho5hF2Yww

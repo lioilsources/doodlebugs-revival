@@ -52,7 +52,8 @@ public class Bird : MonoBehaviour
         }
 
         // stabilization
-        Debug.Log($"STABILIZATION: {rotCounter}");
+        //Debug.Log($"STABILIZATION: {rotCounter}");
+
         // if ((rotCounter >= 2) && (rotCounter > 0)) {
         //     rotCounter -= 2;
         // } else if ((rotCounter <= -2) && (rotCounter < 0)) {
@@ -65,8 +66,9 @@ public class Bird : MonoBehaviour
         // engines on on 270 rotation
         //Debug.Log($"ROTATION: {curRot}");
         //Debug.Log($"ROTATION: {rotCounter}");
-        Debug.Log($"SPEED: {speed}");
-        Debug.Log($"GRAVITY: {rb.gravityScale}");
+
+        //Debug.Log($"SPEED: {speed}");
+        //Debug.Log($"GRAVITY: {rb.gravityScale}");
 
         if (speed == 0 && (curRot > 265 && curRot < 270)) {
             EngineOn();
