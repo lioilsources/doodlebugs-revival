@@ -1,8 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Netcode;
 
-public class PlaneBehaviour : MonoBehaviour
+public class PlaneBehaviour : NetworkBehaviour
 {
     //public Camera cam;
 	public Transform plane;
