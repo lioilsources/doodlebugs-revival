@@ -2,7 +2,7 @@
 - (unity) ParrelSync https://github.com/VeriorPies/ParrelSync.git?path=/ParrelSync
 
 27/8/2023
-- (unity) version updated to 2022.4.4f1
+- (unity) version updated to 2022.3.4f1
 - (t) Code Monkey: COMPLETE Unity Multiplayer Tutorial (Netcode for Game Objects)
 - https://www.youtube.com/watch?v=3yuBOB3VrCk&t=540s
 - PackageManager add com.unity.netcode.gameobjects
