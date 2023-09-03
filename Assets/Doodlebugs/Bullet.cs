@@ -13,8 +13,8 @@ public class Bullet : NetworkBehaviour
     }
 
     void OnTriggerEnter2D(Collider2D other) {
-        if (!IsServer)
-            return;
+        //if (!IsServer)
+        //    return;
 
         if (other.gameObject.name != "Plane" && other.gameObject.name != "Space") {
             var effect = Instantiate(hitEffect, transform.position, Quaternion.identity);

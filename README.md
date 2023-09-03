@@ -1,10 +1,25 @@
 3/9/2023
+- Networking summary:
+-- NetworkManager - Player Prefab to spawn Plane on Host or on Client on (0,0) position
+-- NetworkManager - Network Prefabs Lists to hol all Network Object Prefab Assets
+-- NetworkManager.Singleton.StartHost() - create host instance
+-- NetworkManager.Singleton.StartClient() - join client instance into existing host
+-- NetworkObject - to extend from NewtworkBehaviour
+-- NetworkObject.IsOwner - to work only with object spawn on the right client
+-- NetworkObject.OwnerClientId - unique network id
+-- annotation [ServerRpc] - triggered on both host/client; executed on host
+-- annotation [ClientRpc] - triggered on host; executed on all clients
+-- ClientNetworkTransform - server authoritative false
+- add Bullet.RigidBody2D Gravity Scale 0->2; if disable NetworkRigidBody2D gravity is also there
+- (issue) there is de-sync with Bullet + Cloud collision; sometime Bullet explode on one screen but not on other
+
+2/9/2023
 - (fix) Plane flies in right direction on startup (x=0, y=0)
 - (update) Bird starting position changed to (x=-19, y=1) to start on left border
-- (update) Plane spees from 5 to 2 to slower movement for debuging purposes
+- (update) Plane speed from 5 to 2 to slower movement for debuging purposes
 - shooting logic use AddForce feature
 - ServerRPC call to broadcast ClientRPC to instantiate local Bullet + AddForce localy on Host & Clients
-- (?) it is confusing to me why in that case I'm not able to remove all that Bulet/Shooting NetworkBehaviour logic (client is not able to connect to host)
+- (?) it is confusing to me why in that case I'm not able to remove all that Bullet/Shooting NetworkBehaviour logic (client is not able to connect to host).
 
 28/8/2023
 - (unity) ParrelSync https://github.com/VeriorPies/ParrelSync.git?path=/ParrelSync
