@@ -1,3 +1,8 @@
+4/9/2023
+- spawning Birds
+- (error) Only the owner can invoke a ServerRpc that requires ownership!
+- (quiz) you can spawn Bird on client but you can move (A,S) only on host
+
 3/9/2023
 - Networking summary:
 -- NetworkManager - Player Prefab to spawn Plane on Host or on Client on (0,0) position

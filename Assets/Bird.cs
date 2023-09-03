@@ -1,13 +1,14 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Netcode;
 
 [RequireComponent(typeof(Rigidbody2D))]
-public class Bird : MonoBehaviour
+public class Bird : NetworkBehaviour
 {
     public Rigidbody2D rb;
 
-    public float speed = 5f;
+    public float speed = 3f;
 
     // private
     float rotCounter;
@@ -30,17 +31,17 @@ public class Bird : MonoBehaviour
             rotCounter -= 30;
         }
 
-        if (Input.GetKeyDown(KeyCode.S)) {
-            Debug.Log($"DOWN {rb.transform.localRotation}");
-            Flip();
-        }
+        //if (Input.GetKeyDown(KeyCode.S)) {
+        //    Debug.Log($"DOWN {rb.transform.localRotation}");
+        //    Flip();
+        //}
     }
 
     // something with physics
     void FixedUpdate()
     {
         // movement
-        rb.velocity = rb.transform.right * speed;
+        rb.velocity = -rb.transform.right * speed;
 
         // rotation
         float rotAmount = rotCounter * Time.deltaTime;

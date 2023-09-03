@@ -19,6 +19,12 @@ public class Shooting : NetworkBehaviour
             
             Debug.Log($"Space {OwnerClientId}");
         }
+
+        // shooting Birds
+        if (Input.GetKeyDown(KeyCode.S))
+        {
+            SpawnBirdServerRpc();
+        }
     }
 
     [ServerRpc]
@@ -36,5 +42,13 @@ public class Shooting : NetworkBehaviour
 
         var rb = bullet.GetComponent<Rigidbody2D>();
         rb.AddForce(firePoint.right * bulletForce, ForceMode2D.Impulse);
+    }
+
+    [ServerRpc]
+    public void SpawnBirdServerRpc()
+    {
+        Debug.Log($"GameManager.SpawnBird {OwnerClientId}");
+        var birdPrefab = GameManager.Instance.birdPrefab;
+        NetworkObjectSpawner.SpawnNewNetworkObject(birdPrefab, birdPrefab.transform.position);
     }
 }
