@@ -20,7 +20,6 @@ public class PlaneBehaviour : NetworkBehaviour
         rb = GetComponent<Rigidbody2D>();
     }
 
-    // Update is called once per frame
     void FixedUpdate()
     {
         movePlane();
@@ -35,11 +34,11 @@ public class PlaneBehaviour : NetworkBehaviour
         // Debug.Log("Cloud direction: " + cloudDirection);
         // Debug.DrawRay(rb.position, cloudDirection, Color.white);
 
-        Debug.Log("Plane position: " + rb.position);
+        //Debug.Log("Plane position: " + rb.position);
     }
 
     void movePlane(){
-		rb.velocity = transform.up * speed;
+		rb.velocity = transform.right * speed;
 	}
 
 	void rotatePlane(float x){	

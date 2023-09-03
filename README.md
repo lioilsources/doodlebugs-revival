@@ -1,3 +1,11 @@
+3/9/2023
+- (fix) Plane flies in right direction on startup (x=0, y=0)
+- (update) Bird starting position changed to (x=-19, y=1) to start on left border
+- (update) Plane spees from 5 to 2 to slower movement for debuging purposes
+- shooting logic use AddForce feature
+- ServerRPC call to broadcast ClientRPC to instantiate local Bullet + AddForce localy on Host & Clients
+- (?) it is confusing to me why in that case I'm not able to remove all that Bulet/Shooting NetworkBehaviour logic (client is not able to connect to host)
+
 28/8/2023
 - (unity) ParrelSync https://github.com/VeriorPies/ParrelSync.git?path=/ParrelSync
 
