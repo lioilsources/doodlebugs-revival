@@ -1,3 +1,34 @@
+20/9/2023
+- GallacticKittens deep dive
+- Scripts
+-- PlayerShipController.cs: input handling for movement if IsOwner
+-- PlayerShipMovement.cs: Update if IsOwner; on movement change call ServerRPC -> ClientRPC to propagate sprite change
+-- PlayerShipShootBullet.cs: input handling for shooting if IsOwner; SpawnNewNetworkObject (Bullet Prefab) + attach character data to BulletController
+-- CharacterDataSO.cs: ScriptableObject, game data, character variations
+- Prefabs
+-- PlayerShipBase: ClientNetworkTransform (controllable on client)
+-- Bullet: NetworkObject
+-- shield: IDabagable (Hit), OnTriggerEnter2D act on Server, 2x NetworkBehaviour scripts NetworkObject on Parent node
+
+10/9/2023
+- (doc) https://docs-multiplayer.unity3d.com/netcode/current/basics/object-spawning/
+- NetworkManager behaviour
+- automatic Spawning Player Prefab (Prefab with NetworkObject/NetworkBehaviour component added)
+- player NetworkPrefab needs to be added in Network Prefab Lists list
+-- host Instantiate local GameObject, on client join it Spawn this object on client with Server ownership (server authority) and sync transform.position
+-- client join server/host and ask server to Instantiate GameObject on host and Spawn on client with Client ownership (client authority)
+- destroying player
+- id: NetworkObject.NetworkObjectId
+-- host Destroy player, Instantiate player, Spawn player
+-- clients call ServerRpc to Destroy client player, Instantiate player NetworkPrewab, Spawn it with client authority
+
+9/9/2023
+- make game playable
+- destroy plane on collision
+- respawn plane
+- world boundaries
+- dedicated server run on dedicated machine
+
 4/9/2023
 - spawning Birds
 - (error) Only the owner can invoke a ServerRpc that requires ownership!
