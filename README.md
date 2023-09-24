@@ -1,3 +1,6 @@
+24/9/2023
+- PlayerController to control movement of Plane
+
 20/9/2023
 - GallacticKittens deep dive
 - Scripts
