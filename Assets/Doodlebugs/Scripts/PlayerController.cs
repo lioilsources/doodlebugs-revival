@@ -11,6 +11,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
     Rigidbody2D rb;
     public float speed = 5f, rotateSpeed = 50f;
 
+    public GameObject hitEffect;
+
     // Start is called before the first frame update
     void Start()
     {
@@ -80,12 +82,42 @@ public class PlayerController : NetworkBehaviour, IDamagable
         NetworkObjectDespawner.DespawnNetworkObject(NetworkObject);
     }
 
+    [ClientRpc]
+    private void RespawnWithExplosionClientRpc()
+    {
+        var effect = Instantiate(hitEffect, transform.position, Quaternion.identity);
+        Destroy(effect, 0.5f);
+
+        transform.position = new Vector3(-10f, 10f, 0f);
+    }
+
     void OnTriggerEnter2D(Collider2D collider)
     {
         if (!IsServer)
             return;
 
-        // If the collider hit a power-up
+        if (collider.gameObject.CompareTag("Bullet"))
+        {
+            Debug.Log($"HIT #server{IsServer}");
+
+            RespawnWithExplosionClientRpc();
+        }
+
+        if (collider.gameObject.CompareTag("Respawn"))
+        {
+            Debug.Log($"Respawn #server{IsServer}");
+
+            RespawnWithExplosionClientRpc();
+        }
+
+        if (collider.gameObject.CompareTag("Player"))
+        {
+            Debug.Log($"Collision #server{IsServer}");
+
+            RespawnWithExplosionClientRpc();
+        }
+
+        //If the collider hit a power-up
         //if (collider.gameObject.CompareTag("PowerUpSpecial"))
         //{
         //    // Check if I have space to take the special

@@ -16,7 +16,7 @@ public class Shooting : NetworkBehaviour
         Debug.Log($"Plane Spawn OwnerClientId#{OwnerClientId} NetworkObjectId#{NetworkObjectId}");
     }
 
-        void Update()
+    void Update()
     {
         if (!IsOwner) return;
 
@@ -44,7 +44,7 @@ public class Shooting : NetworkBehaviour
         Debug.Log($"AddForce {OwnerClientId}");
 
         var bullet = Instantiate(bulletPrefab, firePoint.position, firePoint.rotation);
-        bullet.GetComponent<NetworkObject>().Spawn(true);
+        //bullet.GetComponent<NetworkObject>().Spawn(true);
 
         var rb = bullet.GetComponent<Rigidbody2D>();
         rb.AddForce(firePoint.right * bulletForce, ForceMode2D.Impulse);

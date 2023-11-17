@@ -1,3 +1,10 @@
+17/11/2023
+- respawn PlaneHolder/Player/Plane in Cloud on edge collision
+- respawn Player on hit with Bullet
+- respawn on Players collision
+- plane explosion
+- Camera, Background, Cloude positioning to make bigger playground
+
 24/9/2023
 - PlayerController to control movement of Plane
 
@@ -11,7 +18,7 @@
 - Prefabs
 -- PlayerShipBase: ClientNetworkTransform (controllable on client)
 -- Bullet: NetworkObject
--- shield: IDabagable (Hit), OnTriggerEnter2D act on Server, 2x NetworkBehaviour scripts NetworkObject on Parent node
+-- shield: IDamagable (Hit), OnTriggerEnter2D act on Server, 2x NetworkBehaviour scripts NetworkObject on Parent node
 
 10/9/2023
 - (doc) https://docs-multiplayer.unity3d.com/netcode/current/basics/object-spawning/
