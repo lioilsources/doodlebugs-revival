@@ -91,10 +91,38 @@ public class PlayerController : NetworkBehaviour, IDamagable
         transform.position = new Vector3(-10f, 10f, 0f);
     }
 
+    [ClientRpc]
+    private void MoveRightClientRpc()
+    {
+        var right = GameObject.Find("Right");
+        Debug.Log($"Right{right.transform.position.x}");
+        transform.position = new Vector3(right.transform.position.x - 1.1f, transform.position.y, 0f);
+    }
+
+    [ClientRpc]
+    private void MoveLeftClientRpc()
+    {
+        var left = GameObject.Find("Left");
+
+        Debug.Log($"Left{left.transform.position.x}");
+        transform.position = new Vector3(left.transform.position.x + 1.1f, transform.position.y, 0f);
+    }
+
     void OnTriggerEnter2D(Collider2D collider)
     {
         if (!IsServer)
             return;
+
+        if (collider.name == "Left")
+        {
+            MoveRightClientRpc();
+        }
+
+        if (collider.name == "Right")
+        {
+            MoveLeftClientRpc();
+        }
+
 
         if (collider.gameObject.CompareTag("Bullet"))
         {

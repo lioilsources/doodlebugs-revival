@@ -1,9 +1,12 @@
+20/12/2023
+- do not respawn on left and right borders just reveal on other side
+
 17/11/2023
 - respawn PlaneHolder/Player/Plane in Cloud on edge collision
 - respawn Player on hit with Bullet
 - respawn on Players collision
 - plane explosion
-- Camera, Background, Cloude positioning to make bigger playground
+- Camera, Background, Cloud positioning to make bigger playground
 
 24/9/2023
 - PlayerController to control movement of Plane
