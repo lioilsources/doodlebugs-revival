@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
+using static UnityEngine.GridBrushBase;
 
 public class PlayerController : NetworkBehaviour, IDamagable
 {
@@ -11,6 +12,18 @@ public class PlayerController : NetworkBehaviour, IDamagable
     Rigidbody2D rb;
     public float speed = 5f, rotateSpeed = 50f;
 
+    private float targetSpeed = 5f;
+    private float maxSpeed = 5f;
+    private float minSpeed = 0f;
+
+    private float minRotateSpeed = 1f;
+    private float maxRotateSpeed = 50f;
+
+    private bool engineOff = false;
+
+    private float duration = 1f;
+    private bool rotationDirection;
+
     public GameObject hitEffect;
 
     // Start is called before the first frame update
@@ -19,7 +32,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         rb = GetComponent<Rigidbody2D>();
     }
 
-    void Update() {
+    void FixedUpdate() {
         if (!IsOwner) return;
 
         HandleMovement();
@@ -34,8 +47,40 @@ public class PlayerController : NetworkBehaviour, IDamagable
     }
 
     private void movePlane()
-    {
-        rb.velocity = transform.right * speed;
+    { 
+        speed = Mathf.SmoothStep(speed, targetSpeed, duration * Time.deltaTime);
+        Debug.Log("Speed: " + speed);
+
+        if (speed < 2)
+        {
+            rb.velocity = new Vector3(0, -5, 0);
+            engineOff = true;
+        }
+        else
+        {
+            rb.velocity = transform.right * speed;
+            engineOff = false;
+            duration = 2f;
+        }
+
+        Debug.Log("RotationZ: " + transform.rotation.z);
+        if (engineOff) {
+            // 0.7 or -0.7 (top bottom)
+            var rotation = transform.rotation.z;
+
+            if (rotation > 0.6 && rotation < 0.8)
+            {
+                targetSpeed = maxSpeed + 3;
+                duration = 10f;
+            }
+            
+            if (rotation > -0.8 && rotation < -0.6)
+            {
+                targetSpeed = maxSpeed + 3;
+                duration = 10f;
+            }
+            
+        }
     }
 
     private void rotatePlane(float x)
@@ -112,6 +157,11 @@ public class PlayerController : NetworkBehaviour, IDamagable
     {
         if (!IsServer)
             return;
+
+        if (collider.name == "Space")
+        {
+            targetSpeed = 0;
+        }
 
         if (collider.name == "Left")
         {

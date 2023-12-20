@@ -325,7 +325,7 @@ MonoBehaviour:
   leftPoint: {fileID: 1057374115075258630}
   rightPoint: {fileID: 8264828476842166078}
   forwardPoint: {fileID: 5566772036765997987}
-  speed: 2
+  speed: 5
   rotateSpeed: 50
   hitEffect: {fileID: 187198, guid: e5f000577b307384dad9b7e5eebde6e6, type: 3}
 --- !u!114 &4397465812908535828
