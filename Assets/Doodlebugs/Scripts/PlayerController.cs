@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 using static UnityEngine.GridBrushBase;
+using static UnityEngine.GraphicsBuffer;
 
 public class PlayerController : NetworkBehaviour, IDamagable
 {
@@ -32,6 +33,16 @@ public class PlayerController : NetworkBehaviour, IDamagable
         rb = GetComponent<Rigidbody2D>();
     }
 
+    void Update()
+    {
+        Vector3 forward = transform.TransformDirection(Vector3.left) * 10;
+
+        //Debug.Log($"Update: {transform.position}:{forward}");
+
+        
+        Debug.DrawRay(transform.position, forward, Color.green);
+    }
+
     void FixedUpdate() {
         if (!IsOwner) return;
 
@@ -53,7 +64,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         if (speed < 2)
         {
-            rb.velocity = new Vector3(0, -5, 0);
+            var down = Vector3.down * 5;
+            rb.velocity = down;
+            //rb.velocity = new Vector3(0, -5, 0);
             engineOff = true;
         }
         else
@@ -63,17 +76,14 @@ public class PlayerController : NetworkBehaviour, IDamagable
             duration = 2f;
         }
 
-        Debug.Log("RotationZ: " + transform.rotation.z);
-        if (engineOff) {
-            // 0.7 or -0.7 (top bottom)
-            var rotation = transform.rotation.z;
 
-            if (rotation > 0.6 && rotation < 0.8)
-            {
-                targetSpeed = maxSpeed + 3;
-                duration = 10f;
-            }
-            
+        Debug.Log($"RotationZ: {plane.transform.rotation.z}"); 
+
+        //Debug.Log("RotationZ: " + transform.rotation.z);
+        if (engineOff) {
+            // -0.7 (bottom)
+            var rotation = plane.transform.rotation.z;
+
             if (rotation > -0.8 && rotation < -0.6)
             {
                 targetSpeed = maxSpeed + 3;
@@ -117,6 +127,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
         ) * Mathf.Rad2Deg;
 
         plane.transform.rotation = Quaternion.Euler(new Vector3(0, 0, angle));
+
+        Debug.Log($"rotatePlane{plane.transform.rotation}");
     }
 
     public void Hit(int damage)
@@ -153,14 +165,23 @@ public class PlayerController : NetworkBehaviour, IDamagable
         transform.position = new Vector3(left.transform.position.x + 1.1f, transform.position.y, 0f);
     }
 
+    [ClientRpc]
+    private void SpaceClientRpc()
+    {
+        targetSpeed = 0;
+    }
+
     void OnTriggerEnter2D(Collider2D collider)
     {
         if (!IsServer)
             return;
 
+
         if (collider.name == "Space")
         {
-            targetSpeed = 0;
+            Debug.Log($"HIT Space");
+
+            SpaceClientRpc();
         }
 
         if (collider.name == "Left")
