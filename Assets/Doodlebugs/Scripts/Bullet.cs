@@ -13,31 +13,34 @@ public class Bullet : NetworkBehaviour
     }
 
     void OnTriggerEnter2D(Collider2D other) {
+        if (!IsServer) return;
 
+#if UNITY_EDITOR
         Debug.Log($"OnTriggerEnter2D other#{other} NetworkObjectId#{NetworkObjectId}");
+#endif
 
-        var networkBehaviours = other.gameObject.GetComponents<NetworkBehaviour>();
-        if (networkBehaviours.Length == 0)
+        if (other.gameObject.name != "Space")
         {
-            Debug.Log($"other#{other} is not NetworkObject");
-            return;
+            var damagable = other.gameObject.GetComponent<IDamagable>();
+            if (damagable != null)
+            {
+                damagable.Hit(1);
+            }
+
+            PlayHitFxClientRpc(transform.position);
+
+            if (NetworkObject != null && NetworkObject.IsSpawned)
+            {
+                NetworkObject.Despawn();
+            }
         }
+    }
 
-        var otherOwnerClientId = networkBehaviours[0].OwnerClientId;
-        var targetClientId = otherOwnerClientId;
-
-        Debug.Log($"Bullet trigger#{other} otherOwnerClientId#{otherOwnerClientId}");
-
-        if (other.gameObject.name != "Space") {
-
-            var effect = Instantiate(hitEffect, transform.position, Quaternion.identity);
-            Destroy(effect, 0.8f);
-            Destroy(gameObject);
-
-            //NetworkObjectDespawner.DespawnNetworkObject(NetworkObject);
-        }
-
-        
-        Debug.Log($"Bullet triggered owner: {IsOwner} shooter: {OwnerClientId} target: {targetClientId}");
+    [ClientRpc]
+    private void PlayHitFxClientRpc(Vector3 position)
+    {
+        if (hitEffect == null) return;
+        var effect = Instantiate(hitEffect, position, Quaternion.identity);
+        Destroy(effect, 0.8f);
     }
 }

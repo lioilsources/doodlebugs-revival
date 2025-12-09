@@ -36,10 +36,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     void Update()
     {
         Vector3 forward = transform.TransformDirection(Vector3.left) * 10;
-
+#if UNITY_EDITOR
         //Debug.Log($"Update: {transform.position}:{forward}");
-
-        
+#endif
         Debug.DrawRay(transform.position, forward, Color.green);
     }
 
@@ -60,7 +59,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private void movePlane()
     { 
         speed = Mathf.SmoothStep(speed, targetSpeed, duration * Time.deltaTime);
-        Debug.Log("Speed: " + speed);
+#if UNITY_EDITOR
+        // Debug.Log("Speed: " + speed);
+#endif
 
         if (speed < 2)
         {
@@ -76,8 +77,10 @@ public class PlayerController : NetworkBehaviour, IDamagable
             duration = 2f;
         }
 
-
-        Debug.Log($"RotationZ: {plane.transform.rotation.z}"); 
+        
+#if UNITY_EDITOR
+        // Debug.Log($"RotationZ: {plane.transform.rotation.z}"); 
+#endif
 
         //Debug.Log("RotationZ: " + transform.rotation.z);
         if (engineOff) {
@@ -128,7 +131,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         plane.transform.rotation = Quaternion.Euler(new Vector3(0, 0, angle));
 
-        Debug.Log($"rotatePlane{plane.transform.rotation}");
+#if UNITY_EDITOR
+        // Debug.Log($"rotatePlane{plane.transform.rotation}");
+#endif
     }
 
     public void Hit(int damage)

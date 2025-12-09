@@ -21,9 +21,10 @@ public class Shooting : NetworkBehaviour
         if (!IsOwner) return;
 
         if (Input.GetKeyDown(KeyCode.Space)) {
-            ShootServerRpc();
-            
+            ShootServerRpc(firePoint.position, firePoint.rotation);
+#if UNITY_EDITOR
             Debug.Log($"Space {OwnerClientId}");
+#endif
         }
 
         // shooting Birds
@@ -34,20 +35,20 @@ public class Shooting : NetworkBehaviour
     }
 
     [ServerRpc]
-    void ShootServerRpc() {
-        AddForceClientRpc();
-    }
-
-    [ClientRpc]
-    private void AddForceClientRpc()
+    void ShootServerRpc(Vector3 position, Quaternion rotation)
     {
-        Debug.Log($"AddForce {OwnerClientId}");
-
-        var bullet = Instantiate(bulletPrefab, firePoint.position, firePoint.rotation);
-        //bullet.GetComponent<NetworkObject>().Spawn(true);
-
+        // Instantiate and spawn bullet on the server, then apply force server-side
+        var bullet = Instantiate(bulletPrefab, position, rotation);
+        var netObj = bullet.GetComponent<NetworkObject>();
+        if (netObj != null)
+        {
+            netObj.Spawn(true);
+        }
         var rb = bullet.GetComponent<Rigidbody2D>();
-        rb.AddForce(firePoint.right * bulletForce, ForceMode2D.Impulse);
+        if (rb != null)
+        {
+            rb.AddForce((rotation * Vector3.right) * bulletForce, ForceMode2D.Impulse);
+        }
     }
 
     [ServerRpc]

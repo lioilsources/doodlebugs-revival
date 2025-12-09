@@ -29,8 +29,6 @@ public class GameManager : SingletonNetwork<GameManager>
     public void SpawnBirdServerRpc()
     {
         Debug.Log($"GameManager.SpawnBird {OwnerClientId}");
-        //NetworkObjectSpawner.SpawnNewNetworkObject(birdPrefab, birdPrefab.transform.position);
-
-        var bullet = Instantiate(birdPrefab, birdPrefab.transform.position, birdPrefab.transform.rotation);
+        NetworkObjectSpawner.SpawnNewNetworkObject(birdPrefab, birdPrefab.transform.position);
     }
 }

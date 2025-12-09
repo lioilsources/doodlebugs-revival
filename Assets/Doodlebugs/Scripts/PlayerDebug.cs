@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
-public class PlaneDebug : MonoBehaviour
+public class PlayerDebug : MonoBehaviour
 {
     public Transform leftPoint, rightPoint, forwardPoint;
     private Rigidbody2D rb;
