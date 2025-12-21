@@ -14,26 +14,26 @@
 20/9/2023
 - GallacticKittens deep dive
 - Scripts
--- PlayerShipController.cs: input handling for movement if IsOwner
--- PlayerShipMovement.cs: Update if IsOwner; on movement change call ServerRPC -> ClientRPC to propagate sprite change
--- PlayerShipShootBullet.cs: input handling for shooting if IsOwner; SpawnNewNetworkObject (Bullet Prefab) + attach character data to BulletController
--- CharacterDataSO.cs: ScriptableObject, game data, character variations
+  - PlayerShipController.cs: input handling for movement if IsOwner
+  - PlayerShipMovement.cs: Update if IsOwner; on movement change call ServerRPC -> ClientRPC to propagate sprite change
+  - PlayerShipShootBullet.cs: input handling for shooting if IsOwner; SpawnNewNetworkObject (Bullet Prefab) + attach character data to BulletController
+  - CharacterDataSO.cs: ScriptableObject, game data, character variations
 - Prefabs
--- PlayerShipBase: ClientNetworkTransform (controllable on client)
--- Bullet: NetworkObject
--- shield: IDamagable (Hit), OnTriggerEnter2D act on Server, 2x NetworkBehaviour scripts NetworkObject on Parent node
+  - PlayerShipBase: ClientNetworkTransform (controllable on client)
+  - Bullet: NetworkObject
+  - shield: IDamagable (Hit), OnTriggerEnter2D act on Server, 2x NetworkBehaviour scripts NetworkObject on Parent node
 
 10/9/2023
 - (doc) https://docs-multiplayer.unity3d.com/netcode/current/basics/object-spawning/
 - NetworkManager behaviour
 - automatic Spawning Player Prefab (Prefab with NetworkObject/NetworkBehaviour component added)
 - player NetworkPrefab needs to be added in Network Prefab Lists list
--- host Instantiate local GameObject, on client join it Spawn this object on client with Server ownership (server authority) and sync transform.position
--- client join server/host and ask server to Instantiate GameObject on host and Spawn on client with Client ownership (client authority)
+  - host Instantiate local GameObject, on client join it Spawn this object on client with Server ownership (server authority) and sync transform.position
+  - client join server/host and ask server to Instantiate GameObject on host and Spawn on client with Client ownership (client authority)
 - destroying player
 - id: NetworkObject.NetworkObjectId
--- host Destroy player, Instantiate player, Spawn player
--- clients call ServerRpc to Destroy client player, Instantiate player NetworkPrewab, Spawn it with client authority
+  - host Destroy player, Instantiate player, Spawn player
+  - clients call ServerRpc to Destroy client player, Instantiate player NetworkPrewab, Spawn it with client authority
 
 9/9/2023
 - make game playable
@@ -49,16 +49,16 @@
 
 3/9/2023
 - Networking summary:
--- NetworkManager - Player Prefab to spawn Plane on Host or on Client on (0,0) position
--- NetworkManager - Network Prefabs Lists to hol all Network Object Prefab Assets
--- NetworkManager.Singleton.StartHost() - create host instance
--- NetworkManager.Singleton.StartClient() - join client instance into existing host
--- NetworkObject - to extend from NewtworkBehaviour
--- NetworkObject.IsOwner - to work only with object spawn on the right client
--- NetworkObject.OwnerClientId - unique network id
--- annotation [ServerRpc] - triggered on both host/client; executed on host
--- annotation [ClientRpc] - triggered on host; executed on all clients
--- ClientNetworkTransform - server authoritative false
+  - NetworkManager - Player Prefab to spawn Plane on Host or on Client on (0,0) position
+  - NetworkManager - Network Prefabs Lists to hol all Network Object Prefab Assets
+  - NetworkManager.Singleton.StartHost() - create host instance
+  - NetworkManager.Singleton.StartClient() - join client instance into existing host
+  - NetworkObject - to extend from NewtworkBehaviour
+  - NetworkObject.IsOwner - to work only with object spawn on the right client
+  - NetworkObject.OwnerClientId - unique network id
+  - annotation [ServerRpc] - triggered on both host/client; executed on host
+  - annotation [ClientRpc] - triggered on host; executed on all clients
+  - ClientNetworkTransform - server authoritative false
 - add Bullet.RigidBody2D Gravity Scale 0->2; if disable NetworkRigidBody2D gravity is also there
 - (issue) there is de-sync with Bullet + Cloud collision; sometime Bullet explode on one screen but not on other
 
@@ -92,35 +92,35 @@
 - (t) GameDevHQ - How to Calculate Angles in Unity - A Unity Math Tutorial
 - https://www.youtube.com/watch?v=s-Ho5hF2Yww
 - direction
-```
-// calculate direction = destination - source
-Vector3 direction = enemy.position - transform.position
-```
+  ```
+  // calculate direction = destination - source
+  Vector3 direction = enemy.position - transform.position
+  ```
 - angle
-``` 
-// calculate the angle using the inverse tangent method
-// Unity eagle system is clockwise (0 on top) oriented; shifted -90 from regular
-float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90;
-// #1 define the rotation along a specific axis using angle
-Quaterion angleAxis = Quaterion.AngleAxis(angle, Vector3.forward);
-// slerp from our current rotation to the new specific rotation
-transform.rotation = Quaterion.Slerp(transform.rotation, angleAxis, Time.deltaTime * 50);
-// or
-// #2 take our current euler angles and we just add our new angle to it
-transform.eulerAngles = Vector3.forward * angle
-```
+  ``` 
+  // calculate the angle using the inverse tangent method
+  // Unity eagle system is clockwise (0 on top) oriented; shifted -90 from regular
+  float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90;
+  // #1 define the rotation along a specific axis using angle
+  Quaterion angleAxis = Quaterion.AngleAxis(angle, Vector3.forward);
+  // slerp from our current rotation to the new specific rotation
+  transform.rotation = Quaterion.Slerp(transform.rotation, angleAxis, Time.deltaTime * 50);
+  // or
+  // #2 take our current euler angles and we just add our new angle to it
+  transform.eulerAngles = Vector3.forward * angle
+  ```
 - mouse mapping (mouse pointer is enemy now)
-```
-// camera is placed Z = -10
-Vector3 direction = Camera.main.ScreenToWorldPoint(new Vector3(Input.mousePosition.x, Input.mousePosition.y, 10)) - transform.position
-```
+  ```
+  // camera is placed Z = -10
+  Vector3 direction = Camera.main.ScreenToWorldPoint(new Vector3(Input.mousePosition.x, Input.mousePosition.y, 10)) - transform.position
+  ```
 - debug commands
-```
-Debug.DrawRay(transform.position, direction, Color.green);
-Debug.Log("Angle: " + angle);
-```
+  ```
+  Debug.DrawRay(transform.position, direction, Color.green);
+  Debug.Log("Angle: " + angle);
+  ```
 - (n) Visual Studio Code reads all projects
-    - cmd + shift + p: shell (Install 'code' command in PATH)
+  - cmd + shift + p: shell (Install 'code' command in PATH)
 - (n) Unity Settings: External Tools; generate .csproj files (all)
 - (n) VSCode keyboard mapping
   - Navigate Forward [ctrl + option + cmd + right arrow]

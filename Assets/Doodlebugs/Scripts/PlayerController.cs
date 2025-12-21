@@ -31,6 +31,10 @@ public class PlayerController : NetworkBehaviour, IDamagable
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
+
+        // Omezení FPS pro stabilitu
+        Application.targetFrameRate = 60;
+        QualitySettings.vSyncCount = 0;
     }
 
     void Update()
@@ -58,7 +62,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
     private void movePlane()
     { 
-        speed = Mathf.SmoothStep(speed, targetSpeed, duration * Time.deltaTime);
+        speed = Mathf.SmoothStep(speed, targetSpeed, duration * Time.fixedDeltaTime);
 #if UNITY_EDITOR
         // Debug.Log("Speed: " + speed);
 #endif
