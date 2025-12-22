@@ -2,9 +2,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
-using static UnityEngine.GridBrushBase;
-using static UnityEngine.GraphicsBuffer;
-
 public class PlayerController : NetworkBehaviour, IDamagable
 {
     // TODO annotations for Unity Editor
@@ -145,7 +142,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (!IsServer)
             return;
 
-        NetworkObjectDespawner.DespawnNetworkObject(NetworkObject);
+        RespawnWithExplosionClientRpc();
     }
 
     [ClientRpc]
@@ -161,7 +158,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private void MoveRightClientRpc()
     {
         var right = GameObject.Find("Right");
+#if UNITY_EDITOR
         Debug.Log($"Right{right.transform.position.x}");
+#endif
         transform.position = new Vector3(right.transform.position.x - 1.1f, transform.position.y, 0f);
     }
 
@@ -170,7 +169,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     {
         var left = GameObject.Find("Left");
 
+#if UNITY_EDITOR
         Debug.Log($"Left{left.transform.position.x}");
+#endif
         transform.position = new Vector3(left.transform.position.x + 1.1f, transform.position.y, 0f);
     }
 
@@ -188,7 +189,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         if (collider.name == "Space")
         {
+#if UNITY_EDITOR
             Debug.Log($"HIT Space");
+#endif
 
             SpaceClientRpc();
         }
@@ -206,21 +209,27 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         if (collider.gameObject.CompareTag("Bullet"))
         {
+#if UNITY_EDITOR
             Debug.Log($"HIT #server{IsServer}");
+#endif
 
             RespawnWithExplosionClientRpc();
         }
 
         if (collider.gameObject.CompareTag("Respawn"))
         {
+#if UNITY_EDITOR
             Debug.Log($"Respawn #server{IsServer}");
+#endif
 
             RespawnWithExplosionClientRpc();
         }
 
         if (collider.gameObject.CompareTag("Player"))
         {
+#if UNITY_EDITOR
             Debug.Log($"Collision #server{IsServer}");
+#endif
 
             RespawnWithExplosionClientRpc();
         }
