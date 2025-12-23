@@ -22,9 +22,6 @@ public class Shooting : NetworkBehaviour
 
         if (Input.GetKeyDown(KeyCode.Space)) {
             ShootServerRpc(firePoint.position, firePoint.rotation);
-#if UNITY_EDITOR
-            Debug.Log($"Space {OwnerClientId}");
-#endif
         }
 
     }
