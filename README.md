@@ -1,3 +1,15 @@
+26/12/2025
+- align projectil speed with plane speed
+- fix moving on border colision
+
+22/12/2025
+- try to imitate legacy plane movement by switching off engine in space and more
+
+15/12/2025
+- add Claude Code terminal companion
+- use CursorAi with GPT-5.2
+- fix networking issues
+
 20/12/2023
 - do not respawn on left and right borders just reveal on other side
 

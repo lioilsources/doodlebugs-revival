@@ -16,18 +16,26 @@ public class Shooting : NetworkBehaviour
         Debug.Log($"Plane Spawn OwnerClientId#{OwnerClientId} NetworkObjectId#{NetworkObjectId}");
     }
 
+    Rigidbody2D planeRb;
+
+    void Start()
+    {
+        planeRb = GetComponent<Rigidbody2D>();
+    }
+
     void Update()
     {
         if (!IsOwner) return;
 
         if (Input.GetKeyDown(KeyCode.Space)) {
-            ShootServerRpc(firePoint.position, firePoint.rotation);
+            float planeSpeed = planeRb != null ? planeRb.velocity.magnitude : 0f;
+            ShootServerRpc(firePoint.position, firePoint.rotation, planeSpeed);
         }
 
     }
 
     [ServerRpc]
-    void ShootServerRpc(Vector3 position, Quaternion rotation)
+    void ShootServerRpc(Vector3 position, Quaternion rotation, float planeSpeed)
     {
         // Instantiate and spawn bullet on the server, then apply force server-side
         var bullet = Instantiate(bulletPrefab, position, rotation);
@@ -39,7 +47,9 @@ public class Shooting : NetworkBehaviour
         var rb = bullet.GetComponent<Rigidbody2D>();
         if (rb != null)
         {
-            rb.AddForce((rotation * Vector3.right) * bulletForce, ForceMode2D.Impulse);
+            // Bullet force = base force + plane speed
+            float totalForce = bulletForce + planeSpeed;
+            rb.AddForce((rotation * Vector3.right) * totalForce, ForceMode2D.Impulse);
         }
     }
 }

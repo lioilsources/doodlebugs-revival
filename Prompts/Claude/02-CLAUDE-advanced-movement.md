@@ -91,3 +91,39 @@ On death, all values are reset to defaults:
 - `Assets/PlaygroundLeft.cs`
 - `Assets/PlaygroundRight.cs`
 - `Assets/DoodlebugsSpace.cs`
+
+# Summary of Previous Session Prompts
+
+  Bug Fixes
+
+  1. Network bug - Client hitting host plane caused despawn instead of respawn. Fixed Hit() to call RespawnWithExplosionClientRpc() instead of NetworkObjectDespawner.DespawnNetworkObject()
+  2. Host plane not responding to input - Debug code with early return in FixedUpdate was preventing HandleMovement() from running
+
+  Code Removal
+
+  3. Remove all bird-related code - Deleted Bird.cs, Bird.prefab, PlaygroundLeft.cs, PlaygroundRight.cs, DoodlebugsSpace.cs, and cleaned references from GameManager.cs and Shooting.cs
+
+  Flight Physics Implementation
+
+  4. Realistic speed loss when climbing - Implemented climbDrag system where transform.right.y > 0 decreases speed
+  5. Speed gain when diving - Implemented diveBoost system where transform.right.y < 0 increases speed
+  6. Engine off in Space - inSpace flag prevents engine restart while in Space area
+  7. Gravity system - currentGravity gradually increases when engine is off
+  8. Preserve speed on engine restart - speed = rb.velocity.magnitude keeps fall momentum
+
+  Parameter Tuning
+
+  9. Rotation sensitivity - Made rotateSpeed proportional to plane speed, 4x faster when engine off
+  10. Fall speed reduction - Reduced maxGravity and gravityIncreaseRate multiple times
+  11. Climb/dive balance - Adjusted climbDrag=1f, diveBoost=3f, maxSpeed=20f
+
+  Cleanup & Translation
+
+  12. Translate comments to English - All Czech comments in PlayerController.cs
+  13. Translate planning docs - PLAN-claude.md, PLAN-gpt-5.md, AGENTS.md
+  14. Remove Debug.Log patterns - Removed #if UNITY_EDITOR Debug.Log... blocks
+
+  Documentation
+
+  15. Session summary - Created 02-CLAUDE-base-movement.md documenting all changes
+  
