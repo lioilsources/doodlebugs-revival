@@ -2,12 +2,15 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
+using Unity.Netcode.Components;
+
 public class PlayerController : NetworkBehaviour, IDamagable
 {
     // TODO annotations for Unity Editor
     public Transform plane;
     public Transform leftPoint, rightPoint, forwardPoint;
     Rigidbody2D rb;
+    NetworkTransform networkTransform;
     public float speed = 5f, rotateSpeed = 200f;
 
     private float defaultSpeed = 5f;
@@ -31,6 +34,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
+        networkTransform = GetComponent<NetworkTransform>();
 
         // Limit FPS for stability
         Application.targetFrameRate = 60;
@@ -178,8 +182,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
         var effect = Instantiate(hitEffect, transform.position, Quaternion.identity);
         Destroy(effect, 0.5f);
 
-        // Reset position and speed
-        transform.position = new Vector3(-10f, 10f, 0f);
+        // Reset position and speed - use Teleport to skip interpolation
+        Vector3 newPos = new Vector3(-10f, 10f, 0f);
+        networkTransform.Teleport(newPos, transform.rotation, transform.localScale);
         speed = defaultSpeed;
         engineOff = false;
         inSpace = false;
@@ -197,14 +202,16 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private void MoveRightClientRpc()
     {
         var right = GameObject.Find("Right");
-        transform.position = new Vector3(right.transform.position.x - 1.1f, transform.position.y, 0f);
+        Vector3 newPos = new Vector3(right.transform.position.x - 1.1f, transform.position.y, 0f);
+        networkTransform.Teleport(newPos, transform.rotation, transform.localScale);
     }
 
     [ClientRpc]
     private void MoveLeftClientRpc()
     {
         var left = GameObject.Find("Left");
-        transform.position = new Vector3(left.transform.position.x + 1.1f, transform.position.y, 0f);
+        Vector3 newPos = new Vector3(left.transform.position.x + 1.1f, transform.position.y, 0f);
+        networkTransform.Teleport(newPos, transform.rotation, transform.localScale);
     }
 
     [ClientRpc]
