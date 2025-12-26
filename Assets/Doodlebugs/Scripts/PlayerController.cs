@@ -91,8 +91,34 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (!IsOwner) return;
 
         HandleMovement();
+        CheckOutOfBounds();
+    }
 
-        //HandleExitGame();
+    // Safety check - respawn if plane somehow escaped the play area
+    private void CheckOutOfBounds()
+    {
+        float safetyMargin = 50f;
+        bool outOfBounds = false;
+
+        // Check if plane is way outside the boundaries
+        if (leftBoundary != null && transform.position.x < leftBoundary.bounds.min.x - safetyMargin)
+            outOfBounds = true;
+        if (rightBoundary != null && transform.position.x > rightBoundary.bounds.max.x + safetyMargin)
+            outOfBounds = true;
+        // Check lower vertical bound only (can fly into space freely)
+        if (transform.position.y < -safetyMargin)
+            outOfBounds = true;
+
+        if (outOfBounds)
+        {
+            RequestRespawnServerRpc();
+        }
+    }
+
+    [ServerRpc]
+    private void RequestRespawnServerRpc()
+    {
+        RespawnWithExplosionClientRpc();
     }
 
     private void HandleMovement()
