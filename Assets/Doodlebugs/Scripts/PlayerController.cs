@@ -30,11 +30,23 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
     public GameObject hitEffect;
 
+    // Cached boundary references
+    private Transform leftBoundary;
+    private Transform rightBoundary;
+    private BoxCollider2D planeCollider;
+
     // Start is called before the first frame update
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         networkTransform = GetComponent<NetworkTransform>();
+        planeCollider = GetComponent<BoxCollider2D>();
+
+        // Cache boundary references
+        var leftObj = GameObject.Find("Left");
+        var rightObj = GameObject.Find("Right");
+        if (leftObj != null) leftBoundary = leftObj.transform;
+        if (rightObj != null) rightBoundary = rightObj.transform;
 
         // Limit FPS for stability
         Application.targetFrameRate = 60;
@@ -202,25 +214,23 @@ public class PlayerController : NetworkBehaviour, IDamagable
     }
 
     [ClientRpc]
-    private void MoveRightClientRpc()
+    private void WrapToPositionClientRpc(float targetX)
     {
         // Only owner can teleport (ClientNetworkTransform = client authority)
         if (!IsOwner) return;
 
-        var right = GameObject.Find("Right");
-        Vector3 newPos = new Vector3(right.transform.position.x - 1.1f, transform.position.y, 0f);
+        Vector3 newPos = new Vector3(targetX, transform.position.y, 0f);
         networkTransform.Teleport(newPos, transform.rotation, transform.localScale);
     }
 
-    [ClientRpc]
-    private void MoveLeftClientRpc()
+    // Calculate the offset based on collider bounds (accounts for rotation)
+    private float GetPlaneHalfWidth()
     {
-        // Only owner can teleport (ClientNetworkTransform = client authority)
-        if (!IsOwner) return;
-
-        var left = GameObject.Find("Left");
-        Vector3 newPos = new Vector3(left.transform.position.x + 1.1f, transform.position.y, 0f);
-        networkTransform.Teleport(newPos, transform.rotation, transform.localScale);
+        if (planeCollider != null)
+        {
+            return planeCollider.bounds.extents.x;
+        }
+        return 0.5f; // fallback
     }
 
     [ClientRpc]
@@ -241,14 +251,22 @@ public class PlayerController : NetworkBehaviour, IDamagable
             SpaceClientRpc();
         }
 
-        if (collider.name == "Left")
+        if (collider.name == "Left" && rightBoundary != null)
         {
-            MoveRightClientRpc();
+            // Hit left edge -> wrap to right side
+            float margin = 0.2f;
+            float halfWidth = GetPlaneHalfWidth();
+            float targetX = rightBoundary.position.x - halfWidth - margin;
+            WrapToPositionClientRpc(targetX);
         }
 
-        if (collider.name == "Right")
+        if (collider.name == "Right" && leftBoundary != null)
         {
-            MoveLeftClientRpc();
+            // Hit right edge -> wrap to left side
+            float margin = 0.2f;
+            float halfWidth = GetPlaneHalfWidth();
+            float targetX = leftBoundary.position.x + halfWidth + margin;
+            WrapToPositionClientRpc(targetX);
         }
 
 
