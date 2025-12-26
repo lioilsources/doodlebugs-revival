@@ -31,8 +31,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
     public GameObject hitEffect;
 
     // Cached boundary references
-    private Transform leftBoundary;
-    private Transform rightBoundary;
+    private Collider2D leftBoundary;
+    private Collider2D rightBoundary;
     private BoxCollider2D planeCollider;
 
     // Start is called before the first frame update
@@ -42,11 +42,11 @@ public class PlayerController : NetworkBehaviour, IDamagable
         networkTransform = GetComponent<NetworkTransform>();
         planeCollider = GetComponent<BoxCollider2D>();
 
-        // Cache boundary references
+        // Cache boundary references (get Collider2D to use bounds)
         var leftObj = GameObject.Find("Left");
         var rightObj = GameObject.Find("Right");
-        if (leftObj != null) leftBoundary = leftObj.transform;
-        if (rightObj != null) rightBoundary = rightObj.transform;
+        if (leftObj != null) leftBoundary = leftObj.GetComponent<Collider2D>();
+        if (rightObj != null) rightBoundary = rightObj.GetComponent<Collider2D>();
 
         // Limit FPS for stability
         Application.targetFrameRate = 60;
@@ -245,7 +245,6 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (!IsServer)
             return;
 
-
         if (collider.name == "Space")
         {
             SpaceClientRpc();
@@ -254,18 +253,18 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (collider.name == "Left" && rightBoundary != null)
         {
             // Hit left edge -> wrap to right side
-            float margin = 0.2f;
+            float margin = 0.1f;
             float halfWidth = GetPlaneHalfWidth();
-            float targetX = rightBoundary.position.x - halfWidth - margin;
+            float targetX = rightBoundary.bounds.min.x - halfWidth - margin;
             WrapToPositionClientRpc(targetX);
         }
 
         if (collider.name == "Right" && leftBoundary != null)
         {
             // Hit right edge -> wrap to left side
-            float margin = 0.2f;
+            float margin = 0.1f;
             float halfWidth = GetPlaneHalfWidth();
-            float targetX = leftBoundary.position.x + halfWidth + margin;
+            float targetX = leftBoundary.bounds.max.x + halfWidth + margin;
             WrapToPositionClientRpc(targetX);
         }
 
