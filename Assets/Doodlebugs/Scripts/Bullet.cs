@@ -15,10 +15,6 @@ public class Bullet : NetworkBehaviour
     void OnTriggerEnter2D(Collider2D other) {
         if (!IsServer) return;
 
-#if UNITY_EDITOR
-        Debug.Log($"OnTriggerEnter2D other#{other} NetworkObjectId#{NetworkObjectId}");
-#endif
-
         if (other.gameObject.name != "Space")
         {
             var damagable = other.gameObject.GetComponent<IDamagable>();

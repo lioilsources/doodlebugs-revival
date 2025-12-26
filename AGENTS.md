@@ -1,57 +1,55 @@
-## Přehled
+## Overview
 
-„Doodlebugs Revival“ je 2D arkádová letecká střílečka stavěná v Unity s podporou síťového multiplayeru (Netcode for GameObjects). Projekt kombinuje vlastní skripty s několika asset balíčky (2D War Machines, Warped Caves, TextMesh Pro aj.).
+"Doodlebugs Revival" is a 2D arcade air combat shooter built in Unity with networked multiplayer support (Netcode for GameObjects). The project combines custom scripts with several asset packages (2D War Machines, Warped Caves, TextMesh Pro, etc.).
 
-## Technologie
+## Technology
 
 - **Unity**: 2022.3.4f1
 - **Multiplayer**: Netcode for GameObjects (ServerRpc/ClientRpc, NetworkObject, ClientNetworkTransform)
-- **Dev nástroje**: ParrelSync (pro paralelní běh více editor instancí)
+- **Dev tools**: ParrelSync (for running multiple editor instances in parallel)
 - **UI/Fonts**: TextMesh Pro
-- **Assety**: 2DWarMachines, Warped Caves, sprite muzzle flashes, Dynamic Space Background, FPS Gaming Font
+- **Assets**: 2DWarMachines, Warped Caves, sprite muzzle flashes, Dynamic Space Background, FPS Gaming Font
 
-## Scény
+## Scenes
 
-- `Assets/Doodlebugs/Scenes/SampleScene.unity` – hlavní pracovní scéna
-- `Assets/Doodlebugs/Scenes/BumpCloudScene.unity` – test kolizí/respawnů u mraků a hran
-- `Assets/2DWarMachines/Scene/Demo.unity` – ukázková scéna z asset balíčku
-- `Assets/sprite muzzle flashes/demo.unity` – ukázka pro efekt střelby
+- `Assets/Doodlebugs/Scenes/SampleScene.unity` – main working scene
+- `Assets/Doodlebugs/Scenes/BumpCloudScene.unity` – test for cloud/edge collisions and respawns
+- `Assets/2DWarMachines/Scene/Demo.unity` – demo scene from asset package
+- `Assets/sprite muzzle flashes/demo.unity` – demo for shooting effects
 
-## Klíčové skripty (Assets/Doodlebugs/Scripts)
+## Key Scripts (Assets/Doodlebugs/Scripts)
 
-- `PlayerController.cs` – řízení hráčova letounu a vstupy
-- `Shooting.cs` – střelba, spouštění projektilů
-- `Bullet.cs` – chování střely, kolize, poškození/výbuch
-- `GameManager.cs` – herní stav, respawn, základní orchestrace
-- `NetworkManagerUI.cs` – jednoduché UI pro Start Host/Client
-- `NetworkObjectSpawner.cs` / `NetworkObjectDespawner.cs` – síťové spawnování a úklid objektů
-- `IDamagable.cs` – rozhraní pro objekty přijímající poškození
-- `DevMath.cs` – pomocné matematické funkce (např. výpočet úhlů a směrů)
-- `PlayerDebug.cs` – diagnostika/debuginfo pro hráče
+- `PlayerController.cs` – player aircraft control and inputs
+- `Shooting.cs` – shooting, projectile spawning
+- `Bullet.cs` – bullet behavior, collision, damage/explosion
+- `GameManager.cs` – game state, respawn, basic orchestration
+- `NetworkManagerUI.cs` – simple UI for Start Host/Client
+- `NetworkObjectSpawner.cs` / `NetworkObjectDespawner.cs` – network spawning and object cleanup
+- `IDamagable.cs` – interface for objects receiving damage
+- `DevMath.cs` – helper math functions (e.g., angle and direction calculations)
+- `PlayerDebug.cs` – diagnostics/debug info for player
 
-## Síťování (Netcode)
+## Networking (Netcode)
 
-- Hráčův letoun je `NetworkObject` s klientskou autoritou (`ClientNetworkTransform`).
-- Akce se replikují pomocí `ServerRpc`/`ClientRpc` (např. střelba, změny stavu).
-- `NetworkManagerUI` umožňuje rychlý start režimu Host/Client v editoru.
+- Player aircraft is a `NetworkObject` with client authority (`ClientNetworkTransform`).
+- Actions are replicated via `ServerRpc`/`ClientRpc` (e.g., shooting, state changes).
+- `NetworkManagerUI` allows quick Host/Client mode start in editor.
 
-## Jak spustit
+## How to Run
 
-1. Otevřete projekt v Unity 2022.3.4f1.
-2. Načtěte `Assets/Doodlebugs/Scenes/SampleScene.unity`.
-3. Stiskněte Play a v UI zvolte Host (nebo Client pro připojení k běžícímu hostu).
-4. Ovládání a střelbu zajišťují skripty `PlayerController.cs` a `Shooting.cs` (mapování viz Input Manager/nový Input System dle konfigurace projektu).
+1. Open the project in Unity 2022.3.4f1.
+2. Load `Assets/Doodlebugs/Scenes/SampleScene.unity`.
+3. Press Play and choose Host in the UI (or Client to connect to a running host).
+4. Controls and shooting are handled by `PlayerController.cs` and `Shooting.cs` scripts (mapping via Input Manager/new Input System depending on project configuration).
 
-## Struktura
+## Structure
 
-- `Assets/Doodlebugs/` – scény, prefaby a herní skripty projektu
-- `Assets/2DWarMachines/` – asset balíček (prefaby, animace, demo scéna)
-- `Assets/Warped Caves/` – artwork asset balíček
-- `Assets/sprite muzzle flashes/` – efekty záblesků zbraní
-- `Assets/TextMesh Pro/` – písmo, UI utility
+- `Assets/Doodlebugs/` – scenes, prefabs and game scripts
+- `Assets/2DWarMachines/` – asset package (prefabs, animations, demo scene)
+- `Assets/Warped Caves/` – artwork asset package
+- `Assets/sprite muzzle flashes/` – weapon flash effects
+- `Assets/TextMesh Pro/` – fonts, UI utilities
 
-## Poznámky k vývoji
+## Development Notes
 
-- Historii změn a odkazy na použité materiály najdete v `README.md`.
-
-
+- Change history and references to used materials can be found in `README.md`.

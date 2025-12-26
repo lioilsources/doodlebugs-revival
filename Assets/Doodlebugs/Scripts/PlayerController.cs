@@ -2,8 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
-using static UnityEngine.GridBrushBase;
-using static UnityEngine.GraphicsBuffer;
+using Unity.Netcode.Components;
 
 public class PlayerController : NetworkBehaviour, IDamagable
 {
@@ -11,38 +10,110 @@ public class PlayerController : NetworkBehaviour, IDamagable
     public Transform plane;
     public Transform leftPoint, rightPoint, forwardPoint;
     Rigidbody2D rb;
-    public float speed = 5f, rotateSpeed = 50f;
+    NetworkTransform networkTransform;
+    public float rotateSpeed = 200f;
 
-    private float targetSpeed = 5f;
-    private float maxSpeed = 5f;
-    private float minSpeed = 0f;
+    private float defaultSpeed = 5f;
+    private float maxSpeed = 20f;
+    private float minSpeed = 2f;
+    private float climbDrag = 1f;       // how fast speed decreases when climbing
+    private float diveBoost = 3f;       // how fast speed increases when diving
+    private float maxGravity = 0.5f;
+    private float gravityIncreaseRate = 0.35f;  // how fast gravity increases
 
     private float minRotateSpeed = 1f;
     private float maxRotateSpeed = 50f;
 
-    private bool engineOff = false;
+    // Synchronized state across network
+    private NetworkVariable<float> netSpeed = new NetworkVariable<float>(5f,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private NetworkVariable<bool> netEngineOff = new NetworkVariable<bool>(false,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private NetworkVariable<bool> netInSpace = new NetworkVariable<bool>(false,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private NetworkVariable<float> netGravity = new NetworkVariable<float>(0f,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
-    private float duration = 1f;
-    private bool rotationDirection;
+    // Local accessors for network variables
+    private float speed
+    {
+        get => netSpeed.Value;
+        set => netSpeed.Value = value;
+    }
+    private bool engineOff
+    {
+        get => netEngineOff.Value;
+        set => netEngineOff.Value = value;
+    }
+    private bool inSpace
+    {
+        get => netInSpace.Value;
+        set => netInSpace.Value = value;
+    }
+    private float currentGravity
+    {
+        get => netGravity.Value;
+        set => netGravity.Value = value;
+    }
 
     public GameObject hitEffect;
+
+    // Cached boundary references
+    private Collider2D leftBoundary;
+    private Collider2D rightBoundary;
+    private BoxCollider2D planeCollider;
 
     // Start is called before the first frame update
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
+        networkTransform = GetComponent<NetworkTransform>();
+        planeCollider = GetComponent<BoxCollider2D>();
 
-        // Omezení FPS pro stabilitu
+        // Cache boundary references (get Collider2D to use bounds)
+        var leftObj = GameObject.Find("Left");
+        var rightObj = GameObject.Find("Right");
+        if (leftObj != null) leftBoundary = leftObj.GetComponent<Collider2D>();
+        if (rightObj != null) rightBoundary = rightObj.GetComponent<Collider2D>();
+
+        // Limit FPS for stability
         Application.targetFrameRate = 60;
         QualitySettings.vSyncCount = 0;
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+        SetPlaneColor();
+    }
+
+    private void SetPlaneColor()
+    {
+        if (plane == null) return;
+
+        var spriteRenderer = plane.GetComponent<SpriteRenderer>();
+        if (spriteRenderer == null) return;
+
+        // Host keeps original colors, clients get red replaced with blue
+        if (OwnerClientId != 0)
+        {
+            // Load the color replace shader
+            Shader colorReplaceShader = Shader.Find("Custom/ColorReplace");
+            if (colorReplaceShader != null)
+            {
+                Material mat = new Material(colorReplaceShader);
+                mat.SetTexture("_MainTex", spriteRenderer.sprite.texture);
+                mat.SetColor("_SourceColor", Color.red);
+                mat.SetColor("_TargetColor", Color.blue);
+                mat.SetFloat("_Threshold", 0.4f);
+                spriteRenderer.material = mat;
+            }
+        }
     }
 
     void Update()
     {
         Vector3 forward = transform.TransformDirection(Vector3.left) * 10;
-#if UNITY_EDITOR
-        //Debug.Log($"Update: {transform.position}:{forward}");
-#endif
         Debug.DrawRay(transform.position, forward, Color.green);
     }
 
@@ -50,8 +121,34 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (!IsOwner) return;
 
         HandleMovement();
+        CheckOutOfBounds();
+    }
 
-        //HandleExitGame();
+    // Safety check - respawn if plane somehow escaped the play area
+    private void CheckOutOfBounds()
+    {
+        float safetyMargin = 50f;
+        bool outOfBounds = false;
+
+        // Check if plane is way outside the boundaries
+        if (leftBoundary != null && transform.position.x < leftBoundary.bounds.min.x - safetyMargin)
+            outOfBounds = true;
+        if (rightBoundary != null && transform.position.x > rightBoundary.bounds.max.x + safetyMargin)
+            outOfBounds = true;
+        // Check lower vertical bound only (can fly into space freely)
+        if (transform.position.y < -safetyMargin)
+            outOfBounds = true;
+
+        if (outOfBounds)
+        {
+            RequestRespawnServerRpc();
+        }
+    }
+
+    [ServerRpc]
+    private void RequestRespawnServerRpc()
+    {
+        RespawnWithExplosionClientRpc();
     }
 
     private void HandleMovement()
@@ -61,43 +158,67 @@ public class PlayerController : NetworkBehaviour, IDamagable
     }
 
     private void movePlane()
-    { 
-        speed = Mathf.SmoothStep(speed, targetSpeed, duration * Time.fixedDeltaTime);
-#if UNITY_EDITOR
-        // Debug.Log("Speed: " + speed);
-#endif
-
-        if (speed < 2)
+    {
+        if (engineOff)
         {
-            var down = Vector3.down * 5;
-            rb.velocity = down;
-            //rb.velocity = new Vector3(0, -5, 0);
-            engineOff = true;
+            // Engine OFF - gravity gradually increases
+            currentGravity = Mathf.MoveTowards(currentGravity, maxGravity, gravityIncreaseRate * Time.fixedDeltaTime);
+
+            // Add gravity to current velocity
+            rb.velocity += Vector2.down * currentGravity * Time.fixedDeltaTime * 60f;
+
+            // Check for dive to restart engine
+            var rotation = plane.transform.rotation.z;
+            if (rotation > -0.8 && rotation < -0.6)
+            {
+                // Diving - turn on engine and keep speed
+                EngineOn();
+            }
         }
         else
         {
-            rb.velocity = transform.right * speed;
-            engineOff = false;
-            duration = 2f;
-        }
+            // Engine ON - speed changes based on flight angle
+            float verticalFactor = transform.right.y;  // -1 (down) to +1 (up)
 
-        
-#if UNITY_EDITOR
-        // Debug.Log($"RotationZ: {plane.transform.rotation.z}"); 
-#endif
-
-        //Debug.Log("RotationZ: " + transform.rotation.z);
-        if (engineOff) {
-            // -0.7 (bottom)
-            var rotation = plane.transform.rotation.z;
-
-            if (rotation > -0.8 && rotation < -0.6)
+            if (verticalFactor > 0)
             {
-                targetSpeed = maxSpeed + 3;
-                duration = 10f;
+                // Climbing - loses speed
+                speed -= verticalFactor * climbDrag * Time.fixedDeltaTime;
             }
-            
+            else
+            {
+                // Diving - gains speed
+                speed -= verticalFactor * diveBoost * Time.fixedDeltaTime;
+            }
+
+            // Clamp speed
+            speed = Mathf.Clamp(speed, minSpeed, maxSpeed);
+
+            // If speed drops below minimum, turn off engine
+            if (speed <= minSpeed)
+            {
+                EngineOff();
+            }
+
+            rb.velocity = transform.right * speed;
         }
+    }
+
+    private void EngineOn()
+    {
+        // Cannot turn on engine in space
+        if (inSpace) return;
+
+        // Keep speed from the fall
+        speed = rb.velocity.magnitude;
+        engineOff = false;
+        currentGravity = 0f;
+    }
+
+    private void EngineOff()
+    {
+        engineOff = true;
+        // Speed is not lost immediately - keep velocity
     }
 
     private void rotatePlane(float x)
@@ -118,10 +239,17 @@ public class PlayerController : NetworkBehaviour, IDamagable
         direction.Normalize();
         angle = Vector3.Cross(direction, transform.up).z;
 
+        // Rotation speed proportional to plane speed
+        // Extremely fast rotation when engine is off
+        float speedFactor = rb.velocity.magnitude / defaultSpeed;  // 1.0 at defaultSpeed
+        float currentRotateSpeed = engineOff
+            ? rotateSpeed * 4f
+            : rotateSpeed * speedFactor;
+
         // turn on/off
         if (x != 0)
         {
-            rb.angularVelocity = -rotateSpeed * angle;
+            rb.angularVelocity = -currentRotateSpeed * angle;
         }
         else
         {
@@ -134,10 +262,6 @@ public class PlayerController : NetworkBehaviour, IDamagable
         ) * Mathf.Rad2Deg;
 
         plane.transform.rotation = Quaternion.Euler(new Vector3(0, 0, angle));
-
-#if UNITY_EDITOR
-        // Debug.Log($"rotatePlane{plane.transform.rotation}");
-#endif
     }
 
     public void Hit(int damage)
@@ -145,7 +269,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (!IsServer)
             return;
 
-        NetworkObjectDespawner.DespawnNetworkObject(NetworkObject);
+        RespawnWithExplosionClientRpc();
     }
 
     [ClientRpc]
@@ -154,30 +278,52 @@ public class PlayerController : NetworkBehaviour, IDamagable
         var effect = Instantiate(hitEffect, transform.position, Quaternion.identity);
         Destroy(effect, 0.5f);
 
-        transform.position = new Vector3(-10f, 10f, 0f);
+        // Only owner can teleport (ClientNetworkTransform = client authority)
+        if (!IsOwner) return;
+
+        // Reset position and speed - use Teleport to skip interpolation
+        Vector3 newPos = new Vector3(-10f, 10f, 0f);
+        networkTransform.Teleport(newPos, transform.rotation, transform.localScale);
+        speed = defaultSpeed;
+        engineOff = false;
+        inSpace = false;
+        currentGravity = 0f;
+        rb.velocity = transform.right * speed;
     }
 
     [ClientRpc]
-    private void MoveRightClientRpc()
+    private void LeaveSpaceClientRpc()
     {
-        var right = GameObject.Find("Right");
-        Debug.Log($"Right{right.transform.position.x}");
-        transform.position = new Vector3(right.transform.position.x - 1.1f, transform.position.y, 0f);
+        if (!IsOwner) return;
+        inSpace = false;
     }
 
     [ClientRpc]
-    private void MoveLeftClientRpc()
+    private void WrapToPositionClientRpc(float targetX)
     {
-        var left = GameObject.Find("Left");
+        // Only owner can teleport (ClientNetworkTransform = client authority)
+        if (!IsOwner) return;
 
-        Debug.Log($"Left{left.transform.position.x}");
-        transform.position = new Vector3(left.transform.position.x + 1.1f, transform.position.y, 0f);
+        Vector3 newPos = new Vector3(targetX, transform.position.y, 0f);
+        networkTransform.Teleport(newPos, transform.rotation, transform.localScale);
+    }
+
+    // Calculate the offset based on collider bounds (accounts for rotation)
+    private float GetPlaneHalfWidth()
+    {
+        if (planeCollider != null)
+        {
+            return planeCollider.bounds.extents.x;
+        }
+        return 0.5f; // fallback
     }
 
     [ClientRpc]
     private void SpaceClientRpc()
     {
-        targetSpeed = 0;
+        if (!IsOwner) return;
+        inSpace = true;
+        EngineOff();
     }
 
     void OnTriggerEnter2D(Collider2D collider)
@@ -185,63 +331,56 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (!IsServer)
             return;
 
-
         if (collider.name == "Space")
         {
-            Debug.Log($"HIT Space");
-
             SpaceClientRpc();
         }
 
-        if (collider.name == "Left")
+        if (collider.name == "Left" && rightBoundary != null)
         {
-            MoveRightClientRpc();
+            // Hit left edge -> wrap to right side
+            float margin = 0.1f;
+            float halfWidth = GetPlaneHalfWidth();
+            float targetX = rightBoundary.bounds.min.x - halfWidth - margin;
+            WrapToPositionClientRpc(targetX);
         }
 
-        if (collider.name == "Right")
+        if (collider.name == "Right" && leftBoundary != null)
         {
-            MoveLeftClientRpc();
+            // Hit right edge -> wrap to left side
+            float margin = 0.1f;
+            float halfWidth = GetPlaneHalfWidth();
+            float targetX = leftBoundary.bounds.max.x + halfWidth + margin;
+            WrapToPositionClientRpc(targetX);
         }
 
 
         if (collider.gameObject.CompareTag("Bullet"))
         {
-            Debug.Log($"HIT #server{IsServer}");
-
             RespawnWithExplosionClientRpc();
         }
 
         if (collider.gameObject.CompareTag("Respawn"))
         {
-            Debug.Log($"Respawn #server{IsServer}");
-
             RespawnWithExplosionClientRpc();
         }
 
         if (collider.gameObject.CompareTag("Player"))
         {
-            Debug.Log($"Collision #server{IsServer}");
-
             RespawnWithExplosionClientRpc();
         }
 
-        //If the collider hit a power-up
-        //if (collider.gameObject.CompareTag("PowerUpSpecial"))
-        //{
-        //    // Check if I have space to take the special
-        //    if (m_specials.Value < m_maxSpecialPower)
-        //    {
-        //        // Update var
-        //        m_specials.Value++;
+    }
 
-        //        // Update UI
-        //        playerUI.UpdatePowerUp(m_specials.Value, true);
+    void OnTriggerExit2D(Collider2D collider)
+    {
+        if (!IsServer)
+            return;
 
-        //        // Remove the power-up
-        //        NetworkObjectDespawner.DespawnNetworkObject(
-        //            collider.gameObject.GetComponent<NetworkObject>());
-        //    }
-        //}
+        if (collider.name == "Space")
+        {
+            LeaveSpaceClientRpc();
+        }
     }
 
     private void HandleExitGame()
