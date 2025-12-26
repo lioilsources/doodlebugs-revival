@@ -81,6 +81,30 @@ public class PlayerController : NetworkBehaviour, IDamagable
         QualitySettings.vSyncCount = 0;
     }
 
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+        SetPlaneColor();
+    }
+
+    private void SetPlaneColor()
+    {
+        if (plane == null) return;
+
+        var spriteRenderer = plane.GetComponent<SpriteRenderer>();
+        if (spriteRenderer == null) return;
+
+        // Host (OwnerClientId == 0) is red, clients are blue
+        if (OwnerClientId == 0)
+        {
+            spriteRenderer.color = Color.red;
+        }
+        else
+        {
+            spriteRenderer.color = Color.blue;
+        }
+    }
+
     void Update()
     {
         Vector3 forward = transform.TransformDirection(Vector3.left) * 10;
