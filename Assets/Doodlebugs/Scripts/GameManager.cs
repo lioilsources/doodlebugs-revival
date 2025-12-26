@@ -23,12 +23,4 @@ public class SingletonNetwork<T> : NetworkBehaviour where T : Component
 
 public class GameManager : SingletonNetwork<GameManager>
 {
-    public GameObject birdPrefab;
-
-    [ServerRpc]
-    public void SpawnBirdServerRpc()
-    {
-        Debug.Log($"GameManager.SpawnBird {OwnerClientId}");
-        NetworkObjectSpawner.SpawnNewNetworkObject(birdPrefab, birdPrefab.transform.position);
-    }
 }

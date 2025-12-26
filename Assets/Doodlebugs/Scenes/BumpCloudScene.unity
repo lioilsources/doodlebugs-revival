@@ -268,7 +268,6 @@ GameObject:
   m_Component:
   - component: {fileID: 48098103}
   - component: {fileID: 48098104}
-  - component: {fileID: 48098105}
   m_Layer: 0
   m_Name: Space
   m_TagString: Untagged
@@ -336,19 +335,6 @@ BoxCollider2D:
   serializedVersion: 2
   m_Size: {x: 40.633575, y: 7.605606}
   m_EdgeRadius: 0
---- !u!114 &48098105
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 48098102}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 612e9570d33554e1296e090f2965331c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  bird: {fileID: 0}
 --- !u!1 &70954016
 GameObject:
   m_ObjectHideFlags: 0
@@ -587,8 +573,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 95582cca7841c456bad2f5c90e95e4f4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  birdPrefab: {fileID: 1124817836879197747, guid: 6564fb5a5f0cb466cb05018cce3d5e4d,
-    type: 3}
 --- !u!1 &509417880
 GameObject:
   m_ObjectHideFlags: 0
@@ -1147,7 +1131,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1031617534}
   - component: {fileID: 1031617536}
-  - component: {fileID: 1031617535}
   m_Layer: 0
   m_Name: Right
   m_TagString: Untagged
@@ -1170,19 +1153,6 @@ Transform:
   m_Father: {fileID: 1989932994}
   m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1031617535
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1031617533}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 30fc3ca9140d4463a92e60095a60b6af, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  bird: {fileID: 0}
 --- !u!61 &1031617536
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -1302,7 +1272,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1357161224}
   - component: {fileID: 1357161226}
-  - component: {fileID: 1357161225}
   m_Layer: 0
   m_Name: Left
   m_TagString: Untagged
@@ -1325,19 +1294,6 @@ Transform:
   m_Father: {fileID: 1989932994}
   m_RootOrder: 2
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1357161225
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1357161223}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 01507f8257bf9479db224120a76c62ef, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  bird: {fileID: 0}
 --- !u!61 &1357161226
 BoxCollider2D:
   m_ObjectHideFlags: 0
