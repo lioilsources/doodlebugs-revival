@@ -11,7 +11,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     public Transform leftPoint, rightPoint, forwardPoint;
     Rigidbody2D rb;
     NetworkTransform networkTransform;
-    public float speed = 5f, rotateSpeed = 200f;
+    public float rotateSpeed = 200f;
 
     private float defaultSpeed = 5f;
     private float maxSpeed = 20f;
@@ -24,9 +24,37 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private float minRotateSpeed = 1f;
     private float maxRotateSpeed = 50f;
 
-    private bool engineOff = false;
-    private bool inSpace = false;
-    private float currentGravity = 0f;
+    // Synchronized state across network
+    private NetworkVariable<float> netSpeed = new NetworkVariable<float>(5f,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private NetworkVariable<bool> netEngineOff = new NetworkVariable<bool>(false,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private NetworkVariable<bool> netInSpace = new NetworkVariable<bool>(false,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private NetworkVariable<float> netGravity = new NetworkVariable<float>(0f,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
+    // Local accessors for network variables
+    private float speed
+    {
+        get => netSpeed.Value;
+        set => netSpeed.Value = value;
+    }
+    private bool engineOff
+    {
+        get => netEngineOff.Value;
+        set => netEngineOff.Value = value;
+    }
+    private bool inSpace
+    {
+        get => netInSpace.Value;
+        set => netInSpace.Value = value;
+    }
+    private float currentGravity
+    {
+        get => netGravity.Value;
+        set => netGravity.Value = value;
+    }
 
     public GameObject hitEffect;
 
@@ -210,6 +238,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     [ClientRpc]
     private void LeaveSpaceClientRpc()
     {
+        if (!IsOwner) return;
         inSpace = false;
     }
 
@@ -236,6 +265,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     [ClientRpc]
     private void SpaceClientRpc()
     {
+        if (!IsOwner) return;
         inSpace = true;
         EngineOff();
     }
