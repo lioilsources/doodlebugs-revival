@@ -94,14 +94,20 @@ public class PlayerController : NetworkBehaviour, IDamagable
         var spriteRenderer = plane.GetComponent<SpriteRenderer>();
         if (spriteRenderer == null) return;
 
-        // Host (OwnerClientId == 0) is red, clients are blue
-        if (OwnerClientId == 0)
+        // Host keeps original colors, clients get red replaced with blue
+        if (OwnerClientId != 0)
         {
-            spriteRenderer.color = Color.red;
-        }
-        else
-        {
-            spriteRenderer.color = Color.blue;
+            // Load the color replace shader
+            Shader colorReplaceShader = Shader.Find("Custom/ColorReplace");
+            if (colorReplaceShader != null)
+            {
+                Material mat = new Material(colorReplaceShader);
+                mat.SetTexture("_MainTex", spriteRenderer.sprite.texture);
+                mat.SetColor("_SourceColor", Color.red);
+                mat.SetColor("_TargetColor", Color.blue);
+                mat.SetFloat("_Threshold", 0.4f);
+                spriteRenderer.material = mat;
+            }
         }
     }
 
