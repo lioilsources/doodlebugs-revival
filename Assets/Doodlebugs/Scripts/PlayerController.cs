@@ -182,6 +182,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
         var effect = Instantiate(hitEffect, transform.position, Quaternion.identity);
         Destroy(effect, 0.5f);
 
+        // Only owner can teleport (ClientNetworkTransform = client authority)
+        if (!IsOwner) return;
+
         // Reset position and speed - use Teleport to skip interpolation
         Vector3 newPos = new Vector3(-10f, 10f, 0f);
         networkTransform.Teleport(newPos, transform.rotation, transform.localScale);
@@ -201,6 +204,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     [ClientRpc]
     private void MoveRightClientRpc()
     {
+        // Only owner can teleport (ClientNetworkTransform = client authority)
+        if (!IsOwner) return;
+
         var right = GameObject.Find("Right");
         Vector3 newPos = new Vector3(right.transform.position.x - 1.1f, transform.position.y, 0f);
         networkTransform.Teleport(newPos, transform.rotation, transform.localScale);
@@ -209,6 +215,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     [ClientRpc]
     private void MoveLeftClientRpc()
     {
+        // Only owner can teleport (ClientNetworkTransform = client authority)
+        if (!IsOwner) return;
+
         var left = GameObject.Find("Left");
         Vector3 newPos = new Vector3(left.transform.position.x + 1.1f, transform.position.y, 0f);
         networkTransform.Teleport(newPos, transform.rotation, transform.localScale);

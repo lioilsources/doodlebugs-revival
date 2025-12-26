@@ -1,6 +1,7 @@
 26/12/2025
 - align projectil speed with plane speed
 - fix moving on border colision
+- network: teleportovat pouze na straně ownera!
 
 22/12/2025
 - try to imitate legacy plane movement by switching off engine in space and more
