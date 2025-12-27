@@ -153,7 +153,10 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
     private void HandleMovement()
     {
-        rotatePlane(Input.GetAxis("Horizontal"));
+        float horizontalInput = InputManager.Instance != null
+            ? InputManager.Instance.InputProvider.GetHorizontalInput()
+            : Input.GetAxis("Horizontal");
+        rotatePlane(horizontalInput);
         movePlane();
     }
 

@@ -27,11 +27,14 @@ public class Shooting : NetworkBehaviour
     {
         if (!IsOwner) return;
 
-        if (Input.GetKeyDown(KeyCode.Space)) {
+        bool shootPressed = InputManager.Instance != null
+            ? InputManager.Instance.InputProvider.GetShootInput()
+            : Input.GetKeyDown(KeyCode.Space);
+
+        if (shootPressed) {
             float planeSpeed = planeRb != null ? planeRb.velocity.magnitude : 0f;
             ShootServerRpc(firePoint.position, firePoint.rotation, planeSpeed);
         }
-
     }
 
     [ServerRpc]
