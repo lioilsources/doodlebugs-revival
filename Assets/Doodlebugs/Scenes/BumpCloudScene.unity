@@ -1209,8 +1209,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   targetOrthoSize: 5
   referenceAspect: 1.78
-  minVisibleWidth: 17.8
-  showDebugInfo: 0
+  minVisibleWidth: 54
+  showDebugInfo: 1
 --- !u!1 &599474398
 GameObject:
   m_ObjectHideFlags: 0
