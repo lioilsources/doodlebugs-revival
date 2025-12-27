@@ -1,3 +1,7 @@
+27/12/2025
+Plan to create mobile versions.
+- camera needs to adjust unit size between Left and Right boundaries into MinWisibleWidth variable
+
 26/12/2025
 - align projectil speed with plane speed
 - fix moving on border colision
