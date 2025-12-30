@@ -32,7 +32,7 @@ public class Shooting : NetworkBehaviour
             : Input.GetKeyDown(KeyCode.Space);
 
         if (shootPressed) {
-            float planeSpeed = planeRb != null ? planeRb.velocity.magnitude : 0f;
+            float planeSpeed = planeRb != null ? planeRb.linearVelocity.magnitude : 0f;
             ShootServerRpc(firePoint.position, firePoint.rotation, planeSpeed);
         }
     }
