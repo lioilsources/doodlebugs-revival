@@ -168,7 +168,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             currentGravity = Mathf.MoveTowards(currentGravity, maxGravity, gravityIncreaseRate * Time.fixedDeltaTime);
 
             // Add gravity to current velocity
-            rb.velocity += Vector2.down * currentGravity * Time.fixedDeltaTime * 60f;
+            rb.linearVelocity += Vector2.down * currentGravity * Time.fixedDeltaTime * 60f;
 
             // Check for dive to restart engine
             var rotation = plane.transform.rotation.z;
@@ -203,7 +203,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
                 EngineOff();
             }
 
-            rb.velocity = transform.right * speed;
+            rb.linearVelocity = transform.right * speed;
         }
     }
 
@@ -213,7 +213,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (inSpace) return;
 
         // Keep speed from the fall
-        speed = rb.velocity.magnitude;
+        speed = rb.linearVelocity.magnitude;
         engineOff = false;
         currentGravity = 0f;
     }
@@ -244,7 +244,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         // Rotation speed proportional to plane speed
         // Extremely fast rotation when engine is off
-        float speedFactor = rb.velocity.magnitude / defaultSpeed;  // 1.0 at defaultSpeed
+        float speedFactor = rb.linearVelocity.magnitude / defaultSpeed;  // 1.0 at defaultSpeed
         float currentRotateSpeed = engineOff
             ? rotateSpeed * 4f
             : rotateSpeed * speedFactor;
@@ -291,7 +291,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         engineOff = false;
         inSpace = false;
         currentGravity = 0f;
-        rb.velocity = transform.right * speed;
+        rb.linearVelocity = transform.right * speed;
     }
 
     [ClientRpc]
