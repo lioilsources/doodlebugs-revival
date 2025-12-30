@@ -1,3 +1,7 @@
+30/12/2025
+- iOS build requires to align XCode 26.2 with Unity 6.2 on iOS 26.1
+- keep old version of NetCode library
+
 27/12/2025
 Plan to create mobile versions.
 - camera needs to adjust unit size between Left and Right boundaries into MinWisibleWidth variable
