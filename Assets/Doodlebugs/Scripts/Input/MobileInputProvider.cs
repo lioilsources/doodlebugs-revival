@@ -86,38 +86,4 @@ public class MobileInputProvider : IInputProvider
         }
         shootPressed = false;
     }
-
-    // Legacy methods for fallback button support (not used in gyro mode)
-    public void SetLeftPressed(bool pressed)
-    {
-        if (!gyroAvailable)
-        {
-            if (pressed)
-                horizontalInput = -1f;
-            else if (horizontalInput < 0)
-                horizontalInput = 0f;
-        }
-    }
-
-    public void SetRightPressed(bool pressed)
-    {
-        if (!gyroAvailable)
-        {
-            if (pressed)
-                horizontalInput = 1f;
-            else if (horizontalInput > 0)
-                horizontalInput = 0f;
-        }
-    }
-
-    public void SetShootPressed(bool pressed)
-    {
-        // Only use button if touch is not available (fallback)
-        if (Input.touchCount == 0)
-        {
-            shootPressed = pressed;
-        }
-    }
-
-    public bool IsGyroAvailable => gyroAvailable;
 }
