@@ -916,6 +916,11 @@ PrefabInstance:
       propertyPath: m_Name
       value: InputManager
       objectReference: {fileID: 0}
+    - target: {fileID: 8895668214050212867, guid: 66d88715a8ff84f8eb2272d3a691a0b7,
+        type: 3}
+      propertyPath: forceMobileInput
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 8953764359312617660, guid: 66d88715a8ff84f8eb2272d3a691a0b7,
         type: 3}
       propertyPath: m_RootOrder
