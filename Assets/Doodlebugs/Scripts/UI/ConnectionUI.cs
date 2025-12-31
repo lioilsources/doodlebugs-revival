@@ -16,11 +16,15 @@ namespace Doodlebugs.UI
         {
             _connectionManager = ConnectionManager.Instance;
 
-            if (_connectionManager != null)
+            if (_connectionManager == null)
             {
-                _connectionManager.OnStatusMessage += OnStatusMessage;
-                _connectionManager.OnStateChanged += OnStateChanged;
+                Debug.LogError("[ConnectionUI] ConnectionManager.Instance is null!");
+                return;
             }
+
+            _connectionManager.OnStatusMessage += OnStatusMessage;
+            _connectionManager.OnStateChanged += OnStateChanged;
+            Debug.Log("[ConnectionUI] Subscribed to ConnectionManager events");
 
             // Setup text style
             if (_statusText != null)
@@ -53,9 +57,15 @@ namespace Doodlebugs.UI
 
         private void OnStatusMessage(string message)
         {
+            Debug.Log($"[ConnectionUI] OnStatusMessage: {message}");
+
             if (_statusText != null)
             {
                 _statusText.text = message;
+            }
+            else
+            {
+                Debug.LogError("[ConnectionUI] _statusText is null!");
             }
 
             // Make sure panel is visible
