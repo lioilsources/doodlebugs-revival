@@ -20,10 +20,14 @@ public class Bullet : NetworkBehaviour
             var damagable = other.gameObject.GetComponent<IDamagable>();
             if (damagable != null)
             {
+                // Player handles its own explosion, don't create duplicate
                 damagable.Hit(1);
             }
-
-            PlayHitFxClientRpc(transform.position);
+            else
+            {
+                // Non-damagable object (wall, etc.) - bullet creates explosion
+                PlayHitFxClientRpc(transform.position);
+            }
 
             if (NetworkObject != null && NetworkObject.IsSpawned)
             {
