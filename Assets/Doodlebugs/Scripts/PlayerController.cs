@@ -212,9 +212,19 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
     private void HandleMovement()
     {
-        float horizontalInput = InputManager.Instance != null
-            ? InputManager.Instance.InputProvider.GetHorizontalInput()
-            : Input.GetAxis("Horizontal");
+        float horizontalInput;
+        if (InputManager.Instance != null && InputManager.Instance.InputProvider != null)
+        {
+            horizontalInput = InputManager.Instance.InputProvider.GetHorizontalInput();
+        }
+        else
+        {
+            horizontalInput = Input.GetAxis("Horizontal");
+            if (Time.frameCount % 300 == 0) // Log every 5 seconds at 60fps
+            {
+                Debug.LogWarning($"[PlayerController] InputManager not available, using fallback input. Instance: {InputManager.Instance != null}");
+            }
+        }
         rotatePlane(horizontalInput);
         movePlane();
     }

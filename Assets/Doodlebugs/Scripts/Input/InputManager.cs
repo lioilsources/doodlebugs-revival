@@ -10,7 +10,7 @@ public class InputManager : MonoBehaviour
     private IInputProvider inputProvider;
     private MobileInputProvider mobileProvider;
 
-    [SerializeField] private bool forceMobileInput = false; // For testing in editor
+    [SerializeField] private bool forceMobileInput = false; // For testing in editor - UNCHECK THIS FOR DESKTOP BUILD!
 
     public IInputProvider InputProvider => inputProvider;
     public MobileInputProvider MobileProvider => mobileProvider;
@@ -44,7 +44,7 @@ public class InputManager : MonoBehaviour
         else
         {
             inputProvider = new DesktopInputProvider();
-            Debug.Log("InputManager: Using DesktopInputProvider");
+            Debug.Log($"InputManager: Using DesktopInputProvider. Platform: {Application.platform}");
         }
     }
 

@@ -61,6 +61,7 @@ sysinfo.txt
 *.unitypackage
 build-doodle.app/
 iOS-Build/
+macos-build.app/
 
 # Crashlytics generated file
 crashlytics-build.properties

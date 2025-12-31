@@ -1,3 +1,12 @@
+31/12/2025
+- network discovery (255.255.255.255 broadcast is not allowed on iOS)
+- gyro input
+- dynamic screen size & borders
+- plane color replacement shader
+- console alignment
+- cleanup controls
+- iOS & desktop builds
+
 30/12/2025
 - iOS build requires to align XCode 26.2 with Unity 6.2 on iOS 26.1
 - keep old version of NetCode library
@@ -9,7 +18,7 @@ Plan to create mobile versions.
 26/12/2025
 - align projectil speed with plane speed
 - fix moving on border colision
-- network: teleportovat pouze na straně ownera!
+- network: teleport on owner!
 
 22/12/2025
 - try to imitate legacy plane movement by switching off engine in space and more
