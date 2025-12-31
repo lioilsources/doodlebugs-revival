@@ -5,7 +5,7 @@ Shader "Custom/ColorReplace"
         _MainTex ("Sprite Texture", 2D) = "white" {}
         _SourceColor ("Source Color", Color) = (1, 0, 0, 1)
         _TargetColor ("Target Color", Color) = (0, 0, 1, 1)
-        _Threshold ("Color Threshold", Range(0, 1)) = 0.3
+        _Threshold ("Threshold", Range(0, 1)) = 0.4
     }
 
     SubShader
@@ -13,14 +13,16 @@ Shader "Custom/ColorReplace"
         Tags
         {
             "Queue" = "Transparent"
+            "IgnoreProjector" = "True"
             "RenderType" = "Transparent"
             "PreviewType" = "Plane"
+            "CanUseSpriteAtlas" = "True"
         }
 
         Cull Off
         Lighting Off
         ZWrite Off
-        Blend SrcAlpha OneMinusSrcAlpha
+        Blend One OneMinusSrcAlpha
 
         Pass
         {
@@ -49,7 +51,7 @@ Shader "Custom/ColorReplace"
             float4 _TargetColor;
             float _Threshold;
 
-            v2f vert (appdata v)
+            v2f vert(appdata v)
             {
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
@@ -58,7 +60,7 @@ Shader "Custom/ColorReplace"
                 return o;
             }
 
-            fixed4 frag (v2f i) : SV_Target
+            fixed4 frag(v2f i) : SV_Target
             {
                 fixed4 col = tex2D(_MainTex, i.uv) * i.color;
 
@@ -68,14 +70,19 @@ Shader "Custom/ColorReplace"
                 // If close enough to source color, replace with target color
                 if (dist < _Threshold)
                 {
-                    // Blend based on how close the color is
+                    // Blend based on how close we are to source color
                     float blend = 1.0 - (dist / _Threshold);
                     col.rgb = lerp(col.rgb, _TargetColor.rgb, blend);
                 }
+
+                // Premultiply alpha for sprite rendering
+                col.rgb *= col.a;
 
                 return col;
             }
             ENDCG
         }
     }
+
+    Fallback "Sprites/Default"
 }
