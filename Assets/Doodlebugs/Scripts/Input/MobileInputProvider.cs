@@ -1,14 +1,34 @@
 using UnityEngine;
 
 /// <summary>
-/// Mobile input provider that receives state from TouchControlsUI buttons
+/// Mobile input provider using gyroscope for rotation and touch-anywhere for shooting
 /// </summary>
 public class MobileInputProvider : IInputProvider
 {
-    // Current input state (set by TouchControlsUI)
+    // Gyro settings
+    private float deadZone = 0.1f;
+    private float maxTilt = 0.4f;
+    private bool gyroAvailable = false;
+
+    // Input state
     private float horizontalInput = 0f;
     private bool shootPressed = false;
     private bool shootConsumed = false;
+
+    public void Initialize()
+    {
+        if (SystemInfo.supportsGyroscope)
+        {
+            Input.gyro.enabled = true;
+            gyroAvailable = true;
+            Debug.Log("[MobileInputProvider] Gyroscope enabled");
+        }
+        else
+        {
+            gyroAvailable = false;
+            Debug.LogWarning("[MobileInputProvider] Gyroscope not supported");
+        }
+    }
 
     public float GetHorizontalInput()
     {
@@ -28,32 +48,76 @@ public class MobileInputProvider : IInputProvider
 
     public void UpdateInput()
     {
-        // Reset shoot consumed flag when button is released
+        // Gyro rotation
+        if (gyroAvailable)
+        {
+            float tilt = Input.gyro.gravity.y;
+            if (Mathf.Abs(tilt) < deadZone)
+            {
+                horizontalInput = 0f;
+            }
+            else
+            {
+                // Map tilt to -1..1 range
+                horizontalInput = Mathf.Clamp(tilt / maxTilt, -1f, 1f);
+            }
+        }
+
+        // Touch anywhere = shoot
+        CheckTouchShoot();
+
+        // Reset shoot consumed flag when no touch
         if (!shootPressed)
         {
             shootConsumed = false;
         }
     }
 
-    // Called by TouchControlsUI
+    private void CheckTouchShoot()
+    {
+        if (Input.touchCount > 0)
+        {
+            Touch touch = Input.GetTouch(0);
+            if (touch.phase == TouchPhase.Began)
+            {
+                shootPressed = true;
+                return;
+            }
+        }
+        shootPressed = false;
+    }
+
+    // Legacy methods for fallback button support (not used in gyro mode)
     public void SetLeftPressed(bool pressed)
     {
-        if (pressed)
-            horizontalInput = -1f;
-        else if (horizontalInput < 0)
-            horizontalInput = 0f;
+        if (!gyroAvailable)
+        {
+            if (pressed)
+                horizontalInput = -1f;
+            else if (horizontalInput < 0)
+                horizontalInput = 0f;
+        }
     }
 
     public void SetRightPressed(bool pressed)
     {
-        if (pressed)
-            horizontalInput = 1f;
-        else if (horizontalInput > 0)
-            horizontalInput = 0f;
+        if (!gyroAvailable)
+        {
+            if (pressed)
+                horizontalInput = 1f;
+            else if (horizontalInput > 0)
+                horizontalInput = 0f;
+        }
     }
 
     public void SetShootPressed(bool pressed)
     {
-        shootPressed = pressed;
+        // Only use button if touch is not available (fallback)
+        if (Input.touchCount == 0)
+        {
+            shootPressed = pressed;
+        }
     }
+
+    public bool IsGyroAvailable => gyroAvailable;
 }

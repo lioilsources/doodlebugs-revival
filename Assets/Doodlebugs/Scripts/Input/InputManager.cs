@@ -37,6 +37,7 @@ public class InputManager : MonoBehaviour
         if (isMobile)
         {
             mobileProvider = new MobileInputProvider();
+            mobileProvider.Initialize();
             inputProvider = mobileProvider;
             Debug.Log("InputManager: Using MobileInputProvider");
         }

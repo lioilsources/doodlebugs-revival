@@ -1140,6 +1140,7 @@ GameObject:
   - component: {fileID: 574372291}
   - component: {fileID: 574372294}
   - component: {fileID: 574372295}
+  - component: {fileID: 574372296}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -1251,6 +1252,27 @@ MonoBehaviour:
   referenceAspect: 1.78
   minVisibleWidth: 54
   showDebugInfo: 1
+--- !u!114 &574372296
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 574372290}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4b76ff7934b344888b342b725f931421, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BoundaryManager
+  leftBoundary: {fileID: 1357161224}
+  rightBoundary: {fileID: 1031617534}
+  groundBoundary: {fileID: 599474400}
+  spaceBoundary: {fileID: 48098103}
+  boundaryThickness: 2
+  leftOverlap: 0.01
+  rightOverlap: 0.01
+  groundOverlap: 0.02
+  spaceOverlap: 0.1
 --- !u!1 &599474398
 GameObject:
   m_ObjectHideFlags: 0
