@@ -24,8 +24,6 @@ public class TouchControlsUI : MonoBehaviour
             return;
         }
 
-        mobileInput = InputManager.Instance.MobileProvider;
-
         // Hide touch controls on desktop
         if (!InputManager.Instance.IsMobile())
         {
@@ -33,9 +31,23 @@ public class TouchControlsUI : MonoBehaviour
             return;
         }
 
+        mobileInput = InputManager.Instance.MobileProvider;
+
+        // Gyro mode: hide all buttons (touch-anywhere for shoot, gyro for rotation)
+        if (mobileInput != null && mobileInput.IsGyroAvailable)
+        {
+            if (leftButton != null) leftButton.gameObject.SetActive(false);
+            if (rightButton != null) rightButton.gameObject.SetActive(false);
+            if (shootButton != null) shootButton.gameObject.SetActive(false);
+            Debug.Log("TouchControlsUI: Gyro mode - buttons hidden");
+            return;
+        }
+
+        // Fallback: show buttons (no gyro available)
         SetupButton(leftButton, OnLeftDown, OnLeftUp);
         SetupButton(rightButton, OnRightDown, OnRightUp);
         SetupButton(shootButton, OnShootDown, OnShootUp);
+        Debug.Log("TouchControlsUI: Button mode - gyro not available");
     }
 
     private void SetupButton(Button button, System.Action onDown, System.Action onUp)
