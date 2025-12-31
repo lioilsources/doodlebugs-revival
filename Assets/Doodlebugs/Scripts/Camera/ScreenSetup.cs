@@ -140,7 +140,9 @@ public class ScreenSetup : MonoBehaviour
             new Vector2(camPos.x, camPos.y + topY + borderThickness / 2f),
             new Vector2(camWidth * 2, borderThickness));
 
-        Debug.Log($"[ScreenSetup] Created borders. Cam: {camWidth:F1}x{camHeight:F1}, OrthoSize: {cam.orthographicSize:F1}");
+        Debug.Log($"[ScreenSetup] Borders created. CamSize: {camWidth:F1}x{camHeight:F1}, OrthoSize: {cam.orthographicSize:F1}, " +
+                  $"Aspect: {cam.aspect:F2}, Screen: {Screen.width}x{Screen.height}, " +
+                  $"Ground.y: {(camPos.y + bottomY - borderThickness / 2f):F1}, CamBottom: {(camPos.y - halfHeight):F1}");
     }
 
     GameObject CreateCollider(string name, Vector2 position, Vector2 size, string tag = null)
@@ -165,12 +167,51 @@ public class ScreenSetup : MonoBehaviour
 
     void UpdateBorders()
     {
-        // Destroy old borders and recreate
-        foreach (var border in borders)
+        if (cam == null) return;
+
+        float camHeight = cam.orthographicSize * 2f;
+        float camWidth = camHeight * cam.aspect;
+        float halfHeight = camHeight / 2f;
+        float halfWidth = camWidth / 2f;
+        Vector3 camPos = cam.transform.position;
+
+        float leftX = -halfWidth + (leftOverlap * camWidth);
+        float rightX = halfWidth - (rightOverlap * camWidth);
+        float bottomY = -halfHeight + (groundOverlap * camHeight);
+        float topY = halfHeight - (spaceOverlap * camHeight);
+
+        // Update existing borders instead of destroy+create (preserves references)
+        UpdateCollider(borders[0], "Left",
+            new Vector2(camPos.x + leftX - borderThickness / 2f, camPos.y),
+            new Vector2(borderThickness, camHeight * 2));
+
+        UpdateCollider(borders[1], "Right",
+            new Vector2(camPos.x + rightX + borderThickness / 2f, camPos.y),
+            new Vector2(borderThickness, camHeight * 2));
+
+        UpdateCollider(borders[2], "Ground",
+            new Vector2(camPos.x, camPos.y + bottomY - borderThickness / 2f),
+            new Vector2(camWidth * 2, borderThickness));
+
+        UpdateCollider(borders[3], "Space",
+            new Vector2(camPos.x, camPos.y + topY + borderThickness / 2f),
+            new Vector2(camWidth * 2, borderThickness));
+
+        Debug.Log($"[ScreenSetup] Borders updated. CamSize: {camWidth:F1}x{camHeight:F1}, OrthoSize: {cam.orthographicSize:F1}, " +
+                  $"Aspect: {cam.aspect:F2}, Screen: {Screen.width}x{Screen.height}, " +
+                  $"Ground.y: {(camPos.y + bottomY - borderThickness / 2f):F1}, CamBottom: {(camPos.y - halfHeight):F1}");
+    }
+
+    void UpdateCollider(GameObject border, string name, Vector2 position, Vector2 size)
+    {
+        if (border == null) return;
+
+        border.transform.position = position;
+        var collider = border.GetComponent<BoxCollider2D>();
+        if (collider != null)
         {
-            if (border != null) Destroy(border);
+            collider.size = size;
         }
-        CreateBorderColliders();
     }
 
     // Force update - useful if camera settings change
