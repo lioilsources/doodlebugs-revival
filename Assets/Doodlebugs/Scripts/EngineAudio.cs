@@ -24,6 +24,14 @@ public class EngineAudio : NetworkBehaviour
         _player = GetComponent<PlayerController>();
         _audioSource = GetComponent<AudioSource>();
 
+        // Only play audio for the local player's plane
+        if (!IsOwner)
+        {
+            if (_audioSource != null)
+                _audioSource.enabled = false;
+            return;
+        }
+
         if (_audioSource == null)
         {
             _audioSource = gameObject.AddComponent<AudioSource>();
@@ -31,8 +39,7 @@ public class EngineAudio : NetworkBehaviour
 
         // Select melody based on role (host vs client)
         bool isHost = NetworkManager.Singleton != null &&
-                      NetworkManager.Singleton.IsHost &&
-                      IsOwner;
+                      NetworkManager.Singleton.IsHost;
         _audioSource.clip = isHost ? engineHost : engineClient;
         _audioSource.loop = true;
         _audioSource.playOnAwake = false;
@@ -41,7 +48,7 @@ public class EngineAudio : NetworkBehaviour
 
     void Update()
     {
-        if (_player == null || _audioSource == null) return;
+        if (!IsOwner || _player == null || _audioSource == null) return;
 
         bool engineOff = _player.IsEngineOff;
         float speed = _player.Speed;
