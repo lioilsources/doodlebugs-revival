@@ -59,9 +59,9 @@ sysinfo.txt
 *.apk
 *.aab
 *.unitypackage
-build-doodle.app/
 iOS-Build/
 macos-build.app/
+Windows-Build/
 
 # Crashlytics generated file
 crashlytics-build.properties

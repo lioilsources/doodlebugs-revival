@@ -57,6 +57,10 @@ public class PlayerController : NetworkBehaviour, IDamagable
         set => netGravity.Value = value;
     }
 
+    // Public accessors for EngineAudio
+    public bool IsEngineOff => engineOff;
+    public float Speed => speed;
+
     public GameObject hitEffect;
 
     // Cached boundary references
