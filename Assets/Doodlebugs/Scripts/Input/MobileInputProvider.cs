@@ -48,17 +48,17 @@ public class MobileInputProvider : IInputProvider
 
     public void UpdateInput()
     {
-        // Gyro rotation
+        // Gyro rotation - tilt left/right
         if (gyroAvailable)
         {
-            float tilt = Input.gyro.gravity.y;
+            float tilt = Input.gyro.gravity.x;
             if (Mathf.Abs(tilt) < deadZone)
             {
                 horizontalInput = 0f;
             }
             else
             {
-                // Map tilt to -1..1 range
+                // Map tilt to -1..1 range (left tilt = negative = turn left)
                 horizontalInput = Mathf.Clamp(tilt / maxTilt, -1f, 1f);
             }
         }
