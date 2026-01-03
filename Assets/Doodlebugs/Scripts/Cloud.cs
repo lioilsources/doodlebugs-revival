@@ -131,4 +131,37 @@ public class Cloud : NetworkBehaviour
         if (!IsServer) return;
         transform.position = newPosition;
     }
+
+    /// <summary>
+    /// Teleport cloud with hide/show to avoid visible jump on clients
+    /// </summary>
+    public void TeleportWithHide(Vector3 newPosition)
+    {
+        if (!IsServer) return;
+
+        // Hide on all clients
+        SetVisibilityClientRpc(false);
+
+        // Move instantly
+        transform.position = newPosition;
+
+        // Show after short delay
+        StartCoroutine(ShowAfterDelay(0.1f));
+    }
+
+    private System.Collections.IEnumerator ShowAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        SetVisibilityClientRpc(true);
+    }
+
+    [ClientRpc]
+    private void SetVisibilityClientRpc(bool visible)
+    {
+        var sr = GetComponent<SpriteRenderer>();
+        if (sr != null)
+        {
+            sr.enabled = visible;
+        }
+    }
 }

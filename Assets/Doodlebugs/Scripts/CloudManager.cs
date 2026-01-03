@@ -305,7 +305,7 @@ public class CloudManager : MonoBehaviour
 
         // Position so right edge of cloud is just outside left boundary
         float leftX = _leftBoundary.bounds.min.x - (spriteHalfWidth * newScale);
-        cloud.SetPosition(new Vector3(leftX, cloud.transform.position.y, 0));
+        cloud.TeleportWithHide(new Vector3(leftX, cloud.transform.position.y, 0));
 
         cloud.Initialize(
             Random.Range(minSpeed, maxSpeed),
