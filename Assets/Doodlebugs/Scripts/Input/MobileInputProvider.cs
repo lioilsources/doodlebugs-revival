@@ -8,10 +8,12 @@ public class MobileInputProvider : IInputProvider
     // Gyro settings
     private float deadZone = 0.1f;
     private float maxTilt = 0.4f;
+    private float neutralTiltY = -0.7f; // 45 degree hold angle (sin(45°) ≈ 0.707)
     private bool gyroAvailable = false;
 
     // Input state
     private float horizontalInput = 0f;
+    private float verticalInput = 0f;
     private bool shootPressed = false;
     private bool shootConsumed = false;
 
@@ -35,6 +37,11 @@ public class MobileInputProvider : IInputProvider
         return horizontalInput;
     }
 
+    public float GetVerticalInput()
+    {
+        return verticalInput;
+    }
+
     public bool GetShootInput()
     {
         // Return true only once per press
@@ -51,15 +58,29 @@ public class MobileInputProvider : IInputProvider
         // Gyro rotation - tilt left/right
         if (gyroAvailable)
         {
-            float tilt = Input.gyro.gravity.x;
-            if (Mathf.Abs(tilt) < deadZone)
+            // Horizontal: tilt phone left/right
+            float tiltX = Input.gyro.gravity.x;
+            if (Mathf.Abs(tiltX) < deadZone)
             {
                 horizontalInput = 0f;
             }
             else
             {
                 // Map tilt to -1..1 range (left tilt = negative = turn left)
-                horizontalInput = Mathf.Clamp(tilt / maxTilt, -1f, 1f);
+                horizontalInput = Mathf.Clamp(tiltX / maxTilt, -1f, 1f);
+            }
+
+            // Vertical: tilt phone forward/backward (relative to 45° hold angle)
+            // Forward (away from self) = positive = speed up
+            // Backward (towards self) = negative = slow down
+            float tiltY = Input.gyro.gravity.y - neutralTiltY;
+            if (Mathf.Abs(tiltY) < deadZone)
+            {
+                verticalInput = 0f;
+            }
+            else
+            {
+                verticalInput = Mathf.Clamp(tiltY / maxTilt, -1f, 1f);
             }
         }
 
