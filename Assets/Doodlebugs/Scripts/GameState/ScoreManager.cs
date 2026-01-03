@@ -69,6 +69,39 @@ public class ScoreManager : MonoBehaviour
 
         Debug.Log("[ScoreManager] Match started!");
         OnMatchStarted?.Invoke();
+
+        // Sync to all clients
+        SyncMatchStartToClients();
+    }
+
+    private void SyncMatchStartToClients()
+    {
+        // Find any player to send RPC through
+        var players = FindObjectsOfType<PlayerController>();
+        foreach (var player in players)
+        {
+            if (player.IsServer)
+            {
+                player.SyncMatchStartClientRpc();
+                break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Called by PlayerController ClientRpc to start match on clients
+    /// </summary>
+    public void StartMatchFromServer()
+    {
+        if (MatchStarted) return; // Already started
+
+        MatchStarted = true;
+        MatchTime = 0f;
+        Player1Score = 0;
+        Player2Score = 0;
+
+        Debug.Log("[ScoreManager] Match started (from server sync)!");
+        OnMatchStarted?.Invoke();
     }
 
     private void Update()

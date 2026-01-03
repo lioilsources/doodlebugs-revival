@@ -573,4 +573,16 @@ public class PlayerController : NetworkBehaviour, IDamagable
             ScoreManager.Instance.UpdateScoreFromServer(scorerClientId, newScore);
         }
     }
+
+    /// <summary>
+    /// Sync match start to all clients. Called by ScoreManager.
+    /// </summary>
+    [ClientRpc]
+    public void SyncMatchStartClientRpc()
+    {
+        if (ScoreManager.Instance != null)
+        {
+            ScoreManager.Instance.StartMatchFromServer();
+        }
+    }
 }
