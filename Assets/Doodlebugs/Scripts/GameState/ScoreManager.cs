@@ -51,11 +51,11 @@ public class ScoreManager : MonoBehaviour
 
     private void OnClientConnected(ulong clientId)
     {
-        // Start match when second player connects (server only)
+        // Reset and start new match when second player connects (server only)
         if (NetworkManager.Singleton.IsServer &&
-            NetworkManager.Singleton.ConnectedClients.Count >= 2 &&
-            !MatchStarted)
+            NetworkManager.Singleton.ConnectedClients.Count >= 2)
         {
+            // Always reset and start fresh match when 2 players are connected
             StartMatch();
         }
     }
@@ -89,18 +89,17 @@ public class ScoreManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Called by PlayerController ClientRpc to start match on clients
+    /// Called by PlayerController ClientRpc to reset and start match on clients
     /// </summary>
     public void StartMatchFromServer()
     {
-        if (MatchStarted) return; // Already started
-
+        // Always reset - new player connected means new match
         MatchStarted = true;
         MatchTime = 0f;
         Player1Score = 0;
         Player2Score = 0;
 
-        Debug.Log("[ScoreManager] Match started (from server sync)!");
+        Debug.Log("[ScoreManager] Match reset and started (from server sync)!");
         OnMatchStarted?.Invoke();
     }
 
