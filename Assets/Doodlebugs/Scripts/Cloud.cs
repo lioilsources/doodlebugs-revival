@@ -138,20 +138,24 @@ public class Cloud : NetworkBehaviour
     public void TeleportWithHide(Vector3 newPosition)
     {
         if (!IsServer) return;
-
-        // Hide on all clients
-        SetVisibilityClientRpc(false);
-
-        // Move instantly
-        transform.position = newPosition;
-
-        // Show after short delay
-        StartCoroutine(ShowAfterDelay(0.1f));
+        StartCoroutine(TeleportSequence(newPosition));
     }
 
-    private System.Collections.IEnumerator ShowAfterDelay(float delay)
+    private System.Collections.IEnumerator TeleportSequence(Vector3 newPosition)
     {
-        yield return new WaitForSeconds(delay);
+        // Hide on all clients first
+        SetVisibilityClientRpc(false);
+
+        // Wait for RPC to propagate before moving
+        yield return new WaitForSeconds(0.15f);
+
+        // Move while hidden
+        transform.position = newPosition;
+
+        // Wait for position to sync
+        yield return new WaitForSeconds(0.15f);
+
+        // Show again
         SetVisibilityClientRpc(true);
     }
 
