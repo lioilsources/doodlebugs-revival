@@ -560,4 +560,17 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         Shutdown();
     }
+
+    /// <summary>
+    /// Sync score to all clients. Called by ScoreManager.
+    /// </summary>
+    [ClientRpc]
+    public void SyncScoreClientRpc(ulong scorerClientId, int newScore)
+    {
+        // Update local ScoreManager on clients
+        if (ScoreManager.Instance != null)
+        {
+            ScoreManager.Instance.UpdateScoreFromServer(scorerClientId, newScore);
+        }
+    }
 }
