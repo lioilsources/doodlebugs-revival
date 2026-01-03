@@ -1,5 +1,6 @@
 using UnityEngine;
 using Unity.Netcode;
+using Unity.Netcode.Components;
 
 /// <summary>
 /// Cloud behavior - moves right and wraps at screen edge.
@@ -143,29 +144,38 @@ public class Cloud : NetworkBehaviour
 
     private System.Collections.IEnumerator TeleportSequence(Vector3 newPosition)
     {
-        // Hide on all clients first
-        SetVisibilityClientRpc(false);
+        // Teleport on all clients simultaneously (hides, moves, shows)
+        TeleportClientRpc(newPosition);
 
-        // Wait for RPC to propagate before moving
-        yield return new WaitForSeconds(0.15f);
-
-        // Move while hidden
+        // Also set on server
         transform.position = newPosition;
 
-        // Wait for position to sync
-        yield return new WaitForSeconds(0.15f);
-
-        // Show again
-        SetVisibilityClientRpc(true);
+        yield return null;
     }
 
     [ClientRpc]
-    private void SetVisibilityClientRpc(bool visible)
+    private void TeleportClientRpc(Vector3 newPosition)
+    {
+        StartCoroutine(TeleportLocalSequence(newPosition));
+    }
+
+    private System.Collections.IEnumerator TeleportLocalSequence(Vector3 newPosition)
     {
         var sr = GetComponent<SpriteRenderer>();
-        if (sr != null)
-        {
-            sr.enabled = visible;
-        }
+
+        // Hide
+        if (sr != null) sr.enabled = false;
+
+        // Wait a frame
+        yield return null;
+
+        // Move instantly
+        transform.position = newPosition;
+
+        // Wait another frame for position to settle
+        yield return null;
+
+        // Show
+        if (sr != null) sr.enabled = true;
     }
 }
