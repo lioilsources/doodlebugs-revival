@@ -10,6 +10,11 @@ public class DesktopInputProvider : IInputProvider
         return Input.GetAxis("Horizontal");
     }
 
+    public float GetVerticalInput()
+    {
+        return Input.GetAxis("Vertical");
+    }
+
     public bool GetShootInput()
     {
         return Input.GetKeyDown(KeyCode.Space);

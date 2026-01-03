@@ -19,6 +19,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private float minSpeed = 2f;
     private float climbDrag = 1f;       // how fast speed decreases when climbing
     private float diveBoost = 3f;       // how fast speed increases when diving
+    private float throttleRate = 5f;    // how fast throttle changes speed
     private float maxGravity = 0.5f;
     private float gravityIncreaseRate = 0.35f;  // how fast gravity increases
 
@@ -217,23 +218,26 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private void HandleMovement()
     {
         float horizontalInput;
+        float verticalInput;
         if (InputManager.Instance != null && InputManager.Instance.InputProvider != null)
         {
             horizontalInput = InputManager.Instance.InputProvider.GetHorizontalInput();
+            verticalInput = InputManager.Instance.InputProvider.GetVerticalInput();
         }
         else
         {
             horizontalInput = Input.GetAxis("Horizontal");
+            verticalInput = Input.GetAxis("Vertical");
             if (Time.frameCount % 300 == 0) // Log every 5 seconds at 60fps
             {
                 Debug.LogWarning($"[PlayerController] InputManager not available, using fallback input. Instance: {InputManager.Instance != null}");
             }
         }
         rotatePlane(horizontalInput);
-        movePlane();
+        movePlane(verticalInput);
     }
 
-    private void movePlane()
+    private void movePlane(float throttleInput)
     {
         if (engineOff)
         {
@@ -265,6 +269,12 @@ public class PlayerController : NetworkBehaviour, IDamagable
             {
                 // Diving - gains speed
                 speed -= verticalFactor * diveBoost * Time.fixedDeltaTime;
+            }
+
+            // Throttle input: forward tilt = speed up, backward tilt = slow down
+            if (throttleInput != 0)
+            {
+                speed += throttleInput * throttleRate * Time.fixedDeltaTime;
             }
 
             // Clamp speed

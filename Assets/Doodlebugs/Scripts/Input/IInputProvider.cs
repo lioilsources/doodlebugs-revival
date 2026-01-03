@@ -9,6 +9,11 @@ public interface IInputProvider
     float GetHorizontalInput();
 
     /// <summary>
+    /// Returns vertical input for throttle (-1 = slow down, 0 = none, 1 = speed up)
+    /// </summary>
+    float GetVerticalInput();
+
+    /// <summary>
     /// Returns true on the frame when shoot button is pressed
     /// </summary>
     bool GetShootInput();
