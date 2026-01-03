@@ -391,9 +391,22 @@ public class PlayerController : NetworkBehaviour, IDamagable
         // Only owner can teleport (ClientNetworkTransform = owner authority)
         if (!IsOwner) return;
 
-        // Different spawn position for each player to avoid immediate collision
-        float spawnX = (OwnerClientId == 0) ? -15f : 15f;
-        Vector3 newPos = new Vector3(spawnX, 10f, 0f);
+        // Spawn behind a random cloud if available
+        Vector3 newPos;
+        if (CloudManager.Instance != null && CloudManager.Instance.AreCloudsReady())
+        {
+            var cloudPos = CloudManager.Instance.GetRandomCloudPosition();
+            // Spawn behind cloud (left of it) with slight random offset
+            float offsetX = Random.Range(-5f, -2f);
+            float offsetY = Random.Range(-1f, 1f);
+            newPos = new Vector3(cloudPos.x + offsetX, cloudPos.y + offsetY, 0f);
+        }
+        else
+        {
+            // Fallback: different spawn position for each player
+            float spawnX = (OwnerClientId == 0) ? -15f : 15f;
+            newPos = new Vector3(spawnX, 10f, 0f);
+        }
 
         // Both players face right (z=0), they spawn on opposite sides
         Quaternion newRotation = Quaternion.Euler(0, 0, 0);
