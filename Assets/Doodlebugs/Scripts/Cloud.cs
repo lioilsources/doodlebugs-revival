@@ -22,6 +22,7 @@ public class Cloud : NetworkBehaviour
     // Cached boundary and sprite info
     private Collider2D _rightBoundary;
     private float _spriteHalfWidth = 1f; // Will be calculated from SpriteRenderer
+    private NetworkTransform _networkTransform;
 
     void Awake()
     {
@@ -33,6 +34,9 @@ public class Cloud : NetworkBehaviour
         {
             _spriteHalfWidth = sr.sprite.bounds.extents.x;
         }
+
+        // Cache NetworkTransform for teleport
+        _networkTransform = GetComponent<NetworkTransform>();
     }
 
     void Start()
@@ -134,48 +138,21 @@ public class Cloud : NetworkBehaviour
     }
 
     /// <summary>
-    /// Teleport cloud with hide/show to avoid visible jump on clients
+    /// Teleport cloud to new position using NetworkTransform.Teleport (no interpolation)
+    /// Server is owner of clouds, so server can call Teleport directly
     /// </summary>
     public void TeleportWithHide(Vector3 newPosition)
     {
         if (!IsServer) return;
-        StartCoroutine(TeleportSequence(newPosition));
-    }
 
-    private System.Collections.IEnumerator TeleportSequence(Vector3 newPosition)
-    {
-        // Teleport on all clients simultaneously (hides, moves, shows)
-        TeleportClientRpc(newPosition);
-
-        // Also set on server
-        transform.position = newPosition;
-
-        yield return null;
-    }
-
-    [ClientRpc]
-    private void TeleportClientRpc(Vector3 newPosition)
-    {
-        StartCoroutine(TeleportLocalSequence(newPosition));
-    }
-
-    private System.Collections.IEnumerator TeleportLocalSequence(Vector3 newPosition)
-    {
-        var sr = GetComponent<SpriteRenderer>();
-
-        // Hide
-        if (sr != null) sr.enabled = false;
-
-        // Wait a frame
-        yield return null;
-
-        // Move instantly
-        transform.position = newPosition;
-
-        // Wait another frame for position to settle
-        yield return null;
-
-        // Show
-        if (sr != null) sr.enabled = true;
+        // Use NetworkTransform.Teleport to skip interpolation (same as PlayerController)
+        if (_networkTransform != null)
+        {
+            _networkTransform.Teleport(newPosition, transform.rotation, transform.localScale);
+        }
+        else
+        {
+            transform.position = newPosition;
+        }
     }
 }
