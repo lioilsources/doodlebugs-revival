@@ -1,3 +1,10 @@
+3/1/2026
+- new qyro controls: X movement; Y speed
+- dynamic clouds motion and size
+- UX controls for speed, time and score
+- music aligned with engine speed
+- Android build
+
 31/12/2025
 - network discovery (255.255.255.255 broadcast is not allowed on iOS)
 - gyro input
