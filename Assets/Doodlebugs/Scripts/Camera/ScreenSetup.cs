@@ -38,6 +38,9 @@ public class ScreenSetup : MonoBehaviour
 
     void Awake()
     {
+        // Prevent screen from sleeping on mobile devices
+        Screen.sleepTimeout = SleepTimeout.NeverSleep;
+
         cam = Camera.main;
         if (cam == null)
         {

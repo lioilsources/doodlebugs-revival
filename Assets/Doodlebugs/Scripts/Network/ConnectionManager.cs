@@ -80,7 +80,7 @@ namespace Doodlebugs.Network
         public void StartDiscovery()
         {
             SetState(ConnectionState.Searching);
-            SetStatus("Searching for game...");
+            SetStatus($"{UI.ConnectionUI.GameVersion}  •  Searching for game...");
 
             _discovery?.StartListening();
         }
