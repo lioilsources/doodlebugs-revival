@@ -4,6 +4,12 @@ public class PilotMaturityManager : MonoBehaviour
 {
     public static PilotMaturityManager Instance { get; private set; }
 
+    /// <summary>
+    /// Event fired when the pilot maturity level changes.
+    /// Subscribe to this to react to level-ups (e.g., visual effects).
+    /// </summary>
+    public event System.Action<PilotMaturityLevel> OnLevelChanged;
+
     [Header("Current Level (set default in editor, changes at runtime)")]
     [SerializeField] private PilotMaturityLevel currentLevel = PilotMaturityLevel.Novice;
 
@@ -48,6 +54,7 @@ public class PilotMaturityManager : MonoBehaviour
         {
             currentLevel = level;
             Debug.Log($"[PilotMaturity] Level changed to: {level}");
+            OnLevelChanged?.Invoke(level);
         }
     }
 
