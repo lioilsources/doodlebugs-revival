@@ -401,7 +401,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a878ab9f0f5d4477c9267444a02b0d7c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PilotMaturityManager
-  defaultLevel: 0
+  defaultLevel: 2
   noviceProfile: {fileID: 11400000, guid: bf517288de4e84c9faa175aff456d4c4, type: 2}
   advancedProfile: {fileID: 11400000, guid: 71263d9b7a25e4c6cbd5d521a244ac02, type: 2}
   expertProfile: {fileID: 11400000, guid: 474868fbbd013450385efbd82ef49252, type: 2}

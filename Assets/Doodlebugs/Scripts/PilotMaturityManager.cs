@@ -4,16 +4,13 @@ public class PilotMaturityManager : MonoBehaviour
 {
     public static PilotMaturityManager Instance { get; private set; }
 
-    [Header("Testing - Select Default Profile")]
-    [SerializeField] private PilotMaturityLevel defaultLevel = PilotMaturityLevel.Novice;
+    [Header("Current Level (set default in editor, changes at runtime)")]
+    [SerializeField] private PilotMaturityLevel currentLevel = PilotMaturityLevel.Novice;
 
     [Header("Profiles (assign in editor)")]
     [SerializeField] private PilotMaturityProfile noviceProfile;
     [SerializeField] private PilotMaturityProfile advancedProfile;
     [SerializeField] private PilotMaturityProfile expertProfile;
-
-    [Header("Runtime State")]
-    [SerializeField] private PilotMaturityLevel currentLevel;
 
     public PilotMaturityProfile CurrentProfile => GetProfile(currentLevel);
 
@@ -25,7 +22,6 @@ public class PilotMaturityManager : MonoBehaviour
             return;
         }
         Instance = this;
-        currentLevel = defaultLevel;
     }
 
     public PilotMaturityProfile GetProfile(PilotMaturityLevel level)

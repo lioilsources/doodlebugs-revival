@@ -20,5 +20,5 @@ MonoBehaviour:
   engineOffRotateMultiplier: 2
   engineRestartMinRotation: -0.8
   engineRestartMaxRotation: -0.6
-  bulletForceMultiplier: 2
+  bulletForceMultiplier: 1
   bulletGravityScale: 2
