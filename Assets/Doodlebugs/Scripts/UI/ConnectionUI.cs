@@ -6,7 +6,7 @@ namespace Doodlebugs.UI
 {
     public class ConnectionUI : MonoBehaviour
     {
-        public const string GameVersion = "v0.2.0-alpha";
+        public const string GameVersion = "v0.3.0-alpha";
 
         [SerializeField] private Text _statusText;
         [SerializeField] private GameObject _statusPanel;

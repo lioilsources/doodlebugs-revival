@@ -372,6 +372,55 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 256290039}
   m_CullTransparentMesh: 1
+--- !u!1 &283576918
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 283576920}
+  - component: {fileID: 283576919}
+  m_Layer: 0
+  m_Name: PilotMaturityManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &283576919
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283576918}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a878ab9f0f5d4477c9267444a02b0d7c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PilotMaturityManager
+  defaultLevel: 2
+  noviceProfile: {fileID: 11400000, guid: bf517288de4e84c9faa175aff456d4c4, type: 2}
+  advancedProfile: {fileID: 11400000, guid: 71263d9b7a25e4c6cbd5d521a244ac02, type: 2}
+  expertProfile: {fileID: 11400000, guid: 474868fbbd013450385efbd82ef49252, type: 2}
+  currentLevel: 0
+--- !u!4 &283576920
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283576918}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &367916292
 GameObject:
   m_ObjectHideFlags: 0
@@ -991,3 +1040,4 @@ SceneRoots:
   - {fileID: 606726325}
   - {fileID: 1923143461274797603}
   - {fileID: 1977800231}
+  - {fileID: 283576920}
