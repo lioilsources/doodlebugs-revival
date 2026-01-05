@@ -77,3 +77,4 @@ crashlytics-build.properties
 
 # macOS
 .DS_Store
+/Doodlebugs Revival_BurstDebugInformation_DoNotShip

@@ -12,7 +12,6 @@ public class PlayerController : NetworkBehaviour, IDamagable
     public Transform leftPoint, rightPoint, forwardPoint;
     Rigidbody2D rb;
     ClientNetworkTransform networkTransform;
-    public float rotateSpeed = 200f;
 
     // Base values (can be overridden by maturity profile)
     private float baseRotateSpeed = 200f;
@@ -21,6 +20,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private float minSpeed = 2f;
     private float climbDrag = 1f;       // how fast speed decreases when climbing
     private float diveBoost = 3f;       // how fast speed increases when diving
+    private float throttleRate = 5f;    // how fast throttle changes speed
     private float baseMaxGravity = 0.5f;
     private float baseGravityIncreaseRate = 0.35f;  // how fast gravity increases
     private float baseEngineRestartMin = -0.8f;
