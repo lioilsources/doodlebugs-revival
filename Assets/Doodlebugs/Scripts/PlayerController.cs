@@ -23,6 +23,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private float throttleRate = 5f;    // how fast throttle changes speed
     private float baseMaxGravity = 0.5f;
     private float baseGravityIncreaseRate = 0.35f;  // how fast gravity increases
+    private float baseEngineOffRotateMultiplier = 16f;  // Novice default: 50 * 16 = 800
     private float baseEngineRestartMin = -0.8f;
     private float baseEngineRestartMax = -0.6f;
 
@@ -32,6 +33,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private float maxSpeed => Profile?.maxSpeed ?? baseMaxSpeed;
     private float maxGravity => Profile?.maxGravity ?? baseMaxGravity;
     private float gravityIncreaseRate => Profile?.gravityIncreaseRate ?? baseGravityIncreaseRate;
+    private float engineOffRotateMultiplier => Profile?.engineOffRotateMultiplier ?? baseEngineOffRotateMultiplier;
     private float engineRestartMin => Profile?.engineRestartMinRotation ?? baseEngineRestartMin;
     private float engineRestartMax => Profile?.engineRestartMaxRotation ?? baseEngineRestartMax;
 
@@ -335,16 +337,16 @@ public class PlayerController : NetworkBehaviour, IDamagable
         angle = Vector3.Cross(direction, transform.up).z;
 
         // Rotation speed proportional to plane speed
-        // Extremely fast rotation when engine is off
+        // Faster rotation when engine is off (multiplier varies by profile)
         float speedFactor = rb.linearVelocity.magnitude / defaultSpeed;  // 1.0 at defaultSpeed
         float currentRotateSpeed = engineOff
-            ? rotateSpeed * 4f
+            ? rotateSpeed * engineOffRotateMultiplier
             : rotateSpeed * speedFactor;
 
-        // turn on/off
+        // turn on/off - proportional to input strength
         if (x != 0)
         {
-            rb.angularVelocity = -currentRotateSpeed * angle;
+            rb.angularVelocity = -currentRotateSpeed * angle * Mathf.Abs(x);
         }
         else
         {

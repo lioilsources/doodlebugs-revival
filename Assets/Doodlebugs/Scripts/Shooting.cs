@@ -11,9 +11,10 @@ public class Shooting : NetworkBehaviour
     public GameObject bulletPrefab;
     public float baseBulletForce = 20f;
 
-    // Profile-aware bullet force
+    // Profile-aware bullet settings
     private PilotMaturityProfile Profile => PilotMaturityManager.Instance?.CurrentProfile;
     private float bulletForce => baseBulletForce * (Profile?.bulletForceMultiplier ?? 1f);
+    private float bulletGravityScale => Profile?.bulletGravityScale ?? 2f;
 
     public override void OnNetworkSpawn()
     {
@@ -65,6 +66,9 @@ public class Shooting : NetworkBehaviour
         var rb = bullet.GetComponent<Rigidbody2D>();
         if (rb != null)
         {
+            // Apply gravity scale from profile
+            rb.gravityScale = bulletGravityScale;
+
             // Bullet force = base force + plane speed
             float totalForce = bulletForce + planeSpeed;
             rb.AddForce((rotation * Vector3.right) * totalForce, ForceMode2D.Impulse);

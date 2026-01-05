@@ -17,6 +17,8 @@ MonoBehaviour:
   maxSpeed: 20
   maxGravity: 0.25
   gravityIncreaseRate: 0.175
+  engineOffRotateMultiplier: 6
   engineRestartMinRotation: -0.85
   engineRestartMaxRotation: -0.53
   bulletForceMultiplier: 1
+  bulletGravityScale: 1

@@ -41,8 +41,41 @@ public class PilotMaturityProfileCreator
             return;
         }
 
-        var profile = PilotMaturityProfile.CreateDefault(level);
+        // Create profile with level-specific values (single source of truth for asset creation)
+        var profile = ScriptableObject.CreateInstance<PilotMaturityProfile>();
+        profile.level = level;
         profile.name = $"{level}Profile";
+
+        switch (level)
+        {
+            case PilotMaturityLevel.Expert:
+                profile.rotateSpeed = 200f;
+                profile.maxSpeed = 20f;
+                profile.maxGravity = 0.5f;
+                profile.gravityIncreaseRate = 0.35f;
+                profile.engineOffRotateMultiplier = 2f;  // 200 * 2 = 400
+                profile.engineRestartMinRotation = -0.8f;
+                profile.engineRestartMaxRotation = -0.6f;
+                profile.bulletForceMultiplier = 2f;
+                profile.bulletGravityScale = 2f;
+                break;
+
+            case PilotMaturityLevel.Advanced:
+                profile.rotateSpeed = 100f;
+                profile.maxSpeed = 20f;
+                profile.maxGravity = 0.25f;
+                profile.gravityIncreaseRate = 0.175f;
+                profile.engineOffRotateMultiplier = 6f;  // 100 * 6 = 600
+                profile.engineRestartMinRotation = -0.85f;
+                profile.engineRestartMaxRotation = -0.53f;
+                profile.bulletForceMultiplier = 1f;
+                profile.bulletGravityScale = 1f;
+                break;
+
+            case PilotMaturityLevel.Novice:
+                // Uses class default values (Novice)
+                break;
+        }
 
         AssetDatabase.CreateAsset(profile, assetPath);
         Debug.Log($"[Doodlebugs] Created profile: {assetPath}");

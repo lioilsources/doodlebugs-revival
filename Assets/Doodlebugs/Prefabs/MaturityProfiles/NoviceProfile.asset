@@ -13,10 +13,12 @@ MonoBehaviour:
   m_Name: NoviceProfile
   m_EditorClassIdentifier: Assembly-CSharp::PilotMaturityProfile
   level: 0
-  rotateSpeed: 200
+  rotateSpeed: 50
   maxSpeed: 10
-  maxGravity: 0.5
-  gravityIncreaseRate: 0.35
+  maxGravity: 0.125
+  gravityIncreaseRate: 0.0875
+  engineOffRotateMultiplier: 16
   engineRestartMinRotation: -0.91
   engineRestartMaxRotation: -0.41
   bulletForceMultiplier: 1
+  bulletGravityScale: 0
