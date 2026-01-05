@@ -75,6 +75,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
     public GameObject hitEffect;
 
+    // Visual effects controller
+    private PlaneVisualEffects visualEffects;
+
     // Cached boundary references
     private Collider2D leftBoundary;
     private Collider2D rightBoundary;
@@ -102,6 +105,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     {
         base.OnNetworkSpawn();
         SetPlaneColor();
+
+        // Cache visual effects reference
+        visualEffects = GetComponent<PlaneVisualEffects>();
 
         // Ensure Rigidbody is initialized
         if (rb == null)
@@ -366,6 +372,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (!IsServer)
             return;
 
+        visualEffects?.TriggerDamageFlash();
         RespawnWithExplosionClientRpc();
     }
 
@@ -513,16 +520,19 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         if (collider.gameObject.CompareTag("Bullet"))
         {
+            visualEffects?.TriggerDamageFlash();
             RespawnWithExplosionClientRpc();
         }
 
         if (collider.gameObject.CompareTag("Respawn") || collider.gameObject.CompareTag("Ground"))
         {
+            visualEffects?.TriggerDamageFlash();
             RespawnWithExplosionClientRpc();
         }
 
         if (collider.gameObject.CompareTag("Player"))
         {
+            visualEffects?.TriggerDamageFlash();
             RespawnWithExplosionClientRpc();
         }
 
