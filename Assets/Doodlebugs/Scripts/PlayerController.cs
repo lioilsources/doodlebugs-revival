@@ -11,18 +11,27 @@ public class PlayerController : NetworkBehaviour, IDamagable
     public Transform leftPoint, rightPoint, forwardPoint;
     Rigidbody2D rb;
     NetworkTransform networkTransform;
-    public float rotateSpeed = 200f;
 
+    // Base values (can be overridden by maturity profile)
+    private float baseRotateSpeed = 200f;
     private float defaultSpeed = 5f;
-    private float maxSpeed = 20f;
+    private float baseMaxSpeed = 20f;
     private float minSpeed = 2f;
     private float climbDrag = 1f;       // how fast speed decreases when climbing
     private float diveBoost = 3f;       // how fast speed increases when diving
-    private float maxGravity = 0.5f;
-    private float gravityIncreaseRate = 0.35f;  // how fast gravity increases
+    private float baseMaxGravity = 0.5f;
+    private float baseGravityIncreaseRate = 0.35f;  // how fast gravity increases
+    private float baseEngineRestartMin = -0.8f;
+    private float baseEngineRestartMax = -0.6f;
 
-    private float minRotateSpeed = 1f;
-    private float maxRotateSpeed = 50f;
+    // Profile-aware properties
+    private PilotMaturityProfile Profile => PilotMaturityManager.Instance?.CurrentProfile;
+    private float rotateSpeed => Profile?.rotateSpeed ?? baseRotateSpeed;
+    private float maxSpeed => Profile?.maxSpeed ?? baseMaxSpeed;
+    private float maxGravity => Profile?.maxGravity ?? baseMaxGravity;
+    private float gravityIncreaseRate => Profile?.gravityIncreaseRate ?? baseGravityIncreaseRate;
+    private float engineRestartMin => Profile?.engineRestartMinRotation ?? baseEngineRestartMin;
+    private float engineRestartMax => Profile?.engineRestartMaxRotation ?? baseEngineRestartMax;
 
     // Synchronized state across network
     private NetworkVariable<float> netSpeed = new NetworkVariable<float>(5f,
@@ -169,7 +178,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
             // Check for dive to restart engine
             var rotation = plane.transform.rotation.z;
-            if (rotation > -0.8 && rotation < -0.6)
+            if (rotation > engineRestartMin && rotation < engineRestartMax)
             {
                 // Diving - turn on engine and keep speed
                 EngineOn();

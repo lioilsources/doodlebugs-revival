@@ -9,7 +9,11 @@ public class Shooting : NetworkBehaviour
 {
     public Transform firePoint;
     public GameObject bulletPrefab;
-    public float bulletForce = 20f;
+    public float baseBulletForce = 20f;
+
+    // Profile-aware bullet force
+    private PilotMaturityProfile Profile => PilotMaturityManager.Instance?.CurrentProfile;
+    private float bulletForce => baseBulletForce * (Profile?.bulletForceMultiplier ?? 1f);
 
     public override void OnNetworkSpawn()
     {
