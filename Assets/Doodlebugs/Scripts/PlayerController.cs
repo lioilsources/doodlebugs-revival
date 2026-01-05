@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 using Unity.Netcode.Components;
+using Doodlebugs.Network;
 
 public class PlayerController : NetworkBehaviour, IDamagable
 {
@@ -10,7 +11,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
     public Transform plane;
     public Transform leftPoint, rightPoint, forwardPoint;
     Rigidbody2D rb;
-    NetworkTransform networkTransform;
+    ClientNetworkTransform networkTransform;
+    public float rotateSpeed = 200f;
 
     // Base values (can be overridden by maturity profile)
     private float baseRotateSpeed = 200f;
@@ -65,6 +67,10 @@ public class PlayerController : NetworkBehaviour, IDamagable
         set => netGravity.Value = value;
     }
 
+    // Public accessors for EngineAudio
+    public bool IsEngineOff => engineOff;
+    public float Speed => speed;
+
     public GameObject hitEffect;
 
     // Cached boundary references
@@ -76,7 +82,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
-        networkTransform = GetComponent<NetworkTransform>();
+        networkTransform = GetComponent<ClientNetworkTransform>();
         planeCollider = GetComponent<BoxCollider2D>();
 
         // Cache boundary references (get Collider2D to use bounds)
@@ -94,6 +100,50 @@ public class PlayerController : NetworkBehaviour, IDamagable
     {
         base.OnNetworkSpawn();
         SetPlaneColor();
+
+        // Ensure Rigidbody is initialized
+        if (rb == null)
+        {
+            rb = GetComponent<Rigidbody2D>();
+        }
+        if (networkTransform == null)
+        {
+            networkTransform = GetComponent<ClientNetworkTransform>();
+        }
+
+        // Initialize movement for owner (deferred to avoid NetworkVariable timing issues)
+        if (IsOwner)
+        {
+            StartCoroutine(InitializeOwnerDelayed());
+        }
+    }
+
+    private IEnumerator InitializeOwnerDelayed()
+    {
+        yield return null; // Wait one frame
+
+        Debug.Log($"[PlayerController] InitializeOwnerDelayed called, IsOwner={IsOwner}, OwnerClientId={OwnerClientId}, rb={rb != null}");
+
+        if (rb == null)
+        {
+            rb = GetComponent<Rigidbody2D>();
+            Debug.Log($"[PlayerController] rb was null, got component: {rb != null}");
+        }
+
+        speed = defaultSpeed;
+        engineOff = false;
+        inSpace = false;
+        currentGravity = 0f;
+
+        if (rb != null)
+        {
+            rb.linearVelocity = transform.right * speed;
+            Debug.Log($"[PlayerController] Set velocity to {rb.linearVelocity}, speed={speed}");
+        }
+        else
+        {
+            Debug.LogError("[PlayerController] rb is still null!");
+        }
     }
 
     private void SetPlaneColor()
@@ -103,8 +153,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
         var spriteRenderer = plane.GetComponent<SpriteRenderer>();
         if (spriteRenderer == null) return;
 
-        // Host keeps original colors, clients get red replaced with blue
-        if (OwnerClientId != 0)
+        // Client keeps original red, host gets red replaced with blue
+        if (OwnerClientId == 0)
         {
             // Load the color replace shader
             Shader colorReplaceShader = Shader.Find("Custom/ColorReplace");
@@ -116,6 +166,11 @@ public class PlayerController : NetworkBehaviour, IDamagable
                 mat.SetColor("_TargetColor", Color.blue);
                 mat.SetFloat("_Threshold", 0.4f);
                 spriteRenderer.material = mat;
+                Debug.Log($"[PlayerController] Applied blue color shader to host");
+            }
+            else
+            {
+                Debug.LogError("[PlayerController] ColorReplace shader not found! Make sure it's in Always Included Shaders.");
             }
         }
     }
@@ -126,8 +181,17 @@ public class PlayerController : NetworkBehaviour, IDamagable
         Debug.DrawRay(transform.position, forward, Color.green);
     }
 
+    private float _lastLogTime = 0f;
+
     void FixedUpdate() {
         if (!IsOwner) return;
+
+        // Debug log every 2 seconds
+        if (Time.time - _lastLogTime > 2f)
+        {
+            _lastLogTime = Time.time;
+            Debug.Log($"[PlayerController] FixedUpdate: speed={speed}, engineOff={engineOff}, rb.velocity={rb?.linearVelocity}, IsOwner={IsOwner}");
+        }
 
         HandleMovement();
         CheckOutOfBounds();
@@ -162,11 +226,27 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
     private void HandleMovement()
     {
-        rotatePlane(Input.GetAxis("Horizontal"));
-        movePlane();
+        float horizontalInput;
+        float verticalInput;
+        if (InputManager.Instance != null && InputManager.Instance.InputProvider != null)
+        {
+            horizontalInput = InputManager.Instance.InputProvider.GetHorizontalInput();
+            verticalInput = InputManager.Instance.InputProvider.GetVerticalInput();
+        }
+        else
+        {
+            horizontalInput = Input.GetAxis("Horizontal");
+            verticalInput = Input.GetAxis("Vertical");
+            if (Time.frameCount % 300 == 0) // Log every 5 seconds at 60fps
+            {
+                Debug.LogWarning($"[PlayerController] InputManager not available, using fallback input. Instance: {InputManager.Instance != null}");
+            }
+        }
+        rotatePlane(horizontalInput);
+        movePlane(verticalInput);
     }
 
-    private void movePlane()
+    private void movePlane(float throttleInput)
     {
         if (engineOff)
         {
@@ -174,7 +254,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             currentGravity = Mathf.MoveTowards(currentGravity, maxGravity, gravityIncreaseRate * Time.fixedDeltaTime);
 
             // Add gravity to current velocity
-            rb.velocity += Vector2.down * currentGravity * Time.fixedDeltaTime * 60f;
+            rb.linearVelocity += Vector2.down * currentGravity * Time.fixedDeltaTime * 60f;
 
             // Check for dive to restart engine
             var rotation = plane.transform.rotation.z;
@@ -200,6 +280,12 @@ public class PlayerController : NetworkBehaviour, IDamagable
                 speed -= verticalFactor * diveBoost * Time.fixedDeltaTime;
             }
 
+            // Throttle input: forward tilt = speed up, backward tilt = slow down
+            if (throttleInput != 0)
+            {
+                speed += throttleInput * throttleRate * Time.fixedDeltaTime;
+            }
+
             // Clamp speed
             speed = Mathf.Clamp(speed, minSpeed, maxSpeed);
 
@@ -209,7 +295,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
                 EngineOff();
             }
 
-            rb.velocity = transform.right * speed;
+            rb.linearVelocity = transform.right * speed;
         }
     }
 
@@ -219,7 +305,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (inSpace) return;
 
         // Keep speed from the fall
-        speed = rb.velocity.magnitude;
+        speed = rb.linearVelocity.magnitude;
         engineOff = false;
         currentGravity = 0f;
     }
@@ -250,7 +336,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         // Rotation speed proportional to plane speed
         // Extremely fast rotation when engine is off
-        float speedFactor = rb.velocity.magnitude / defaultSpeed;  // 1.0 at defaultSpeed
+        float speedFactor = rb.linearVelocity.magnitude / defaultSpeed;  // 1.0 at defaultSpeed
         float currentRotateSpeed = engineOff
             ? rotateSpeed * 4f
             : rotateSpeed * speedFactor;
@@ -284,20 +370,79 @@ public class PlayerController : NetworkBehaviour, IDamagable
     [ClientRpc]
     private void RespawnWithExplosionClientRpc()
     {
-        var effect = Instantiate(hitEffect, transform.position, Quaternion.identity);
-        Destroy(effect, 0.5f);
+        // Show explosion effect on all clients
+        if (hitEffect != null)
+        {
+            // Spawn at plane position but with z=0 to ensure visibility
+            Vector3 explosionPos = new Vector3(transform.position.x, transform.position.y, 0f);
+            var effect = Instantiate(hitEffect, explosionPos, Quaternion.identity);
 
-        // Only owner can teleport (ClientNetworkTransform = client authority)
+            // Ensure explosion is on top (visible) - set sorting order
+            var spriteRenderer = effect.GetComponent<SpriteRenderer>();
+            if (spriteRenderer != null)
+            {
+                spriteRenderer.sortingOrder = 100;
+            }
+            // Also check particle system renderer
+            var particleRenderer = effect.GetComponent<ParticleSystemRenderer>();
+            if (particleRenderer != null)
+            {
+                particleRenderer.sortingOrder = 100;
+            }
+
+            Destroy(effect, 0.5f);
+        }
+        else
+        {
+            Debug.LogWarning("[PlayerController] hitEffect is null!");
+        }
+
+        // Only owner can teleport (ClientNetworkTransform = owner authority)
         if (!IsOwner) return;
 
-        // Reset position and speed - use Teleport to skip interpolation
-        Vector3 newPos = new Vector3(-10f, 10f, 0f);
-        networkTransform.Teleport(newPos, transform.rotation, transform.localScale);
+        // Spawn behind a random cloud if available
+        Vector3 newPos;
+        if (CloudManager.Instance != null && CloudManager.Instance.AreCloudsReady())
+        {
+            var cloudPos = CloudManager.Instance.GetRandomCloudPosition();
+            // Spawn behind cloud (left of it) with slight random offset
+            float offsetX = Random.Range(-5f, -2f);
+            float offsetY = Random.Range(-1f, 1f);
+            newPos = new Vector3(cloudPos.x + offsetX, cloudPos.y + offsetY, 0f);
+        }
+        else
+        {
+            // Fallback: different spawn position for each player
+            float spawnX = (OwnerClientId == 0) ? -15f : 15f;
+            newPos = new Vector3(spawnX, 10f, 0f);
+        }
+
+        // Both players face right (z=0), they spawn on opposite sides
+        Quaternion newRotation = Quaternion.Euler(0, 0, 0);
+
+        // Owner does the teleport (ClientNetworkTransform = owner authority)
+        if (networkTransform != null)
+        {
+            networkTransform.Teleport(newPos, newRotation, transform.localScale);
+        }
+        else
+        {
+            transform.position = newPos;
+            transform.rotation = newRotation;
+        }
+
+        // Reset state
         speed = defaultSpeed;
         engineOff = false;
         inSpace = false;
         currentGravity = 0f;
-        rb.velocity = transform.right * speed;
+
+        if (rb != null)
+        {
+            rb.linearVelocity = transform.right * speed;
+        }
+
+        Debug.Log($"[PlayerController] Respawned player {OwnerClientId} at {newPos}, speed={speed}");
     }
 
     [ClientRpc]
@@ -369,7 +514,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             RespawnWithExplosionClientRpc();
         }
 
-        if (collider.gameObject.CompareTag("Respawn"))
+        if (collider.gameObject.CompareTag("Respawn") || collider.gameObject.CompareTag("Ground"))
         {
             RespawnWithExplosionClientRpc();
         }
@@ -436,5 +581,30 @@ public class PlayerController : NetworkBehaviour, IDamagable
             return;
 
         Shutdown();
+    }
+
+    /// <summary>
+    /// Sync score to all clients. Called by ScoreManager.
+    /// </summary>
+    [ClientRpc]
+    public void SyncScoreClientRpc(ulong scorerClientId, int newScore)
+    {
+        // Update local ScoreManager on clients
+        if (ScoreManager.Instance != null)
+        {
+            ScoreManager.Instance.UpdateScoreFromServer(scorerClientId, newScore);
+        }
+    }
+
+    /// <summary>
+    /// Sync match start to all clients. Called by ScoreManager.
+    /// </summary>
+    [ClientRpc]
+    public void SyncMatchStartClientRpc()
+    {
+        if (ScoreManager.Instance != null)
+        {
+            ScoreManager.Instance.StartMatchFromServer();
+        }
     }
 }

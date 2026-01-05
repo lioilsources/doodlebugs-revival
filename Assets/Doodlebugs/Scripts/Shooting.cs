@@ -31,16 +31,22 @@ public class Shooting : NetworkBehaviour
     {
         if (!IsOwner) return;
 
-        if (Input.GetKeyDown(KeyCode.Space)) {
-            float planeSpeed = planeRb != null ? planeRb.velocity.magnitude : 0f;
+        bool shootPressed = InputManager.Instance != null
+            ? InputManager.Instance.InputProvider.GetShootInput()
+            : Input.GetKeyDown(KeyCode.Space);
+
+        if (shootPressed) {
+            float planeSpeed = planeRb != null ? planeRb.linearVelocity.magnitude : 0f;
             ShootServerRpc(firePoint.position, firePoint.rotation, planeSpeed);
         }
-
     }
 
     [ServerRpc]
-    void ShootServerRpc(Vector3 position, Quaternion rotation, float planeSpeed)
+    void ShootServerRpc(Vector3 position, Quaternion rotation, float planeSpeed, ServerRpcParams rpcParams = default)
     {
+        // Get shooter's client ID from RPC sender
+        ulong shooterClientId = rpcParams.Receive.SenderClientId;
+
         // Instantiate and spawn bullet on the server, then apply force server-side
         var bullet = Instantiate(bulletPrefab, position, rotation);
         var netObj = bullet.GetComponent<NetworkObject>();
@@ -48,6 +54,14 @@ public class Shooting : NetworkBehaviour
         {
             netObj.Spawn(true);
         }
+
+        // Set shooter ID for scoring
+        var bulletScript = bullet.GetComponent<Bullet>();
+        if (bulletScript != null)
+        {
+            bulletScript.SetShooter(shooterClientId);
+        }
+
         var rb = bullet.GetComponent<Rigidbody2D>();
         if (rb != null)
         {

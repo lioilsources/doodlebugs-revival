@@ -1,7 +1,31 @@
+3/1/2026
+- new qyro controls: X movement; Y speed
+- dynamic clouds motion and size
+- UX controls for speed, time and score
+- music aligned with engine speed
+- Android build
+
+31/12/2025
+- network discovery (255.255.255.255 broadcast is not allowed on iOS)
+- gyro input
+- dynamic screen size & borders
+- plane color replacement shader
+- console alignment
+- cleanup controls
+- iOS & desktop builds
+
+30/12/2025
+- iOS build requires to align XCode 26.2 with Unity 6.2 on iOS 26.1
+- keep old version of NetCode library
+
+27/12/2025
+Plan to create mobile versions.
+- camera needs to adjust unit size between Left and Right boundaries into MinWisibleWidth variable
+
 26/12/2025
 - align projectil speed with plane speed
 - fix moving on border colision
-- network: teleportovat pouze na straně ownera!
+- network: teleport on owner!
 
 22/12/2025
 - try to imitate legacy plane movement by switching off engine in space and more
