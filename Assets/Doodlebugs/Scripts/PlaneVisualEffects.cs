@@ -16,6 +16,9 @@ public class PlaneVisualEffects : NetworkBehaviour
 
     [Header("Expert Sparkles")]
     [SerializeField] private ParticleSystem sparkleParticles;
+    [SerializeField] private float orbitRadius = 0.8f;
+    [SerializeField] private float orbitSpeed = 2f;
+    [SerializeField] private Color sparkleColor = new Color(1f, 0.85f, 0f, 1f); // Gold
 
     [Header("Damage Flash")]
     [SerializeField] private SpriteRenderer planeRenderer;
@@ -39,6 +42,9 @@ public class PlaneVisualEffects : NetworkBehaviour
 
         // Setup damage flash material
         SetupDamageFlashMaterial();
+
+        // Configure sparkle particles for orbiting effect
+        ConfigureSparkleParticles();
 
         // Subscribe to expert status changes
         isExpert.OnValueChanged += OnExpertStatusChanged;
@@ -66,6 +72,65 @@ public class PlaneVisualEffects : NetworkBehaviour
         {
             PilotMaturityManager.Instance.OnLevelChanged -= HandleLevelChange;
         }
+    }
+
+    private void ConfigureSparkleParticles()
+    {
+        if (sparkleParticles == null) return;
+
+        // Main module - basic settings
+        var main = sparkleParticles.main;
+        main.startSpeed = 0f; // No initial velocity - orbit handles movement
+        main.startLifetime = 2f;
+        main.startSize = 0.15f;
+        main.startColor = sparkleColor;
+        main.simulationSpace = ParticleSystemSimulationSpace.Local;
+        main.maxParticles = 20;
+
+        // Emission - steady stream of particles
+        var emission = sparkleParticles.emission;
+        emission.rateOverTime = 8f;
+
+        // Shape - emit from circle edge
+        var shape = sparkleParticles.shape;
+        shape.shapeType = ParticleSystemShapeType.Circle;
+        shape.radius = orbitRadius;
+        shape.radiusThickness = 0f; // Emit only from edge
+
+        // Velocity over lifetime - orbital motion
+        var velocityOverLifetime = sparkleParticles.velocityOverLifetime;
+        velocityOverLifetime.enabled = true;
+        velocityOverLifetime.space = ParticleSystemSimulationSpace.Local;
+        velocityOverLifetime.orbitalZ = orbitSpeed; // Orbit around Z axis (2D plane)
+        velocityOverLifetime.radial = 0f; // No radial movement
+
+        // Size over lifetime - fade out
+        var sizeOverLifetime = sparkleParticles.sizeOverLifetime;
+        sizeOverLifetime.enabled = true;
+        AnimationCurve sizeCurve = new AnimationCurve();
+        sizeCurve.AddKey(0f, 1f);
+        sizeCurve.AddKey(0.7f, 1f);
+        sizeCurve.AddKey(1f, 0f);
+        sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(1f, sizeCurve);
+
+        // Color over lifetime - golden glow with fade
+        var colorOverLifetime = sparkleParticles.colorOverLifetime;
+        colorOverLifetime.enabled = true;
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new GradientColorKey[] {
+                new GradientColorKey(sparkleColor, 0f),
+                new GradientColorKey(sparkleColor, 0.8f),
+                new GradientColorKey(sparkleColor, 1f)
+            },
+            new GradientAlphaKey[] {
+                new GradientAlphaKey(0f, 0f),
+                new GradientAlphaKey(1f, 0.2f),
+                new GradientAlphaKey(1f, 0.7f),
+                new GradientAlphaKey(0f, 1f)
+            }
+        );
+        colorOverLifetime.color = gradient;
     }
 
     private void SetupDamageFlashMaterial()

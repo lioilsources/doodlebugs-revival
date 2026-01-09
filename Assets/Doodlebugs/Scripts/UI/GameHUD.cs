@@ -5,20 +5,13 @@ using UnityEngine.UI;
 using Unity.Netcode;
 
 /// <summary>
-/// Game HUD displaying scores, speed bars, and match timer for both players.
-/// Attach to a GameObject under Canvas.
+/// Game HUD displaying scores and speed bars for all players on the left side.
+/// Supports dynamic player count (up to 4 players).
 /// </summary>
 public class GameHUD : MonoBehaviour
 {
-    [Header("Player 1 (Host/Blue)")]
-    [SerializeField] private Text p1ScoreText;
-    [SerializeField] private Image p1SpeedBarFill;
-    [SerializeField] private Image p1SpeedBarBg;
-
-    [Header("Player 2 (Client/Red)")]
-    [SerializeField] private Text p2ScoreText;
-    [SerializeField] private Image p2SpeedBarFill;
-    [SerializeField] private Image p2SpeedBarBg;
+    [Header("Player Stats Container (Left Side)")]
+    [SerializeField] private RectTransform playerStatsContainer;
 
     [Header("Match Timer")]
     [SerializeField] private Text matchTimeText;
@@ -34,39 +27,61 @@ public class GameHUD : MonoBehaviour
     [SerializeField] private Color engineOnColor = new Color(0.2f, 0.8f, 0.2f); // Green
     [SerializeField] private Color engineOffColor = new Color(0.5f, 0.5f, 0.5f); // Gray
 
-    // Cached player references
-    private PlayerController _player1;
-    private PlayerController _player2;
+    [Header("Player Colors")]
+    [SerializeField] private Color[] playerColors = new Color[]
+    {
+        new Color(0.3f, 0.5f, 1f),    // Blue (Player 1)
+        new Color(1f, 0.3f, 0.3f),    // Red (Player 2)
+        new Color(0.3f, 0.9f, 0.3f),  // Green (Player 3)
+        new Color(1f, 0.8f, 0.2f)     // Yellow (Player 4)
+    };
 
-    // Animation coroutines
-    private Coroutine _p1PulseCoroutine;
-    private Coroutine _p2PulseCoroutine;
+    // Player UI elements - dynamically created
+    private class PlayerHUDEntry
+    {
+        public ulong clientId;
+        public PlayerController player;
+        public GameObject container;
+        public Text scoreText;
+        public Text statsText; // Ground crashes, plane collisions, out of bounds
+        public Image speedBarFill;
+        public Image speedBarBg;
+        public Vector3 originalScoreScale;
+        public Coroutine pulseCoroutine;
+        public string lastKnownName; // Track name changes from NetworkVariable sync
+    }
 
-    // Original scales for pulse animation
-    private Vector3 _p1ScoreOriginalScale;
-    private Vector3 _p2ScoreOriginalScale;
+    private List<PlayerHUDEntry> _playerEntries = new List<PlayerHUDEntry>();
+    private Dictionary<ulong, PlayerHUDEntry> _playerEntriesById = new Dictionary<ulong, PlayerHUDEntry>();
+
+    // Legacy references for backward compatibility
+    [HideInInspector] public Text p1ScoreText;
+    [HideInInspector] public Image p1SpeedBarFill;
+    [HideInInspector] public Image p1SpeedBarBg;
+    [HideInInspector] public Text p2ScoreText;
+    [HideInInspector] public Image p2SpeedBarFill;
+    [HideInInspector] public Image p2SpeedBarBg;
 
     private void Start()
     {
-        // Store original scales
-        if (p1ScoreText != null)
-            _p1ScoreOriginalScale = p1ScoreText.transform.localScale;
-        if (p2ScoreText != null)
-            _p2ScoreOriginalScale = p2ScoreText.transform.localScale;
+        // Create player stats container if not assigned
+        if (playerStatsContainer == null)
+        {
+            CreatePlayerStatsContainer();
+        }
 
-        // Initialize display
-        UpdateScoreDisplay(0, 0);
-        UpdateScoreDisplay(1, 0);
+        // Initialize timer display
         if (matchTimeText != null)
             matchTimeText.text = "0:00.0";
     }
 
     private void OnEnable()
     {
-        // Subscribe to score changes
+        // Subscribe to score and stats changes
         if (ScoreManager.Instance != null)
         {
             ScoreManager.Instance.OnScoreChanged += OnScoreChanged;
+            ScoreManager.Instance.OnStatsChanged += OnStatsChanged;
         }
         else
         {
@@ -79,6 +94,7 @@ public class GameHUD : MonoBehaviour
         if (ScoreManager.Instance != null)
         {
             ScoreManager.Instance.OnScoreChanged -= OnScoreChanged;
+            ScoreManager.Instance.OnStatsChanged -= OnStatsChanged;
         }
     }
 
@@ -89,86 +105,213 @@ public class GameHUD : MonoBehaviour
             yield return new WaitForSeconds(0.1f);
         }
         ScoreManager.Instance.OnScoreChanged += OnScoreChanged;
+        ScoreManager.Instance.OnStatsChanged += OnStatsChanged;
     }
 
     private void Update()
     {
-        // Find players if not cached
-        CachePlayers();
+        // Find and register new players
+        UpdatePlayerEntries();
 
-        // Update speed bars
-        UpdateSpeedBars();
+        // Update all player speed bars
+        UpdateAllSpeedBars();
 
         // Update timer
         UpdateTimer();
     }
 
-    private void CachePlayers()
+    private void CreatePlayerStatsContainer()
     {
-        // Re-cache if players are missing (they may spawn later)
-        if (_player1 == null || _player2 == null)
-        {
-            var players = FindObjectsOfType<PlayerController>();
-            foreach (var player in players)
-            {
-                if (player.OwnerClientId == 0)
-                    _player1 = player;
-                else
-                    _player2 = player;
-            }
+        var containerObj = new GameObject("PlayerStatsContainer");
+        containerObj.transform.SetParent(transform, false);
 
-            // Debug log when players are found
-            if (_player1 != null || _player2 != null)
+        playerStatsContainer = containerObj.AddComponent<RectTransform>();
+        // Anchor to top-left
+        playerStatsContainer.anchorMin = new Vector2(0, 1);
+        playerStatsContainer.anchorMax = new Vector2(0, 1);
+        playerStatsContainer.pivot = new Vector2(0, 1);
+        playerStatsContainer.anchoredPosition = new Vector2(20, -20);
+        playerStatsContainer.sizeDelta = new Vector2(200, 400);
+
+        // Add vertical layout group
+        var layout = containerObj.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 10;
+        layout.childAlignment = TextAnchor.UpperLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+    }
+
+    private void UpdatePlayerEntries()
+    {
+        var players = FindObjectsOfType<PlayerController>();
+
+        foreach (var player in players)
+        {
+            if (!_playerEntriesById.ContainsKey(player.OwnerClientId))
             {
-                Debug.Log($"[GameHUD] Players cached: P1={_player1 != null}, P2={_player2 != null}");
+                // New player - create HUD entry
+                CreatePlayerHUDEntry(player);
+            }
+            else
+            {
+                // Update player reference (in case of respawn)
+                var entry = _playerEntriesById[player.OwnerClientId];
+                entry.player = player;
+
+                // Check if player name was updated (NetworkVariable sync may arrive after HUD creation)
+                string currentName = player.PlayerName;
+                if (!string.IsNullOrEmpty(currentName) && currentName != entry.lastKnownName)
+                {
+                    entry.lastKnownName = currentName;
+                    // Update score text with new name, preserving the score
+                    if (entry.scoreText != null)
+                    {
+                        string scoreText = entry.scoreText.text;
+                        int colonIndex = scoreText.LastIndexOf(':');
+                        string scorePart = colonIndex >= 0 ? scoreText.Substring(colonIndex) : ": 0";
+                        entry.scoreText.text = $"{currentName}{scorePart}";
+                    }
+                }
+            }
+        }
+
+        // Sort entries by client ID
+        _playerEntries.Sort((a, b) => a.clientId.CompareTo(b.clientId));
+
+        // Reorder UI elements
+        for (int i = 0; i < _playerEntries.Count; i++)
+        {
+            _playerEntries[i].container.transform.SetSiblingIndex(i);
+        }
+    }
+
+    private void CreatePlayerHUDEntry(PlayerController player)
+    {
+        var entry = new PlayerHUDEntry
+        {
+            clientId = player.OwnerClientId,
+            player = player
+        };
+
+        int playerIndex = (int)player.OwnerClientId;
+        Color playerColor = playerIndex < playerColors.Length ? playerColors[playerIndex] : Color.white;
+
+        // Create container for this player's stats
+        var container = new GameObject($"Player{playerIndex}Stats");
+        container.transform.SetParent(playerStatsContainer, false);
+        entry.container = container;
+
+        var containerRect = container.AddComponent<RectTransform>();
+        containerRect.sizeDelta = new Vector2(180, 75); // Increased height for stats
+
+        var containerLayout = container.AddComponent<VerticalLayoutGroup>();
+        containerLayout.spacing = 1;
+        containerLayout.childAlignment = TextAnchor.UpperLeft;
+        containerLayout.childControlWidth = true;
+        containerLayout.childControlHeight = false;
+
+        // Create score text (with player indicator)
+        var scoreObj = new GameObject("Score");
+        scoreObj.transform.SetParent(container.transform, false);
+
+        var scoreRect = scoreObj.AddComponent<RectTransform>();
+        scoreRect.sizeDelta = new Vector2(180, 30);
+
+        entry.scoreText = scoreObj.AddComponent<Text>();
+        // Use device name if available, fallback to P# format
+        string displayName = !string.IsNullOrEmpty(player.PlayerName) ? player.PlayerName : $"P{playerIndex + 1}";
+        entry.lastKnownName = displayName;
+        entry.scoreText.text = $"{displayName}: 0";
+        entry.scoreText.fontSize = 28;
+        entry.scoreText.alignment = TextAnchor.MiddleLeft;
+        entry.scoreText.color = playerColor;
+        entry.scoreText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        entry.originalScoreScale = entry.scoreText.transform.localScale;
+
+        // Create stats text (crashes, collisions, out of bounds)
+        var statsObj = new GameObject("Stats");
+        statsObj.transform.SetParent(container.transform, false);
+
+        var statsRect = statsObj.AddComponent<RectTransform>();
+        statsRect.sizeDelta = new Vector2(180, 18);
+
+        entry.statsText = statsObj.AddComponent<Text>();
+        entry.statsText.text = "D:0 C:0";
+        entry.statsText.fontSize = 14;
+        entry.statsText.alignment = TextAnchor.MiddleLeft;
+        entry.statsText.color = new Color(playerColor.r, playerColor.g, playerColor.b, 0.7f);
+        entry.statsText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+        // Create speed bar background
+        var speedBarBgObj = new GameObject("SpeedBarBg");
+        speedBarBgObj.transform.SetParent(container.transform, false);
+
+        var speedBarBgRect = speedBarBgObj.AddComponent<RectTransform>();
+        speedBarBgRect.sizeDelta = new Vector2(180, 12);
+
+        entry.speedBarBg = speedBarBgObj.AddComponent<Image>();
+        entry.speedBarBg.color = new Color(0.2f, 0.2f, 0.2f, 0.8f);
+
+        // Create speed bar fill
+        var speedBarFillObj = new GameObject("SpeedBarFill");
+        speedBarFillObj.transform.SetParent(speedBarBgObj.transform, false);
+
+        var speedBarFillRect = speedBarFillObj.AddComponent<RectTransform>();
+        speedBarFillRect.anchorMin = Vector2.zero;
+        speedBarFillRect.anchorMax = Vector2.one;
+        speedBarFillRect.offsetMin = new Vector2(2, 2);
+        speedBarFillRect.offsetMax = new Vector2(-2, -2);
+
+        entry.speedBarFill = speedBarFillObj.AddComponent<Image>();
+        entry.speedBarFill.color = engineOnColor;
+
+        // Store entry
+        _playerEntries.Add(entry);
+        _playerEntriesById[player.OwnerClientId] = entry;
+
+        // Update legacy references for backward compatibility
+        if (playerIndex == 0)
+        {
+            p1ScoreText = entry.scoreText;
+            p1SpeedBarFill = entry.speedBarFill;
+            p1SpeedBarBg = entry.speedBarBg;
+        }
+        else if (playerIndex == 1)
+        {
+            p2ScoreText = entry.scoreText;
+            p2SpeedBarFill = entry.speedBarFill;
+            p2SpeedBarBg = entry.speedBarBg;
+        }
+
+        Debug.Log($"[GameHUD] Created HUD entry for Player {playerIndex + 1} (ClientId: {player.OwnerClientId})");
+    }
+
+    private void UpdateAllSpeedBars()
+    {
+        foreach (var entry in _playerEntries)
+        {
+            if (entry.player != null && entry.speedBarFill != null)
+            {
+                float speed = entry.player.Speed;
+                float normalizedSpeed = Mathf.InverseLerp(minSpeed, maxSpeed, speed);
+                UpdateSpeedBarFill(entry.speedBarFill, normalizedSpeed);
+                entry.speedBarFill.color = entry.player.IsEngineOff ? engineOffColor : engineOnColor;
+            }
+            else if (entry.speedBarFill != null)
+            {
+                UpdateSpeedBarFill(entry.speedBarFill, 0f);
             }
         }
     }
 
-    private void UpdateSpeedBars()
-    {
-        // Player 1 speed bar (left-to-right fill)
-        if (_player1 != null && p1SpeedBarFill != null)
-        {
-            float speed = _player1.Speed;
-            float normalizedSpeed = Mathf.InverseLerp(minSpeed, maxSpeed, speed);
-            UpdateSpeedBarFill(p1SpeedBarFill, normalizedSpeed, false);
-            p1SpeedBarFill.color = _player1.IsEngineOff ? engineOffColor : engineOnColor;
-        }
-        else if (p1SpeedBarFill != null)
-        {
-            UpdateSpeedBarFill(p1SpeedBarFill, 0f, false);
-        }
-
-        // Player 2 speed bar (right-to-left fill)
-        if (_player2 != null && p2SpeedBarFill != null)
-        {
-            float speed = _player2.Speed;
-            float normalizedSpeed = Mathf.InverseLerp(minSpeed, maxSpeed, speed);
-            UpdateSpeedBarFill(p2SpeedBarFill, normalizedSpeed, true);
-            p2SpeedBarFill.color = _player2.IsEngineOff ? engineOffColor : engineOnColor;
-        }
-        else if (p2SpeedBarFill != null)
-        {
-            UpdateSpeedBarFill(p2SpeedBarFill, 0f, true);
-        }
-    }
-
-    private void UpdateSpeedBarFill(Image fillImage, float normalizedValue, bool rightToLeft)
+    private void UpdateSpeedBarFill(Image fillImage, float normalizedValue)
     {
         var rect = fillImage.rectTransform;
-        if (rightToLeft)
-        {
-            // Right-to-left: anchor from right, adjust left anchor
-            rect.anchorMin = new Vector2(1f - normalizedValue, 0);
-            rect.anchorMax = new Vector2(1, 1);
-        }
-        else
-        {
-            // Left-to-right: anchor from left, adjust right anchor
-            rect.anchorMin = new Vector2(0, 0);
-            rect.anchorMax = new Vector2(normalizedValue, 1);
-        }
+        // Left-to-right fill for all players
+        rect.anchorMin = new Vector2(0, 0);
+        rect.anchorMax = new Vector2(normalizedValue, 1);
     }
 
     private void UpdateTimer()
@@ -188,44 +331,51 @@ public class GameHUD : MonoBehaviour
 
     private void OnScoreChanged(ulong scorerClientId, int newScore)
     {
-        UpdateScoreDisplay((int)scorerClientId, newScore);
-        PlayScoreEffect((int)scorerClientId);
+        UpdateScoreDisplay(scorerClientId, newScore);
+        PlayScoreEffect(scorerClientId);
     }
 
-    private void UpdateScoreDisplay(int playerId, int score)
+    private void OnStatsChanged(ulong clientId, ScoreManager.PlayerStats stats)
     {
-        if (playerId == 0 && p1ScoreText != null)
+        UpdateStatsDisplay(clientId, stats);
+    }
+
+    private void UpdateScoreDisplay(ulong clientId, int score)
+    {
+        if (_playerEntriesById.TryGetValue(clientId, out var entry) && entry.scoreText != null)
         {
-            p1ScoreText.text = score.ToString();
-        }
-        else if (playerId == 1 && p2ScoreText != null)
-        {
-            p2ScoreText.text = score.ToString();
+            // Use device name if available, fallback to P# format
+            string displayName = entry.player != null && !string.IsNullOrEmpty(entry.player.PlayerName)
+                ? entry.player.PlayerName
+                : $"P{(int)clientId + 1}";
+            entry.scoreText.text = $"{displayName}: {score}";
         }
     }
 
-    private void PlayScoreEffect(int playerId)
+    private void UpdateStatsDisplay(ulong clientId, ScoreManager.PlayerStats stats)
     {
-        Text targetText = playerId == 0 ? p1ScoreText : p2ScoreText;
-        Vector3 originalScale = playerId == 0 ? _p1ScoreOriginalScale : _p2ScoreOriginalScale;
+        if (_playerEntriesById.TryGetValue(clientId, out var entry) && entry.statsText != null)
+        {
+            // D = Deaths (crashes + out of bounds), C = Plane Collisions
+            entry.statsText.text = $"D:{stats.Deaths} C:{stats.PlaneCollisions}";
+        }
+    }
 
-        if (targetText == null) return;
+    private void PlayScoreEffect(ulong clientId)
+    {
+        if (!_playerEntriesById.TryGetValue(clientId, out var entry)) return;
+        if (entry.scoreText == null) return;
 
         // Stop any running pulse
-        if (playerId == 0 && _p1PulseCoroutine != null)
-            StopCoroutine(_p1PulseCoroutine);
-        else if (playerId == 1 && _p2PulseCoroutine != null)
-            StopCoroutine(_p2PulseCoroutine);
+        if (entry.pulseCoroutine != null)
+            StopCoroutine(entry.pulseCoroutine);
 
         // Start pulse animation
-        var coroutine = StartCoroutine(PulseAnimation(targetText.transform, originalScale));
-        if (playerId == 0)
-            _p1PulseCoroutine = coroutine;
-        else
-            _p2PulseCoroutine = coroutine;
+        entry.pulseCoroutine = StartCoroutine(PulseAnimation(entry.scoreText.transform, entry.originalScoreScale));
 
         // Spawn floating +1 text
-        SpawnFloatingText(targetText.transform.position, playerId);
+        int playerIndex = (int)clientId;
+        SpawnFloatingText(entry.scoreText.transform.position, playerIndex);
     }
 
     private IEnumerator PulseAnimation(Transform target, Vector3 originalScale)
@@ -255,7 +405,7 @@ public class GameHUD : MonoBehaviour
         target.localScale = originalScale;
     }
 
-    private void SpawnFloatingText(Vector3 position, int playerId)
+    private void SpawnFloatingText(Vector3 position, int playerIndex)
     {
         if (floatingTextPrefab == null) return;
 
@@ -268,7 +418,7 @@ public class GameHUD : MonoBehaviour
         if (text != null)
         {
             text.text = "+1";
-            text.color = playerId == 0 ? new Color(0.3f, 0.5f, 1f) : new Color(1f, 0.3f, 0.3f);
+            text.color = playerIndex < playerColors.Length ? playerColors[playerIndex] : Color.white;
         }
 
         // Animate and destroy
@@ -325,26 +475,6 @@ public class GameHUD : MonoBehaviour
 
         var hud = hudObj.AddComponent<GameHUD>();
 
-        // Create P1 Speed Bar (top-left, above score)
-        hud.p1SpeedBarBg = CreateSpeedBar(hudObj.transform, "P1SpeedBar",
-            new Vector2(0, 1), new Vector2(0, 1), new Vector2(100, -20),
-            out hud.p1SpeedBarFill, false); // left-to-right fill
-
-        // Create P1 Score (top-left, below speed bar)
-        hud.p1ScoreText = CreateText(hudObj.transform, "P1Score", "0",
-            new Vector2(0, 1), new Vector2(0, 1), new Vector2(80, -55),
-            48, TextAnchor.MiddleLeft, new Color(0.3f, 0.5f, 1f));
-
-        // Create P2 Speed Bar (top-right, above score)
-        hud.p2SpeedBarBg = CreateSpeedBar(hudObj.transform, "P2SpeedBar",
-            new Vector2(1, 1), new Vector2(1, 1), new Vector2(-100, -20),
-            out hud.p2SpeedBarFill, true); // right-to-left fill
-
-        // Create P2 Score (top-right, below speed bar)
-        hud.p2ScoreText = CreateText(hudObj.transform, "P2Score", "0",
-            new Vector2(1, 1), new Vector2(1, 1), new Vector2(-80, -55),
-            48, TextAnchor.MiddleRight, new Color(1f, 0.3f, 0.3f));
-
         // Create Match Time (top-center)
         hud.matchTimeText = CreateText(hudObj.transform, "MatchTime", "0:00.0",
             new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -40),
@@ -352,6 +482,8 @@ public class GameHUD : MonoBehaviour
 
         // Create floating text prefab
         hud.floatingTextPrefab = CreateFloatingTextPrefab();
+
+        // Player stats container will be created automatically in Start()
 
         return hud;
     }
@@ -377,40 +509,6 @@ public class GameHUD : MonoBehaviour
         textComp.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
         return textComp;
-    }
-
-    private static Image CreateSpeedBar(Transform parent, string name,
-        Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPos,
-        out Image fillImage, bool rightToLeft = false)
-    {
-        // Background
-        var bgObj = new GameObject(name + "Bg");
-        bgObj.transform.SetParent(parent, false);
-
-        var bgRect = bgObj.AddComponent<RectTransform>();
-        bgRect.anchorMin = anchorMin;
-        bgRect.anchorMax = anchorMax;
-        bgRect.anchoredPosition = anchoredPos;
-        bgRect.sizeDelta = new Vector2(150, 20);
-
-        var bgImage = bgObj.AddComponent<Image>();
-        bgImage.color = new Color(0.2f, 0.2f, 0.2f, 0.8f);
-
-        // Fill - anchors will be set dynamically in UpdateSpeedBarFill
-        var fillObj = new GameObject(name + "Fill");
-        fillObj.transform.SetParent(bgObj.transform, false);
-
-        var fillRect = fillObj.AddComponent<RectTransform>();
-        // Start with full bar, will be adjusted by UpdateSpeedBarFill
-        fillRect.anchorMin = Vector2.zero;
-        fillRect.anchorMax = Vector2.one;
-        fillRect.offsetMin = new Vector2(2, 2);
-        fillRect.offsetMax = new Vector2(-2, -2);
-
-        fillImage = fillObj.AddComponent<Image>();
-        fillImage.color = new Color(0.2f, 0.8f, 0.2f);
-
-        return bgImage;
     }
 
     private static GameObject CreateFloatingTextPrefab()
