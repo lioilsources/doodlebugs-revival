@@ -1,8 +1,10 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// Singleton that provides the correct input provider based on platform
 /// Automatically switches between keyboard and gamepad on desktop
+/// Supports New Input System for iOS MFi controllers
 /// </summary>
 public class InputManager : MonoBehaviour
 {
@@ -15,12 +17,12 @@ public class InputManager : MonoBehaviour
     private DesktopInputProvider desktopProvider;
     private GamepadInputProvider gamepadProvider;
 
-    [SerializeField] private bool forceMobileInput = false; // For testing in editor
-    [SerializeField] private bool forceGamepadInput = false; // For testing gamepad in editor
+    [SerializeField] private bool forceMobileInput = false;
+    [SerializeField] private bool forceGamepadInput = false;
 
     private bool isUsingGamepad = false;
     private float lastInputCheckTime = 0f;
-    private const float INPUT_CHECK_INTERVAL = 0.5f; // Check for input device change every 0.5s
+    private const float INPUT_CHECK_INTERVAL = 0.5f;
 
     public IInputProvider InputProvider => inputProvider;
     public MobileInputProvider MobileProvider => mobileProvider;
@@ -37,6 +39,62 @@ public class InputManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
 
         InitializeInputProvider();
+        SubscribeToDeviceChanges();
+    }
+
+    private void SubscribeToDeviceChanges()
+    {
+        InputSystem.onDeviceChange += OnDeviceChange;
+    }
+
+    private void OnDeviceChange(InputDevice device, InputDeviceChange change)
+    {
+        if (device is Gamepad)
+        {
+            if (change == InputDeviceChange.Added)
+            {
+                Debug.Log($"[InputManager] Gamepad connected: {device.displayName}");
+                if (!isUsingGamepad)
+                {
+                    SwitchToGamepad();
+                }
+            }
+            else if (change == InputDeviceChange.Removed)
+            {
+                Debug.Log($"[InputManager] Gamepad disconnected: {device.displayName}");
+                if (isUsingGamepad && Gamepad.current == null)
+                {
+                    SwitchToDefaultInput();
+                }
+            }
+        }
+    }
+
+    private void SwitchToGamepad()
+    {
+        inputProvider = gamepadProvider;
+        isUsingGamepad = true;
+        Debug.Log("[InputManager] Switched to GamepadInputProvider (device connected)");
+    }
+
+    private void SwitchToDefaultInput()
+    {
+        if (mobileProvider != null)
+        {
+            inputProvider = mobileProvider;
+            Debug.Log("[InputManager] Switched to MobileInputProvider (gamepad disconnected)");
+        }
+        else if (desktopProvider != null)
+        {
+            inputProvider = desktopProvider;
+            Debug.Log("[InputManager] Switched to DesktopInputProvider (gamepad disconnected)");
+        }
+        isUsingGamepad = false;
+    }
+
+    private void OnDestroy()
+    {
+        InputSystem.onDeviceChange -= OnDeviceChange;
     }
 
     private void InitializeInputProvider()
@@ -45,16 +103,10 @@ public class InputManager : MonoBehaviour
                         Application.platform == RuntimePlatform.IPhonePlayer ||
                         forceMobileInput;
 
-        // Log connected joysticks for debugging
-        string[] joysticks = Input.GetJoystickNames();
+        // Log connected gamepads
         Debug.Log($"[InputManager] Platform: {Application.platform}, IsMobile: {isMobile}");
-        Debug.Log($"[InputManager] Connected joysticks ({joysticks.Length}):");
-        for (int i = 0; i < joysticks.Length; i++)
-        {
-            Debug.Log($"  [{i}]: '{joysticks[i]}'");
-        }
+        Debug.Log($"[InputManager] Gamepad.current: {Gamepad.current?.displayName ?? "none"}");
 
-        // Always create gamepad provider - gamepads work on both desktop and mobile (BackBone, etc.)
         gamepadProvider = new GamepadInputProvider();
 
         if (isMobile)
@@ -62,7 +114,6 @@ public class InputManager : MonoBehaviour
             mobileProvider = new MobileInputProvider();
             mobileProvider.Initialize();
 
-            // Check if gamepad is connected (BackBone, Razer Kishi, etc.)
             if (forceGamepadInput || GamepadInputProvider.IsGamepadConnected())
             {
                 inputProvider = gamepadProvider;
@@ -78,10 +129,8 @@ public class InputManager : MonoBehaviour
         }
         else
         {
-            // Initialize desktop provider
             desktopProvider = new DesktopInputProvider();
 
-            // Check if gamepad is connected and use it, otherwise keyboard
             if (forceGamepadInput || GamepadInputProvider.IsGamepadConnected())
             {
                 inputProvider = gamepadProvider;
@@ -103,66 +152,59 @@ public class InputManager : MonoBehaviour
     {
         inputProvider?.UpdateInput();
 
-        // Also update mobile provider when using gamepad (to keep gyro data fresh for potential switch)
         if (mobileProvider != null && isUsingGamepad)
         {
             mobileProvider.UpdateInput();
         }
 
-        // Check for input device switching (works on both desktop and mobile)
         CheckInputDeviceSwitch();
-
-        // Debug: log input state periodically and on any gamepad button press
         DebugInputState();
     }
 
     private void DebugInputState()
     {
-        // Check for any gamepad button press
-        for (int i = 0; i < 20; i++)
+        if (Gamepad.current != null)
         {
-            if (Input.GetKeyDown((KeyCode)(KeyCode.JoystickButton0 + i)))
-            {
-                Debug.Log($"[InputManager] Button {i} pressed! Provider: {inputProvider?.GetType().Name}, IsUsingGamepad: {isUsingGamepad}");
-            }
+            if (Gamepad.current.buttonNorth.wasPressedThisFrame)
+                Debug.Log($"[InputManager] Button North pressed! Provider: {inputProvider?.GetType().Name}");
+            if (Gamepad.current.buttonSouth.wasPressedThisFrame)
+                Debug.Log($"[InputManager] Button South pressed! Provider: {inputProvider?.GetType().Name}");
+            if (Gamepad.current.buttonEast.wasPressedThisFrame)
+                Debug.Log($"[InputManager] Button East pressed! Provider: {inputProvider?.GetType().Name}");
+            if (Gamepad.current.buttonWest.wasPressedThisFrame)
+                Debug.Log($"[InputManager] Button West pressed! Provider: {inputProvider?.GetType().Name}");
         }
 
-        // Periodic status (every 5 seconds)
         if (Time.time - _lastDebugTime > 5f)
         {
             _lastDebugTime = Time.time;
             string providerName = inputProvider?.GetType().Name ?? "null";
             bool gamepadConnected = GamepadInputProvider.IsGamepadConnected();
-            Debug.Log($"[InputManager] Status: Provider={providerName}, IsUsingGamepad={isUsingGamepad}, GamepadConnected={gamepadConnected}");
+            string gamepadName = Gamepad.current?.displayName ?? "none";
+            Debug.Log($"[InputManager] Status: Provider={providerName}, IsUsingGamepad={isUsingGamepad}, GamepadConnected={gamepadConnected}, Gamepad={gamepadName}");
         }
     }
 
     private void CheckInputDeviceSwitch()
     {
-        // Don't check every frame for performance
         if (Time.time - lastInputCheckTime < INPUT_CHECK_INTERVAL)
             return;
 
         lastInputCheckTime = Time.time;
 
-        // Check if user is using gamepad
         bool gamepadActive = GamepadInputProvider.IsGamepadActive();
-
         bool isMobilePlatform = mobileProvider != null;
 
         if (isMobilePlatform)
         {
-            // Mobile: switch between touch/gyro and gamepad
             bool touchActive = Input.touchCount > 0;
 
-            // Switch to gamepad if gamepad input detected and not already using it
             if (gamepadActive && !isUsingGamepad)
             {
                 inputProvider = gamepadProvider;
                 isUsingGamepad = true;
                 Debug.Log("InputManager: Switched to GamepadInputProvider (mobile)");
             }
-            // Switch to touch/gyro if touch detected and currently using gamepad
             else if (touchActive && isUsingGamepad)
             {
                 inputProvider = mobileProvider;
@@ -172,17 +214,14 @@ public class InputManager : MonoBehaviour
         }
         else
         {
-            // Desktop: switch between keyboard and gamepad
             bool keyboardActive = Input.anyKey && !gamepadActive;
 
-            // Switch to gamepad if gamepad input detected and not already using it
             if (gamepadActive && !isUsingGamepad)
             {
                 inputProvider = gamepadProvider;
                 isUsingGamepad = true;
                 Debug.Log("InputManager: Switched to GamepadInputProvider");
             }
-            // Switch to keyboard if keyboard input detected and currently using gamepad
             else if (keyboardActive && isUsingGamepad)
             {
                 inputProvider = desktopProvider;

@@ -1,106 +1,79 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
-/// Gamepad input using controller
+/// Gamepad input using Unity New Input System
 /// Left stick Y: rotation (up=right, down=left)
 /// Right stick Y: throttle (up=faster, down=slower)
-/// Works with Xbox, PlayStation, and generic controllers
+/// Works with Xbox, PlayStation, MFi (iOS), and generic controllers
 /// </summary>
 public class GamepadInputProvider : IInputProvider
 {
-    // Deadzone to prevent stick drift
     private const float DEADZONE = 0.15f;
+    private const float ROTATION_SENSITIVITY = 0.5f;
+    private const float THROTTLE_SENSITIVITY = 1.0f;
 
-    // Sensitivity multipliers (lower = less sensitive)
-    private const float ROTATION_SENSITIVITY = 0.5f;  // Reduce rotation sensitivity to 50%
-    private const float THROTTLE_SENSITIVITY = 1.0f;  // Full throttle sensitivity
+    private bool _rightTriggerPressed = false;
+    private bool _leftTriggerPressed = false;
 
     public float GetHorizontalInput()
     {
+        if (Gamepad.current == null) return 0f;
+
         // Left stick Y axis controls rotation
-        // Up (negative Y) = turn right (positive horizontal)
-        // Down (positive Y) = turn left (negative horizontal)
-        float raw = -Input.GetAxis("Vertical");
+        // Up (negative Y) = turn right, Down (positive Y) = turn left
+        float raw = -Gamepad.current.leftStick.y.ReadValue();
         return ApplyDeadzone(raw) * ROTATION_SENSITIVITY;
     }
 
     public float GetVerticalInput()
     {
-        // Right stick Y axis (axis 3) controls throttle
-        // Forward (up) = speed up, Backward (down) = slow down
-        float raw = GetAxisSafe("RightStickAxis3");
+        if (Gamepad.current == null) return 0f;
+
+        // Right stick Y axis controls throttle
+        float raw = Gamepad.current.rightStick.y.ReadValue();
         return ApplyDeadzone(raw) * THROTTLE_SENSITIVITY;
     }
 
     public bool GetShootInput()
     {
-        // Check joystick buttons, excluding D-pad (buttons 6-9)
-        for (int i = 0; i < 20; i++)
-        {
-            // Skip D-pad buttons (6, 7, 8, 9)
-            if (i >= 6 && i <= 9) continue;
+        if (Gamepad.current == null) return false;
 
-            KeyCode buttonCode = (KeyCode)(KeyCode.JoystickButton0 + i);
-            if (Input.GetKeyDown(buttonCode))
-            {
-                Debug.Log($"[GamepadInput] Shoot triggered by JoystickButton{i}");
-                return true;
-            }
+        // Face buttons (A/B/X/Y or Cross/Circle/Square/Triangle)
+        if (Gamepad.current.buttonNorth.wasPressedThisFrame ||
+            Gamepad.current.buttonSouth.wasPressedThisFrame ||
+            Gamepad.current.buttonEast.wasPressedThisFrame ||
+            Gamepad.current.buttonWest.wasPressedThisFrame)
+        {
+            return true;
         }
 
-        // Check triggers - configured in InputManager.asset
-        // RightTrigger (axis 9), LeftTrigger (axis 10), Triggers (axis 2 - combined)
-        float rightTrigger = GetAxisSafe("RightTrigger");
-        float leftTrigger = GetAxisSafe("LeftTrigger");
-        float combinedTriggers = GetAxisSafe("Triggers");
+        // Shoulder buttons
+        if (Gamepad.current.leftShoulder.wasPressedThisFrame ||
+            Gamepad.current.rightShoulder.wasPressedThisFrame)
+        {
+            return true;
+        }
 
-        // Right trigger
+        // Right trigger with edge detection
+        float rightTrigger = Gamepad.current.rightTrigger.ReadValue();
         if (rightTrigger > 0.3f && !_rightTriggerPressed)
         {
             _rightTriggerPressed = true;
-            Debug.Log($"[GamepadInput] Shoot triggered by RightTrigger: {rightTrigger}");
             return true;
         }
         if (rightTrigger < 0.1f) _rightTriggerPressed = false;
 
-        // Left trigger
+        // Left trigger with edge detection
+        float leftTrigger = Gamepad.current.leftTrigger.ReadValue();
         if (leftTrigger > 0.3f && !_leftTriggerPressed)
         {
             _leftTriggerPressed = true;
-            Debug.Log($"[GamepadInput] Shoot triggered by LeftTrigger: {leftTrigger}");
             return true;
         }
         if (leftTrigger < 0.1f) _leftTriggerPressed = false;
 
-        // Combined triggers (some controllers use single axis)
-        if (Mathf.Abs(combinedTriggers) > 0.3f && !_combinedTriggerPressed)
-        {
-            _combinedTriggerPressed = true;
-            Debug.Log($"[GamepadInput] Shoot triggered by Triggers: {combinedTriggers}");
-            return true;
-        }
-        if (Mathf.Abs(combinedTriggers) < 0.1f) _combinedTriggerPressed = false;
-
         return false;
-    }
-
-    private bool _rightTriggerPressed = false;
-    private bool _leftTriggerPressed = false;
-    private bool _combinedTriggerPressed = false;
-
-    /// <summary>
-    /// Safely get axis value, returns 0 if axis doesn't exist
-    /// </summary>
-    private float GetAxisSafe(string axisName)
-    {
-        try
-        {
-            return Input.GetAxis(axisName);
-        }
-        catch
-        {
-            return 0f;
-        }
     }
 
     public void UpdateInput()
@@ -113,51 +86,44 @@ public class GamepadInputProvider : IInputProvider
         if (Mathf.Abs(value) < DEADZONE)
             return 0f;
 
-        // Remap value outside deadzone to full range
         float sign = Mathf.Sign(value);
         float magnitude = Mathf.Abs(value);
         return sign * (magnitude - DEADZONE) / (1f - DEADZONE);
     }
 
     /// <summary>
-    /// Check if any gamepad input is detected
+    /// Check if any gamepad is connected
     /// </summary>
     public static bool IsGamepadConnected()
     {
-        string[] joysticks = Input.GetJoystickNames();
-        foreach (string name in joysticks)
-        {
-            if (!string.IsNullOrEmpty(name))
-                return true;
-        }
-        return false;
+        return Gamepad.current != null;
     }
 
     /// <summary>
-    /// Check if gamepad is actively being used (any button or significant stick movement)
+    /// Check if gamepad is actively being used
     /// </summary>
     public static bool IsGamepadActive()
     {
-        // Check left stick movement
-        if (Mathf.Abs(Input.GetAxis("Horizontal")) > 0.5f ||
-            Mathf.Abs(Input.GetAxis("Vertical")) > 0.5f)
-            return true;
+        if (Gamepad.current == null) return false;
 
-        // Check right stick movement (axis 3)
-        try
+        if (Gamepad.current.wasUpdatedThisFrame)
         {
-            if (Mathf.Abs(Input.GetAxis("RightStickAxis3")) > 0.5f)
+            // Check stick movement
+            if (Gamepad.current.leftStick.ReadValue().magnitude > 0.5f ||
+                Gamepad.current.rightStick.ReadValue().magnitude > 0.5f)
+                return true;
+
+            // Check buttons
+            if (Gamepad.current.buttonNorth.isPressed ||
+                Gamepad.current.buttonSouth.isPressed ||
+                Gamepad.current.buttonEast.isPressed ||
+                Gamepad.current.buttonWest.isPressed ||
+                Gamepad.current.leftShoulder.isPressed ||
+                Gamepad.current.rightShoulder.isPressed ||
+                Gamepad.current.leftTrigger.ReadValue() > 0.3f ||
+                Gamepad.current.rightTrigger.ReadValue() > 0.3f)
                 return true;
         }
-        catch { }
-
-        // Check common gamepad buttons
-        for (int i = 0; i < 20; i++)
-        {
-            if (Input.GetKey((KeyCode)(KeyCode.JoystickButton0 + i)))
-                return true;
-        }
-
         return false;
     }
 }
