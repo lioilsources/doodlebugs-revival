@@ -1,7 +1,9 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// Mobile input provider using gyroscope for rotation and touch-anywhere for shooting
+/// Uses new Input System for both gyro and touch
 /// </summary>
 public class MobileInputProvider : IInputProvider
 {
@@ -9,6 +11,9 @@ public class MobileInputProvider : IInputProvider
     private float deadZone = 0.1f;
     private float maxTilt = 0.4f;
     private float neutralTiltY = -0.7f; // 45 degree hold angle (sin(45°) ≈ 0.707)
+
+    // New Input System sensors
+    private GravitySensor gravitySensor;
     private bool gyroAvailable = false;
 
     // Input state
@@ -19,11 +24,20 @@ public class MobileInputProvider : IInputProvider
 
     public void Initialize()
     {
-        if (SystemInfo.supportsGyroscope)
+        // Try new Input System GravitySensor first
+        gravitySensor = GravitySensor.current;
+        if (gravitySensor != null)
+        {
+            InputSystem.EnableDevice(gravitySensor);
+            gyroAvailable = true;
+            Debug.Log("[MobileInputProvider] GravitySensor enabled (New Input System)");
+        }
+        // Fallback to old Input system
+        else if (SystemInfo.supportsGyroscope)
         {
             Input.gyro.enabled = true;
             gyroAvailable = true;
-            Debug.Log("[MobileInputProvider] Gyroscope enabled");
+            Debug.Log("[MobileInputProvider] Gyroscope enabled (Legacy Input)");
         }
         else
         {
@@ -58,8 +72,10 @@ public class MobileInputProvider : IInputProvider
         // Gyro rotation - tilt left/right
         if (gyroAvailable)
         {
+            Vector3 gravity = GetGravity();
+
             // Horizontal: tilt phone left/right
-            float tiltX = Input.gyro.gravity.x;
+            float tiltX = gravity.x;
             if (Mathf.Abs(tiltX) < deadZone)
             {
                 horizontalInput = 0f;
@@ -73,7 +89,7 @@ public class MobileInputProvider : IInputProvider
             // Vertical: tilt phone forward/backward (relative to 45° hold angle)
             // Forward (away from self) = positive = speed up
             // Backward (towards self) = negative = slow down
-            float tiltY = Input.gyro.gravity.y - neutralTiltY;
+            float tiltY = gravity.y - neutralTiltY;
             if (Mathf.Abs(tiltY) < deadZone)
             {
                 verticalInput = 0f;
@@ -94,12 +110,35 @@ public class MobileInputProvider : IInputProvider
         }
     }
 
+    private Vector3 GetGravity()
+    {
+        // Prefer new Input System
+        if (gravitySensor != null)
+        {
+            return gravitySensor.gravity.ReadValue();
+        }
+        // Fallback to legacy
+        return Input.gyro.gravity;
+    }
+
     private void CheckTouchShoot()
     {
-        if (Input.touchCount > 0)
+        // Try new Input System Touchscreen first
+        var touchscreen = Touchscreen.current;
+        if (touchscreen != null)
         {
-            Touch touch = Input.GetTouch(0);
-            if (touch.phase == TouchPhase.Began)
+            var primaryTouch = touchscreen.primaryTouch;
+            if (primaryTouch.press.wasPressedThisFrame)
+            {
+                shootPressed = true;
+                return;
+            }
+        }
+        // Fallback to legacy Input
+        else if (Input.touchCount > 0)
+        {
+            UnityEngine.Touch touch = Input.GetTouch(0);
+            if (touch.phase == UnityEngine.TouchPhase.Began)
             {
                 shootPressed = true;
                 return;
