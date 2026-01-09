@@ -126,17 +126,17 @@ public class GameHUD : MonoBehaviour
         containerObj.transform.SetParent(transform, false);
 
         playerStatsContainer = containerObj.AddComponent<RectTransform>();
-        // Anchor to top-left
-        playerStatsContainer.anchorMin = new Vector2(0, 1);
-        playerStatsContainer.anchorMax = new Vector2(0, 1);
-        playerStatsContainer.pivot = new Vector2(0, 1);
-        playerStatsContainer.anchoredPosition = new Vector2(20, -20);
-        playerStatsContainer.sizeDelta = new Vector2(200, 400);
+        // Anchor to top-right (avoids phone notch on left side)
+        playerStatsContainer.anchorMin = new Vector2(1, 1);
+        playerStatsContainer.anchorMax = new Vector2(1, 1);
+        playerStatsContainer.pivot = new Vector2(1, 1);
+        playerStatsContainer.anchoredPosition = new Vector2(-60, -20); // Extra right padding for rounded screen corners
+        playerStatsContainer.sizeDelta = new Vector2(420, 700);
 
         // Add vertical layout group
         var layout = containerObj.AddComponent<VerticalLayoutGroup>();
         layout.spacing = 10;
-        layout.childAlignment = TextAnchor.UpperLeft;
+        layout.childAlignment = TextAnchor.UpperRight;
         layout.childControlWidth = true;
         layout.childControlHeight = false;
         layout.childForceExpandWidth = true;
@@ -204,11 +204,11 @@ public class GameHUD : MonoBehaviour
         entry.container = container;
 
         var containerRect = container.AddComponent<RectTransform>();
-        containerRect.sizeDelta = new Vector2(180, 75); // Increased height for stats
+        containerRect.sizeDelta = new Vector2(400, 170); // Increased for 2x larger fonts
 
         var containerLayout = container.AddComponent<VerticalLayoutGroup>();
         containerLayout.spacing = 1;
-        containerLayout.childAlignment = TextAnchor.UpperLeft;
+        containerLayout.childAlignment = TextAnchor.UpperRight;
         containerLayout.childControlWidth = true;
         containerLayout.childControlHeight = false;
 
@@ -217,15 +217,17 @@ public class GameHUD : MonoBehaviour
         scoreObj.transform.SetParent(container.transform, false);
 
         var scoreRect = scoreObj.AddComponent<RectTransform>();
-        scoreRect.sizeDelta = new Vector2(180, 30);
+        scoreRect.sizeDelta = new Vector2(400, 80);
 
         entry.scoreText = scoreObj.AddComponent<Text>();
         // Use device name if available, fallback to P# format
         string displayName = !string.IsNullOrEmpty(player.PlayerName) ? player.PlayerName : $"P{playerIndex + 1}";
         entry.lastKnownName = displayName;
         entry.scoreText.text = $"{displayName}: 0";
-        entry.scoreText.fontSize = 28;
-        entry.scoreText.alignment = TextAnchor.MiddleLeft;
+        entry.scoreText.fontSize = 72; // Large - kills are the most important stat
+        entry.scoreText.alignment = TextAnchor.MiddleRight;
+        entry.scoreText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        entry.scoreText.verticalOverflow = VerticalWrapMode.Overflow;
         entry.scoreText.color = playerColor;
         entry.scoreText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         entry.originalScoreScale = entry.scoreText.transform.localScale;
@@ -235,12 +237,14 @@ public class GameHUD : MonoBehaviour
         statsObj.transform.SetParent(container.transform, false);
 
         var statsRect = statsObj.AddComponent<RectTransform>();
-        statsRect.sizeDelta = new Vector2(180, 18);
+        statsRect.sizeDelta = new Vector2(400, 60);
 
         entry.statsText = statsObj.AddComponent<Text>();
         entry.statsText.text = "D:0 C:0";
-        entry.statsText.fontSize = 14;
-        entry.statsText.alignment = TextAnchor.MiddleLeft;
+        entry.statsText.fontSize = 52;
+        entry.statsText.alignment = TextAnchor.MiddleRight;
+        entry.statsText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        entry.statsText.verticalOverflow = VerticalWrapMode.Overflow;
         entry.statsText.color = new Color(playerColor.r, playerColor.g, playerColor.b, 0.7f);
         entry.statsText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
@@ -249,7 +253,7 @@ public class GameHUD : MonoBehaviour
         speedBarBgObj.transform.SetParent(container.transform, false);
 
         var speedBarBgRect = speedBarBgObj.AddComponent<RectTransform>();
-        speedBarBgRect.sizeDelta = new Vector2(180, 12);
+        speedBarBgRect.sizeDelta = new Vector2(400, 16);
 
         entry.speedBarBg = speedBarBgObj.AddComponent<Image>();
         entry.speedBarBg.color = new Color(0.2f, 0.2f, 0.2f, 0.8f);
