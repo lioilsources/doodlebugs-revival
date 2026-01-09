@@ -47,6 +47,18 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private NetworkVariable<float> netGravity = new NetworkVariable<float>(0f,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
+    // Player display name (synced from device name)
+    private NetworkVariable<Unity.Collections.FixedString64Bytes> netPlayerName =
+        new NetworkVariable<Unity.Collections.FixedString64Bytes>(
+            default,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Owner);
+
+    /// <summary>
+    /// Get the display name for this player (device name, shortened)
+    /// </summary>
+    public string PlayerName => netPlayerName.Value.ToString();
+
     // Local accessors for network variables
     private float speed
     {
@@ -138,6 +150,10 @@ public class PlayerController : NetworkBehaviour, IDamagable
             Debug.Log($"[PlayerController] rb was null, got component: {rb != null}");
         }
 
+        // Set player display name based on device/platform
+        netPlayerName.Value = new Unity.Collections.FixedString64Bytes(GetDeviceDisplayName());
+        Debug.Log($"[PlayerController] Set player name to: {netPlayerName.Value}");
+
         speed = defaultSpeed;
         engineOff = false;
         inSpace = false;
@@ -154,6 +170,15 @@ public class PlayerController : NetworkBehaviour, IDamagable
         }
     }
 
+    // Player colors for up to 4 players
+    private static readonly Color[] PlayerColors = new Color[]
+    {
+        new Color(0.3f, 0.5f, 1f),    // Blue (Player 1 / Host)
+        new Color(1f, 0.3f, 0.3f),    // Red (Player 2) - original sprite color, no shader needed
+        new Color(0.3f, 0.9f, 0.3f),  // Green (Player 3)
+        new Color(1f, 0.8f, 0.2f)     // Yellow (Player 4)
+    };
+
     private void SetPlaneColor()
     {
         if (plane == null) return;
@@ -161,26 +186,110 @@ public class PlayerController : NetworkBehaviour, IDamagable
         var spriteRenderer = plane.GetComponent<SpriteRenderer>();
         if (spriteRenderer == null) return;
 
-        // Client keeps original red, host gets red replaced with blue
-        if (OwnerClientId == 0)
+        int playerIndex = (int)OwnerClientId;
+
+        // Player 2 (index 1) keeps original red color - no shader needed
+        if (playerIndex == 1)
         {
-            // Load the color replace shader
-            Shader colorReplaceShader = Shader.Find("Custom/ColorReplace");
-            if (colorReplaceShader != null)
-            {
-                Material mat = new Material(colorReplaceShader);
-                mat.SetTexture("_MainTex", spriteRenderer.sprite.texture);
-                mat.SetColor("_SourceColor", Color.red);
-                mat.SetColor("_TargetColor", Color.blue);
-                mat.SetFloat("_Threshold", 0.4f);
-                spriteRenderer.material = mat;
-                Debug.Log($"[PlayerController] Applied blue color shader to host");
-            }
-            else
-            {
-                Debug.LogError("[PlayerController] ColorReplace shader not found! Make sure it's in Always Included Shaders.");
-            }
+            Debug.Log($"[PlayerController] Player 2 keeps original red color");
+            return;
         }
+
+        // All other players get color replaced via shader
+        Color targetColor = playerIndex < PlayerColors.Length ? PlayerColors[playerIndex] : Color.white;
+
+        Shader colorReplaceShader = Shader.Find("Custom/ColorReplace");
+        if (colorReplaceShader != null)
+        {
+            Material mat = new Material(colorReplaceShader);
+            mat.SetTexture("_MainTex", spriteRenderer.sprite.texture);
+            mat.SetColor("_SourceColor", Color.red);
+            mat.SetColor("_TargetColor", targetColor);
+            mat.SetFloat("_Threshold", 0.4f);
+            spriteRenderer.material = mat;
+            Debug.Log($"[PlayerController] Applied {GetColorName(playerIndex)} color shader to Player {playerIndex + 1}");
+        }
+        else
+        {
+            Debug.LogError("[PlayerController] ColorReplace shader not found! Make sure it's in Always Included Shaders.");
+        }
+    }
+
+    private string GetColorName(int playerIndex)
+    {
+        switch (playerIndex)
+        {
+            case 0: return "blue";
+            case 1: return "red";
+            case 2: return "green";
+            case 3: return "yellow";
+            default: return "white";
+        }
+    }
+
+    /// <summary>
+    /// Get a short display name based on the device/platform.
+    /// Uses device model for mobile (e.g., "iPhone 14", "Pixel 7").
+    /// Falls back to platform + player number for desktop.
+    /// </summary>
+    private string GetDeviceDisplayName()
+    {
+        int playerNum = (int)OwnerClientId + 1;
+        string deviceModel = SystemInfo.deviceModel;
+
+        switch (Application.platform)
+        {
+            case RuntimePlatform.IPhonePlayer:
+                // iOS: deviceModel returns internal name like "iPhone14,2"
+                // Convert to friendly name or use as-is
+                return ShortenDeviceName(deviceModel, "iPhone", 12);
+
+            case RuntimePlatform.Android:
+                // Android: deviceModel returns manufacturer + model like "Samsung SM-G998B"
+                return ShortenDeviceName(deviceModel, "Android", 12);
+
+            case RuntimePlatform.OSXPlayer:
+            case RuntimePlatform.OSXEditor:
+                return $"macOS #{playerNum}";
+
+            case RuntimePlatform.WindowsPlayer:
+            case RuntimePlatform.WindowsEditor:
+                return $"Windows #{playerNum}";
+
+            case RuntimePlatform.LinuxPlayer:
+            case RuntimePlatform.LinuxEditor:
+                return $"Linux #{playerNum}";
+
+            case RuntimePlatform.WebGLPlayer:
+                return $"Web #{playerNum}";
+
+            default:
+                return $"Player #{playerNum}";
+        }
+    }
+
+    /// <summary>
+    /// Shorten device name to fit in HUD, with fallback.
+    /// </summary>
+    private string ShortenDeviceName(string deviceModel, string fallback, int maxLength)
+    {
+        if (string.IsNullOrEmpty(deviceModel) || deviceModel == "unknown")
+            return $"{fallback} #{(int)OwnerClientId + 1}";
+
+        // Remove common prefixes
+        string name = deviceModel
+            .Replace("Apple ", "")
+            .Replace("Samsung ", "")
+            .Replace("Google ", "")
+            .Replace("OnePlus ", "OP ")
+            .Replace("Xiaomi ", "")
+            .Trim();
+
+        // Truncate if too long
+        if (name.Length > maxLength)
+            name = name.Substring(0, maxLength);
+
+        return name;
     }
 
     void Update()
@@ -229,6 +338,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
     [ServerRpc]
     private void RequestRespawnServerRpc()
     {
+        // Player flew out of bounds - record death
+        ScoreManager.Instance?.AddDeath(OwnerClientId);
         RespawnWithExplosionClientRpc();
     }
 
@@ -520,18 +631,23 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         if (collider.gameObject.CompareTag("Bullet"))
         {
+            // Bullet hit - stats handled by Bullet.cs (gives kill to shooter)
             visualEffects?.TriggerDamageFlash();
             RespawnWithExplosionClientRpc();
         }
 
         if (collider.gameObject.CompareTag("Respawn") || collider.gameObject.CompareTag("Ground"))
         {
+            // Crashed into ground/obstacle - record death
+            ScoreManager.Instance?.AddDeath(OwnerClientId);
             visualEffects?.TriggerDamageFlash();
             RespawnWithExplosionClientRpc();
         }
 
         if (collider.gameObject.CompareTag("Player"))
         {
+            // Collided with another plane
+            ScoreManager.Instance?.AddPlaneCollision(OwnerClientId);
             visualEffects?.TriggerDamageFlash();
             RespawnWithExplosionClientRpc();
         }
@@ -617,6 +733,18 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (ScoreManager.Instance != null)
         {
             ScoreManager.Instance.StartMatchFromServer();
+        }
+    }
+
+    /// <summary>
+    /// Sync player stats to all clients. Called by ScoreManager.
+    /// </summary>
+    [ClientRpc]
+    public void SyncStatsClientRpc(ulong clientId, int kills, int deaths, int planeCollisions)
+    {
+        if (ScoreManager.Instance != null)
+        {
+            ScoreManager.Instance.UpdateStatsFromServer(clientId, kills, deaths, planeCollisions);
         }
     }
 }

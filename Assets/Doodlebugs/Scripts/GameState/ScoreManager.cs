@@ -1,25 +1,40 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
 /// <summary>
-/// Manages game scores and match timer.
+/// Manages game scores, statistics, and match timer.
 /// Singleton that runs on all clients, server-authoritative for scoring.
 /// </summary>
 public class ScoreManager : MonoBehaviour
 {
     public static ScoreManager Instance { get; private set; }
 
-    // Scores
-    public int Player1Score { get; private set; }
-    public int Player2Score { get; private set; }
+    /// <summary>
+    /// Player statistics (kills, deaths, collisions)
+    /// </summary>
+    public class PlayerStats
+    {
+        public int Kills;           // Enemy planes shot down
+        public int Deaths;          // Crashed into ground/obstacles or flew out of bounds
+        public int PlaneCollisions; // Collided with another plane
+    }
+
+    // Player stats dictionary (supports up to 4 players)
+    private Dictionary<ulong, PlayerStats> _playerStats = new Dictionary<ulong, PlayerStats>();
+
+    // Legacy score properties for backward compatibility
+    public int Player1Score => GetStats(0).Kills;
+    public int Player2Score => GetStats(1).Kills;
 
     // Match timer
     public float MatchTime { get; private set; }
     public bool MatchStarted { get; private set; }
 
     // Events for UI
-    public event Action<ulong, int> OnScoreChanged; // (scorerClientId, newScore)
+    public event Action<ulong, int> OnScoreChanged; // (scorerClientId, newKills)
+    public event Action<ulong, PlayerStats> OnStatsChanged; // (clientId, stats)
     public event Action OnMatchStarted;
 
     private void Awake()
@@ -64,14 +79,26 @@ public class ScoreManager : MonoBehaviour
     {
         MatchStarted = true;
         MatchTime = 0f;
-        Player1Score = 0;
-        Player2Score = 0;
+        _playerStats.Clear(); // Reset all stats
 
         Debug.Log("[ScoreManager] Match started!");
         OnMatchStarted?.Invoke();
 
         // Sync to all clients
         SyncMatchStartToClients();
+    }
+
+    /// <summary>
+    /// Get or create stats for a player
+    /// </summary>
+    public PlayerStats GetStats(ulong clientId)
+    {
+        if (!_playerStats.TryGetValue(clientId, out var stats))
+        {
+            stats = new PlayerStats();
+            _playerStats[clientId] = stats;
+        }
+        return stats;
     }
 
     private void SyncMatchStartToClients()
@@ -96,8 +123,7 @@ public class ScoreManager : MonoBehaviour
         // Always reset - new player connected means new match
         MatchStarted = true;
         MatchTime = 0f;
-        Player1Score = 0;
-        Player2Score = 0;
+        _playerStats.Clear();
 
         Debug.Log("[ScoreManager] Match reset and started (from server sync)!");
         OnMatchStarted?.Invoke();
@@ -113,7 +139,7 @@ public class ScoreManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Add score for a player. Call from server when bullet hits opponent.
+    /// Add kill score for a player. Call from server when bullet hits opponent.
     /// </summary>
     public void AddScore(ulong scorerClientId)
     {
@@ -124,25 +150,46 @@ public class ScoreManager : MonoBehaviour
             return;
         }
 
-        int newScore;
-        if (scorerClientId == 0)
-        {
-            Player1Score++;
-            newScore = Player1Score;
-            Debug.Log($"[ScoreManager] Player 1 scored! New score: {Player1Score}");
-        }
-        else
-        {
-            Player2Score++;
-            newScore = Player2Score;
-            Debug.Log($"[ScoreManager] Player 2 scored! New score: {Player2Score}");
-        }
+        var stats = GetStats(scorerClientId);
+        stats.Kills++;
+        Debug.Log($"[ScoreManager] Player {scorerClientId} scored kill! Total kills: {stats.Kills}");
 
-        // Fire event locally first
-        OnScoreChanged?.Invoke(scorerClientId, newScore);
+        // Fire events
+        OnScoreChanged?.Invoke(scorerClientId, stats.Kills);
+        OnStatsChanged?.Invoke(scorerClientId, stats);
 
         // Sync to all clients
-        SyncScoreToClients(scorerClientId, newScore);
+        SyncScoreToClients(scorerClientId, stats.Kills);
+    }
+
+    /// <summary>
+    /// Record death for a player (ground crash or out of bounds). Call from server.
+    /// </summary>
+    public void AddDeath(ulong clientId)
+    {
+        if (!NetworkManager.Singleton.IsServer) return;
+
+        var stats = GetStats(clientId);
+        stats.Deaths++;
+        Debug.Log($"[ScoreManager] Player {clientId} died! Total deaths: {stats.Deaths}");
+
+        OnStatsChanged?.Invoke(clientId, stats);
+        SyncStatsToClients(clientId, stats);
+    }
+
+    /// <summary>
+    /// Record plane collision for a player. Call from server.
+    /// </summary>
+    public void AddPlaneCollision(ulong clientId)
+    {
+        if (!NetworkManager.Singleton.IsServer) return;
+
+        var stats = GetStats(clientId);
+        stats.PlaneCollisions++;
+        Debug.Log($"[ScoreManager] Player {clientId} collided with plane! Total collisions: {stats.PlaneCollisions}");
+
+        OnStatsChanged?.Invoke(clientId, stats);
+        SyncStatsToClients(clientId, stats);
     }
 
     private void SyncScoreToClients(ulong scorerClientId, int newScore)
@@ -159,29 +206,48 @@ public class ScoreManager : MonoBehaviour
         }
     }
 
+    private void SyncStatsToClients(ulong clientId, PlayerStats stats)
+    {
+        // Find any player to send RPC through
+        var players = FindObjectsOfType<PlayerController>();
+        foreach (var player in players)
+        {
+            if (player.IsServer)
+            {
+                player.SyncStatsClientRpc(clientId, stats.Kills, stats.Deaths, stats.PlaneCollisions);
+                break;
+            }
+        }
+    }
+
     /// <summary>
     /// Called by PlayerController ClientRpc to update score on clients
     /// </summary>
     public void UpdateScoreFromServer(ulong scorerClientId, int newScore)
     {
-        if (scorerClientId == 0)
-        {
-            Player1Score = newScore;
-        }
-        else
-        {
-            Player2Score = newScore;
-        }
-
+        var stats = GetStats(scorerClientId);
+        stats.Kills = newScore;
         OnScoreChanged?.Invoke(scorerClientId, newScore);
     }
 
     /// <summary>
-    /// Get score for a specific client
+    /// Called by PlayerController ClientRpc to update all stats on clients
+    /// </summary>
+    public void UpdateStatsFromServer(ulong clientId, int kills, int deaths, int planeCollisions)
+    {
+        var stats = GetStats(clientId);
+        stats.Kills = kills;
+        stats.Deaths = deaths;
+        stats.PlaneCollisions = planeCollisions;
+        OnStatsChanged?.Invoke(clientId, stats);
+    }
+
+    /// <summary>
+    /// Get score (kills) for a specific client
     /// </summary>
     public int GetScore(ulong clientId)
     {
-        return clientId == 0 ? Player1Score : Player2Score;
+        return GetStats(clientId).Kills;
     }
 
     /// <summary>
@@ -200,8 +266,7 @@ public class ScoreManager : MonoBehaviour
     /// </summary>
     public void ResetMatch()
     {
-        Player1Score = 0;
-        Player2Score = 0;
+        _playerStats.Clear();
         MatchTime = 0f;
         MatchStarted = false;
     }

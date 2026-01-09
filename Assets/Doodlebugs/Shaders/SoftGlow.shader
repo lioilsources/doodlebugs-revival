@@ -3,17 +3,19 @@ Shader "Custom/SoftGlow"
     Properties
     {
         _MainTex ("Sprite Texture", 2D) = "white" {}
-        _GlowColor ("Glow Color", Color) = (0.5, 1, 1, 0.6)
-        _GlowIntensity ("Intensity", Range(0, 2)) = 1.0
-        _PulseSpeed ("Pulse Speed", Range(0, 5)) = 1.0
-        _PulseAmount ("Pulse Amount", Range(0, 0.5)) = 0.15
+        _GlowColor ("Glow Color", Color) = (0.5, 1, 1, 1)
+        _GlowIntensity ("Intensity", Range(0, 3)) = 1.5
+        _GlowSize ("Glow Size", Range(0, 0.1)) = 0.02
+        _Softness ("Edge Softness", Range(0.001, 0.1)) = 0.03
+        _PulseSpeed ("Pulse Speed", Range(0, 5)) = 2.0
+        _PulseAmount ("Pulse Amount", Range(0, 0.5)) = 0.2
     }
 
     SubShader
     {
         Tags
         {
-            "Queue" = "Transparent"
+            "Queue" = "Transparent-1"
             "RenderType" = "Transparent"
             "PreviewType" = "Plane"
         }
@@ -21,7 +23,7 @@ Shader "Custom/SoftGlow"
         Cull Off
         Lighting Off
         ZWrite Off
-        Blend SrcAlpha One // Additive blending for glow effect
+        Blend SrcAlpha One
 
         Pass
         {
@@ -46,8 +48,11 @@ Shader "Custom/SoftGlow"
 
             sampler2D _MainTex;
             float4 _MainTex_ST;
+            float4 _MainTex_TexelSize;
             float4 _GlowColor;
             float _GlowIntensity;
+            float _GlowSize;
+            float _Softness;
             float _PulseSpeed;
             float _PulseAmount;
 
@@ -62,20 +67,34 @@ Shader "Custom/SoftGlow"
 
             fixed4 frag (v2f i) : SV_Target
             {
-                fixed4 texCol = tex2D(_MainTex, i.uv);
+                // Sample surrounding pixels for blur/glow effect
+                float2 texelSize = _MainTex_TexelSize.xy * (_GlowSize * 100.0);
 
-                // Calculate pulse effect using sine wave
+                float alpha = 0;
+
+                // 9-tap box blur for soft edges
+                alpha += tex2D(_MainTex, i.uv + float2(-texelSize.x, -texelSize.y)).a;
+                alpha += tex2D(_MainTex, i.uv + float2(0, -texelSize.y)).a;
+                alpha += tex2D(_MainTex, i.uv + float2(texelSize.x, -texelSize.y)).a;
+                alpha += tex2D(_MainTex, i.uv + float2(-texelSize.x, 0)).a;
+                alpha += tex2D(_MainTex, i.uv).a;
+                alpha += tex2D(_MainTex, i.uv + float2(texelSize.x, 0)).a;
+                alpha += tex2D(_MainTex, i.uv + float2(-texelSize.x, texelSize.y)).a;
+                alpha += tex2D(_MainTex, i.uv + float2(0, texelSize.y)).a;
+                alpha += tex2D(_MainTex, i.uv + float2(texelSize.x, texelSize.y)).a;
+
+                alpha /= 9.0;
+
+                // Smooth the alpha for softer edges
+                alpha = smoothstep(0, _Softness, alpha);
+
+                // Pulse animation
                 float pulse = 1.0 + sin(_Time.y * _PulseSpeed) * _PulseAmount;
 
-                // Apply glow color with intensity and pulse
+                // Final glow color
                 fixed4 glowCol = _GlowColor;
                 glowCol.rgb *= _GlowIntensity * pulse;
-
-                // Use texture alpha to mask the glow
-                glowCol.a *= texCol.a * _GlowColor.a;
-
-                // Apply vertex color (SpriteRenderer color tint)
-                glowCol *= i.color;
+                glowCol.a = alpha * _GlowColor.a * i.color.a;
 
                 return glowCol;
             }
