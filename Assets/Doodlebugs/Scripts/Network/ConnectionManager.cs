@@ -25,7 +25,7 @@ namespace Doodlebugs.Network
         public event Action<ConnectionState> OnStateChanged;
         public event Action<string> OnStatusMessage;
 
-        private const int MAX_PLAYERS = 2;
+        private const int MAX_PLAYERS = 4;
 
         private void Awake()
         {
@@ -176,6 +176,12 @@ namespace Doodlebugs.Network
             if (NetworkManager.Singleton.IsHost)
             {
                 int playerCount = NetworkManager.Singleton.ConnectedClientsIds.Count;
+
+                // Notify LocalPlayerManager to spawn enabled local players
+                if (clientId == NetworkManager.Singleton.LocalClientId)
+                {
+                    LocalPlayerManager.Instance?.OnNetworkStarted();
+                }
 
                 if (playerCount >= MAX_PLAYERS)
                 {
