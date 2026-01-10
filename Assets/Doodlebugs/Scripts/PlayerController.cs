@@ -54,10 +54,25 @@ public class PlayerController : NetworkBehaviour, IDamagable
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Owner);
 
+    // Local player index for couch co-op (-1 = network player, 0-3 = local player)
+    private NetworkVariable<int> netLocalPlayerIndex = new NetworkVariable<int>(-1,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
+
     /// <summary>
     /// Get the display name for this player (device name, shortened)
     /// </summary>
     public string PlayerName => netPlayerName.Value.ToString();
+
+    /// <summary>
+    /// Local player index for couch co-op (-1 = network player, 0-3 = local player)
+    /// </summary>
+    public int LocalPlayerIndex => netLocalPlayerIndex.Value;
+
+    /// <summary>
+    /// Check if this is a local couch co-op player
+    /// </summary>
+    public bool IsLocalPlayer => netLocalPlayerIndex.Value >= 0;
 
     // Local accessors for network variables
     private float speed
@@ -228,6 +243,48 @@ public class PlayerController : NetworkBehaviour, IDamagable
     }
 
     /// <summary>
+    /// Set the local player index (called by LocalPlayerManager after spawn)
+    /// Only server can set this value.
+    /// </summary>
+    public void SetLocalPlayerIndex(int index)
+    {
+        if (!NetworkManager.Singleton.IsServer)
+        {
+            Debug.LogWarning("[PlayerController] SetLocalPlayerIndex can only be called on server");
+            return;
+        }
+
+        netLocalPlayerIndex.Value = index;
+        Debug.Log($"[PlayerController] Set localPlayerIndex to {index}");
+
+        // Update player name to reflect local player
+        if (index >= 0)
+        {
+            netPlayerName.Value = new Unity.Collections.FixedString64Bytes($"P{index + 1}");
+        }
+    }
+
+    /// <summary>
+    /// Get the input provider for this player (local or network)
+    /// </summary>
+    private IInputProvider GetInputProvider()
+    {
+        // Local couch co-op player - use LocalPlayerManager
+        if (IsLocalPlayer && LocalPlayerManager.Instance != null)
+        {
+            return LocalPlayerManager.Instance.GetInputProvider(LocalPlayerIndex);
+        }
+
+        // Network player - use InputManager singleton
+        if (InputManager.Instance != null && InputManager.Instance.InputProvider != null)
+        {
+            return InputManager.Instance.InputProvider;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Get a short display name based on the device/platform.
     /// Uses device model for mobile (e.g., "iPhone 14", "Pixel 7").
     /// Falls back to platform + player number for desktop.
@@ -301,13 +358,17 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private float _lastLogTime = 0f;
 
     void FixedUpdate() {
-        if (!IsOwner) return;
+        // Check if we should process input:
+        // - Regular network player: IsOwner must be true
+        // - Local couch co-op player: IsLocalPlayer and we're the host
+        bool canProcessInput = IsOwner || (IsLocalPlayer && NetworkManager.Singleton.IsHost);
+        if (!canProcessInput) return;
 
         // Debug log every 2 seconds
         if (Time.time - _lastLogTime > 2f)
         {
             _lastLogTime = Time.time;
-            Debug.Log($"[PlayerController] FixedUpdate: speed={speed}, engineOff={engineOff}, rb.velocity={rb?.linearVelocity}, IsOwner={IsOwner}");
+            Debug.Log($"[PlayerController] FixedUpdate: speed={speed}, engineOff={engineOff}, rb.velocity={rb?.linearVelocity}, IsOwner={IsOwner}, LocalPlayerIndex={LocalPlayerIndex}");
         }
 
         HandleMovement();
@@ -345,22 +406,20 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
     private void HandleMovement()
     {
-        float horizontalInput;
-        float verticalInput;
-        if (InputManager.Instance != null && InputManager.Instance.InputProvider != null)
+        float horizontalInput = 0f;
+        float verticalInput = 0f;
+
+        var inputProvider = GetInputProvider();
+        if (inputProvider != null)
         {
-            horizontalInput = InputManager.Instance.InputProvider.GetHorizontalInput();
-            verticalInput = InputManager.Instance.InputProvider.GetVerticalInput();
+            horizontalInput = inputProvider.GetHorizontalInput();
+            verticalInput = inputProvider.GetVerticalInput();
         }
-        else
+        else if (Time.frameCount % 300 == 0) // Log every 5 seconds at 60fps
         {
-            horizontalInput = Input.GetAxis("Horizontal");
-            verticalInput = Input.GetAxis("Vertical");
-            if (Time.frameCount % 300 == 0) // Log every 5 seconds at 60fps
-            {
-                Debug.LogWarning($"[PlayerController] InputManager not available, using fallback input. Instance: {InputManager.Instance != null}");
-            }
+            Debug.LogWarning($"[PlayerController] No input provider available. LocalPlayerIndex={LocalPlayerIndex}");
         }
+
         rotatePlane(horizontalInput);
         movePlane(verticalInput);
     }

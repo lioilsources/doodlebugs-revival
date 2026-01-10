@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
@@ -16,9 +16,13 @@ public class Shooting : NetworkBehaviour
     private float bulletForce => baseBulletForce * (Profile?.bulletForceMultiplier ?? 1f);
     private float bulletGravityScale => Profile?.bulletGravityScale ?? 2f;
 
+    // Reference to PlayerController for local player index
+    private PlayerController playerController;
+
     public override void OnNetworkSpawn()
     {
         Debug.Log($"Plane Spawn OwnerClientId#{OwnerClientId} NetworkObjectId#{NetworkObjectId}");
+        playerController = GetComponent<PlayerController>();
     }
 
     Rigidbody2D planeRb;
@@ -30,104 +34,48 @@ public class Shooting : NetworkBehaviour
 
     void Update()
     {
-        if (!IsOwner) return;
+        // Check if we should process input:
+        // - Regular network player: IsOwner must be true
+        // - Local couch co-op player: IsLocalPlayer and we're the host
+        bool isLocalPlayer = playerController != null && playerController.IsLocalPlayer;
+        bool canProcessInput = IsOwner || (isLocalPlayer && NetworkManager.Singleton.IsHost);
+        if (!canProcessInput) return;
 
-        bool shootPressed = false;
+        bool shootPressed = GetShootInput();
 
-        // Try InputManager first
-        if (InputManager.Instance != null)
+        if (shootPressed)
         {
-            shootPressed = InputManager.Instance.InputProvider.GetShootInput();
-        }
-
-        // Keyboard fallback
-        if (!shootPressed && Input.GetKeyDown(KeyCode.Space))
-        {
-            shootPressed = true;
-        }
-
-        // Direct gamepad button check as fallback (in case InputManager doesn't use gamepad provider)
-        if (!shootPressed)
-        {
-            for (int i = 0; i < 20; i++)
-            {
-                // Skip D-pad buttons (6, 7, 8, 9)
-                if (i >= 6 && i <= 9) continue;
-
-                if (Input.GetKeyDown((KeyCode)(KeyCode.JoystickButton0 + i)))
-                {
-                    Debug.Log($"[Shooting] Direct gamepad button {i} pressed");
-                    shootPressed = true;
-                    break;
-                }
-            }
-        }
-
-        // Direct trigger axis check as fallback
-        if (!shootPressed)
-        {
-            shootPressed = CheckTriggerAxis();
-        }
-
-        if (shootPressed) {
             float planeSpeed = planeRb != null ? planeRb.linearVelocity.magnitude : 0f;
             ShootServerRpc(firePoint.position, firePoint.rotation, planeSpeed);
         }
     }
 
-    // Track trigger state for "button down" behavior
-    private bool _leftTriggerWasPressed = false;
-    private bool _rightTriggerWasPressed = false;
-
-    private bool CheckTriggerAxis()
+    /// <summary>
+    /// Get shoot input from the appropriate provider (local or network)
+    /// </summary>
+    private bool GetShootInput()
     {
-        // Check trigger axes configured in InputManager.asset
-        float rightTrigger = GetAxisSafe("RightTrigger");
-        float leftTrigger = GetAxisSafe("LeftTrigger");
-        float combinedTriggers = GetAxisSafe("Triggers");
-
-        // Right trigger
-        if (rightTrigger > 0.3f && !_rightTriggerWasPressed)
+        // Local couch co-op player - use LocalPlayerManager
+        if (playerController != null && playerController.IsLocalPlayer)
         {
-            _rightTriggerWasPressed = true;
-            Debug.Log($"[Shooting] Right trigger pressed: {rightTrigger}");
-            return true;
+            if (LocalPlayerManager.Instance != null)
+            {
+                var provider = LocalPlayerManager.Instance.GetInputProvider(playerController.LocalPlayerIndex);
+                if (provider != null)
+                {
+                    return provider.GetShootInput();
+                }
+            }
+            return false;
         }
-        if (rightTrigger < 0.1f) _rightTriggerWasPressed = false;
 
-        // Left trigger
-        if (leftTrigger > 0.3f && !_leftTriggerWasPressed)
+        // Network player - use InputManager singleton
+        if (InputManager.Instance != null && InputManager.Instance.InputProvider != null)
         {
-            _leftTriggerWasPressed = true;
-            Debug.Log($"[Shooting] Left trigger pressed: {leftTrigger}");
-            return true;
+            return InputManager.Instance.InputProvider.GetShootInput();
         }
-        if (leftTrigger < 0.1f) _leftTriggerWasPressed = false;
-
-        // Combined triggers
-        if (Mathf.Abs(combinedTriggers) > 0.3f && !_triggerWasPressed)
-        {
-            _triggerWasPressed = true;
-            Debug.Log($"[Shooting] Combined trigger pressed: {combinedTriggers}");
-            return true;
-        }
-        if (Mathf.Abs(combinedTriggers) < 0.1f) _triggerWasPressed = false;
 
         return false;
-    }
-
-    private bool _triggerWasPressed = false;
-
-    private float GetAxisSafe(string axisName)
-    {
-        try
-        {
-            return Input.GetAxisRaw(axisName);
-        }
-        catch
-        {
-            return 0f;
-        }
     }
 
     [ServerRpc]
