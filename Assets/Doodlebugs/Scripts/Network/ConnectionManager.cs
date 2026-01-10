@@ -62,16 +62,25 @@ namespace Doodlebugs.Network
 
         private void OnDestroy()
         {
+            // Stop discovery
+            _discovery?.StopAllDiscovery();
+
             if (_discovery != null)
             {
                 _discovery.OnServerFound -= OnServerFound;
                 _discovery.OnDiscoveryTimeout -= OnDiscoveryTimeout;
             }
 
+            // Shutdown network to release port
             if (NetworkManager.Singleton != null)
             {
                 NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
                 NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+
+                if (NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer)
+                {
+                    NetworkManager.Singleton.Shutdown();
+                }
             }
         }
 
@@ -164,8 +173,12 @@ namespace Doodlebugs.Network
             else
             {
                 response.Approved = true;
-                response.CreatePlayerObject = true;
-                Debug.Log("[ConnectionManager] Connection approved");
+                // For host: LocalPlayerManager handles player spawning (supports couch co-op)
+                // Host is always clientId 0 and first to connect (currentPlayers == 0)
+                // For clients: NetworkManager creates player object automatically
+                bool isHostConnection = currentPlayers == 0 && NetworkManager.Singleton.IsServer;
+                response.CreatePlayerObject = !isHostConnection;
+                Debug.Log($"[ConnectionManager] Connection approved - ClientNetworkId={request.ClientNetworkId}, IsServer={NetworkManager.Singleton.IsServer}, CurrentPlayers={currentPlayers}, CreatePlayerObject={response.CreatePlayerObject}");
             }
         }
 

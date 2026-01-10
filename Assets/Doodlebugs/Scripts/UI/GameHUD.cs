@@ -27,19 +27,14 @@ public class GameHUD : MonoBehaviour
     [SerializeField] private Color engineOnColor = new Color(0.2f, 0.8f, 0.2f); // Green
     [SerializeField] private Color engineOffColor = new Color(0.5f, 0.5f, 0.5f); // Gray
 
-    [Header("Player Colors")]
-    [SerializeField] private Color[] playerColors = new Color[]
-    {
-        new Color(0.3f, 0.5f, 1f),    // Blue (Player 1)
-        new Color(1f, 0.3f, 0.3f),    // Red (Player 2)
-        new Color(0.3f, 0.9f, 0.3f),  // Green (Player 3)
-        new Color(1f, 0.8f, 0.2f)     // Yellow (Player 4)
-    };
+    // Player colors now managed by PlayerColorManager
 
     // Player UI elements - dynamically created
     private class PlayerHUDEntry
     {
         public ulong clientId;
+        public int localPlayerIndex;
+        public string uniqueId; // "clientId_localPlayerIndex"
         public PlayerController player;
         public GameObject container;
         public Text scoreText;
@@ -52,7 +47,18 @@ public class GameHUD : MonoBehaviour
     }
 
     private List<PlayerHUDEntry> _playerEntries = new List<PlayerHUDEntry>();
-    private Dictionary<ulong, PlayerHUDEntry> _playerEntriesById = new Dictionary<ulong, PlayerHUDEntry>();
+    private Dictionary<string, PlayerHUDEntry> _playerEntriesById = new Dictionary<string, PlayerHUDEntry>();
+
+    private string GetPlayerUniqueId(ulong clientId, int localPlayerIndex)
+    {
+        return $"{clientId}_{localPlayerIndex}";
+    }
+
+    private string GetPlayerUniqueId(PlayerController player)
+    {
+        int localIdx = player.LocalPlayerIndex >= 0 ? player.LocalPlayerIndex : 0;
+        return GetPlayerUniqueId(player.OwnerClientId, localIdx);
+    }
 
     // Legacy references for backward compatibility
     [HideInInspector] public Text p1ScoreText;
@@ -149,7 +155,9 @@ public class GameHUD : MonoBehaviour
 
         foreach (var player in players)
         {
-            if (!_playerEntriesById.ContainsKey(player.OwnerClientId))
+            string uniqueId = GetPlayerUniqueId(player);
+
+            if (!_playerEntriesById.ContainsKey(uniqueId))
             {
                 // New player - create HUD entry
                 CreatePlayerHUDEntry(player);
@@ -157,7 +165,7 @@ public class GameHUD : MonoBehaviour
             else
             {
                 // Update player reference (in case of respawn)
-                var entry = _playerEntriesById[player.OwnerClientId];
+                var entry = _playerEntriesById[uniqueId];
                 entry.player = player;
 
                 // Check if player name was updated (NetworkVariable sync may arrive after HUD creation)
@@ -177,8 +185,12 @@ public class GameHUD : MonoBehaviour
             }
         }
 
-        // Sort entries by client ID
-        _playerEntries.Sort((a, b) => a.clientId.CompareTo(b.clientId));
+        // Sort entries by client ID, then local player index
+        _playerEntries.Sort((a, b) =>
+        {
+            int cmp = a.clientId.CompareTo(b.clientId);
+            return cmp != 0 ? cmp : a.localPlayerIndex.CompareTo(b.localPlayerIndex);
+        });
 
         // Reorder UI elements
         for (int i = 0; i < _playerEntries.Count; i++)
@@ -189,17 +201,33 @@ public class GameHUD : MonoBehaviour
 
     private void CreatePlayerHUDEntry(PlayerController player)
     {
+        int localIdx = player.LocalPlayerIndex >= 0 ? player.LocalPlayerIndex : 0;
+        string uniqueId = GetPlayerUniqueId(player.OwnerClientId, localIdx);
+
         var entry = new PlayerHUDEntry
         {
             clientId = player.OwnerClientId,
+            localPlayerIndex = localIdx,
+            uniqueId = uniqueId,
             player = player
         };
 
-        int playerIndex = (int)player.OwnerClientId;
-        Color playerColor = playerIndex < playerColors.Length ? playerColors[playerIndex] : Color.white;
+        // Get color from PlayerColorManager using clientId + localPlayerIndex
+        Color playerColor;
+        int colorIndex;
+        if (PlayerColorManager.Instance != null)
+        {
+            colorIndex = PlayerColorManager.Instance.GetColorIndex(player.OwnerClientId, localIdx);
+            playerColor = PlayerColorManager.PlayerColors[colorIndex];
+        }
+        else
+        {
+            colorIndex = (int)player.OwnerClientId + localIdx;
+            playerColor = PlayerColorManager.GetColorByIndex(colorIndex);
+        }
 
         // Create container for this player's stats
-        var container = new GameObject($"Player{playerIndex}Stats");
+        var container = new GameObject($"Player_{uniqueId}_Stats");
         container.transform.SetParent(playerStatsContainer, false);
         entry.container = container;
 
@@ -220,8 +248,8 @@ public class GameHUD : MonoBehaviour
         scoreRect.sizeDelta = new Vector2(400, 80);
 
         entry.scoreText = scoreObj.AddComponent<Text>();
-        // Use device name if available, fallback to P# format
-        string displayName = !string.IsNullOrEmpty(player.PlayerName) ? player.PlayerName : $"P{playerIndex + 1}";
+        // Use device name if available, fallback to P# format (using color index for player number)
+        string displayName = !string.IsNullOrEmpty(player.PlayerName) ? player.PlayerName : $"P{colorIndex + 1}";
         entry.lastKnownName = displayName;
         entry.scoreText.text = $"{displayName}: 0";
         entry.scoreText.fontSize = 72; // Large - kills are the most important stat
@@ -273,23 +301,23 @@ public class GameHUD : MonoBehaviour
 
         // Store entry
         _playerEntries.Add(entry);
-        _playerEntriesById[player.OwnerClientId] = entry;
+        _playerEntriesById[uniqueId] = entry;
 
         // Update legacy references for backward compatibility
-        if (playerIndex == 0)
+        if (colorIndex == 0)
         {
             p1ScoreText = entry.scoreText;
             p1SpeedBarFill = entry.speedBarFill;
             p1SpeedBarBg = entry.speedBarBg;
         }
-        else if (playerIndex == 1)
+        else if (colorIndex == 1)
         {
             p2ScoreText = entry.scoreText;
             p2SpeedBarFill = entry.speedBarFill;
             p2SpeedBarBg = entry.speedBarBg;
         }
 
-        Debug.Log($"[GameHUD] Created HUD entry for Player {playerIndex + 1} (ClientId: {player.OwnerClientId})");
+        Debug.Log($"[GameHUD] Created HUD entry for P{colorIndex + 1} (ClientId: {player.OwnerClientId}, LocalIdx: {localIdx})");
     }
 
     private void UpdateAllSpeedBars()
@@ -333,41 +361,45 @@ public class GameHUD : MonoBehaviour
         }
     }
 
-    private void OnScoreChanged(ulong scorerClientId, int newScore)
+    private void OnScoreChanged(ulong scorerClientId, int localPlayerIndex, int newScore)
     {
-        UpdateScoreDisplay(scorerClientId, newScore);
-        PlayScoreEffect(scorerClientId);
+        UpdateScoreDisplay(scorerClientId, localPlayerIndex, newScore);
+        PlayScoreEffect(scorerClientId, localPlayerIndex);
     }
 
-    private void OnStatsChanged(ulong clientId, ScoreManager.PlayerStats stats)
+    private void OnStatsChanged(ulong clientId, int localPlayerIndex, ScoreManager.PlayerStats stats)
     {
-        UpdateStatsDisplay(clientId, stats);
+        UpdateStatsDisplay(clientId, localPlayerIndex, stats);
     }
 
-    private void UpdateScoreDisplay(ulong clientId, int score)
+    private void UpdateScoreDisplay(ulong clientId, int localPlayerIndex, int score)
     {
-        if (_playerEntriesById.TryGetValue(clientId, out var entry) && entry.scoreText != null)
+        // Find the specific entry for this player
+        string uniqueId = GetPlayerUniqueId(clientId, localPlayerIndex);
+        if (_playerEntriesById.TryGetValue(uniqueId, out var entry) && entry.scoreText != null)
         {
             // Use device name if available, fallback to P# format
-            string displayName = entry.player != null && !string.IsNullOrEmpty(entry.player.PlayerName)
-                ? entry.player.PlayerName
-                : $"P{(int)clientId + 1}";
+            string displayName = entry.lastKnownName ?? $"P{localPlayerIndex + 1}";
             entry.scoreText.text = $"{displayName}: {score}";
         }
     }
 
-    private void UpdateStatsDisplay(ulong clientId, ScoreManager.PlayerStats stats)
+    private void UpdateStatsDisplay(ulong clientId, int localPlayerIndex, ScoreManager.PlayerStats stats)
     {
-        if (_playerEntriesById.TryGetValue(clientId, out var entry) && entry.statsText != null)
+        // Find the specific entry for this player
+        string uniqueId = GetPlayerUniqueId(clientId, localPlayerIndex);
+        if (_playerEntriesById.TryGetValue(uniqueId, out var entry) && entry.statsText != null)
         {
             // D = Deaths (crashes + out of bounds), C = Plane Collisions
             entry.statsText.text = $"D:{stats.Deaths} C:{stats.PlaneCollisions}";
         }
     }
 
-    private void PlayScoreEffect(ulong clientId)
+    private void PlayScoreEffect(ulong clientId, int localPlayerIndex)
     {
-        if (!_playerEntriesById.TryGetValue(clientId, out var entry)) return;
+        // Find the specific entry for this player
+        string uniqueId = GetPlayerUniqueId(clientId, localPlayerIndex);
+        if (!_playerEntriesById.TryGetValue(uniqueId, out var entry)) return;
         if (entry.scoreText == null) return;
 
         // Stop any running pulse
@@ -377,9 +409,8 @@ public class GameHUD : MonoBehaviour
         // Start pulse animation
         entry.pulseCoroutine = StartCoroutine(PulseAnimation(entry.scoreText.transform, entry.originalScoreScale));
 
-        // Spawn floating +1 text
-        int playerIndex = (int)clientId;
-        SpawnFloatingText(entry.scoreText.transform.position, playerIndex);
+        // Spawn floating +1 text with correct color
+        SpawnFloatingText(entry.scoreText.transform.position, clientId, localPlayerIndex);
     }
 
     private IEnumerator PulseAnimation(Transform target, Vector3 originalScale)
@@ -409,7 +440,7 @@ public class GameHUD : MonoBehaviour
         target.localScale = originalScale;
     }
 
-    private void SpawnFloatingText(Vector3 position, int playerIndex)
+    private void SpawnFloatingText(Vector3 position, ulong clientId, int localPlayerIndex)
     {
         if (floatingTextPrefab == null) return;
 
@@ -417,12 +448,20 @@ public class GameHUD : MonoBehaviour
         Vector3 spawnPos = position + Vector3.up * 30f;
         var floatingText = Instantiate(floatingTextPrefab, spawnPos, Quaternion.identity, transform);
 
-        // Set color based on player
+        // Set color based on player using PlayerColorManager
         var text = floatingText.GetComponent<Text>();
         if (text != null)
         {
             text.text = "+1";
-            text.color = playerIndex < playerColors.Length ? playerColors[playerIndex] : Color.white;
+            if (PlayerColorManager.Instance != null)
+            {
+                text.color = PlayerColorManager.Instance.GetColor(clientId, localPlayerIndex);
+            }
+            else
+            {
+                int fallbackIndex = (int)clientId + localPlayerIndex;
+                text.color = PlayerColorManager.GetColorByIndex(fallbackIndex);
+            }
         }
 
         // Animate and destroy
