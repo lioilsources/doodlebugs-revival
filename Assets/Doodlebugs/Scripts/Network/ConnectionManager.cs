@@ -146,7 +146,8 @@ namespace Doodlebugs.Network
             SetState(ConnectionState.WaitingForOpponent);
             SetStatus("Waiting for opponent...");
 
-            // Configure connection approval for max players
+            // Enable and configure connection approval
+            NetworkManager.Singleton.NetworkConfig.ConnectionApproval = true;
             NetworkManager.Singleton.ConnectionApprovalCallback = ApproveConnection;
 
             // Start as host
