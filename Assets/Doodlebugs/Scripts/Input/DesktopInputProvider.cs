@@ -6,8 +6,8 @@ using UnityEngine.InputSystem;
 /// Each player has unique key bindings:
 /// P1: A/D, W/S, Space
 /// P2: J/L, I/K, H
-/// P3: Arrows, RCtrl
-/// P4: O/P, [/], \
+/// P3: Arrows, / (slash)
+/// P4: O/P, [/], ; (semicolon)
 /// </summary>
 public class DesktopInputProvider : IInputProvider
 {
@@ -54,20 +54,20 @@ public class DesktopInputProvider : IInputProvider
                 shootKey = Key.H;
                 break;
 
-            case 2: // P3: Arrows, RCtrl
+            case 2: // P3: Arrows, / (slash)
                 leftKey = Key.LeftArrow;
                 rightKey = Key.RightArrow;
                 upKey = Key.UpArrow;
                 downKey = Key.DownArrow;
-                shootKey = Key.RightCtrl;
+                shootKey = Key.Slash;
                 break;
 
-            case 3: // P4: O/P, [/], \
+            case 3: // P4: O/P, [/], ; (semicolon)
                 leftKey = Key.O;
                 rightKey = Key.P;
                 upKey = Key.LeftBracket;
                 downKey = Key.RightBracket;
-                shootKey = Key.Backslash;
+                shootKey = Key.Semicolon;
                 break;
 
             default:

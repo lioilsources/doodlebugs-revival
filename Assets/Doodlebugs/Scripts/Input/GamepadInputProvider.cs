@@ -6,6 +6,7 @@ using UnityEngine.InputSystem;
 /// Left stick Y: rotation (up=right, down=left)
 /// Right stick Y: throttle (up=faster, down=slower)
 /// Works with Xbox, PlayStation, MFi (iOS), and generic controllers
+/// Supports multiple gamepads via gamepadIndex (maps to Gamepad.all[index])
 /// </summary>
 public class GamepadInputProvider : IInputProvider
 {
@@ -13,50 +14,74 @@ public class GamepadInputProvider : IInputProvider
     private const float ROTATION_SENSITIVITY = 0.5f;
     private const float THROTTLE_SENSITIVITY = 1.0f;
 
+    private int gamepadIndex;
     private bool _rightTriggerPressed = false;
     private bool _leftTriggerPressed = false;
 
+    /// <summary>
+    /// Create a gamepad input provider for a specific gamepad index
+    /// </summary>
+    /// <param name="gamepadIndex">Index into Gamepad.all (0 = first gamepad, 1 = second, etc.)</param>
+    public GamepadInputProvider(int gamepadIndex = 0)
+    {
+        this.gamepadIndex = gamepadIndex;
+    }
+
+    /// <summary>
+    /// Get the gamepad for this player's index
+    /// </summary>
+    private Gamepad GetGamepad()
+    {
+        var gamepads = Gamepad.all;
+        if (gamepadIndex >= 0 && gamepadIndex < gamepads.Count)
+            return gamepads[gamepadIndex];
+        return null;
+    }
+
     public float GetHorizontalInput()
     {
-        if (Gamepad.current == null) return 0f;
+        var gamepad = GetGamepad();
+        if (gamepad == null) return 0f;
 
         // Left stick Y axis controls rotation
         // Up (negative Y) = turn right, Down (positive Y) = turn left
-        float raw = -Gamepad.current.leftStick.y.ReadValue();
+        float raw = -gamepad.leftStick.y.ReadValue();
         return ApplyDeadzone(raw) * ROTATION_SENSITIVITY;
     }
 
     public float GetVerticalInput()
     {
-        if (Gamepad.current == null) return 0f;
+        var gamepad = GetGamepad();
+        if (gamepad == null) return 0f;
 
         // Right stick Y axis controls throttle
-        float raw = Gamepad.current.rightStick.y.ReadValue();
+        float raw = gamepad.rightStick.y.ReadValue();
         return ApplyDeadzone(raw) * THROTTLE_SENSITIVITY;
     }
 
     public bool GetShootInput()
     {
-        if (Gamepad.current == null) return false;
+        var gamepad = GetGamepad();
+        if (gamepad == null) return false;
 
         // Face buttons (A/B/X/Y or Cross/Circle/Square/Triangle)
-        if (Gamepad.current.buttonNorth.wasPressedThisFrame ||
-            Gamepad.current.buttonSouth.wasPressedThisFrame ||
-            Gamepad.current.buttonEast.wasPressedThisFrame ||
-            Gamepad.current.buttonWest.wasPressedThisFrame)
+        if (gamepad.buttonNorth.wasPressedThisFrame ||
+            gamepad.buttonSouth.wasPressedThisFrame ||
+            gamepad.buttonEast.wasPressedThisFrame ||
+            gamepad.buttonWest.wasPressedThisFrame)
         {
             return true;
         }
 
         // Shoulder buttons
-        if (Gamepad.current.leftShoulder.wasPressedThisFrame ||
-            Gamepad.current.rightShoulder.wasPressedThisFrame)
+        if (gamepad.leftShoulder.wasPressedThisFrame ||
+            gamepad.rightShoulder.wasPressedThisFrame)
         {
             return true;
         }
 
         // Right trigger with edge detection
-        float rightTrigger = Gamepad.current.rightTrigger.ReadValue();
+        float rightTrigger = gamepad.rightTrigger.ReadValue();
         if (rightTrigger > 0.3f && !_rightTriggerPressed)
         {
             _rightTriggerPressed = true;
@@ -65,7 +90,7 @@ public class GamepadInputProvider : IInputProvider
         if (rightTrigger < 0.1f) _rightTriggerPressed = false;
 
         // Left trigger with edge detection
-        float leftTrigger = Gamepad.current.leftTrigger.ReadValue();
+        float leftTrigger = gamepad.leftTrigger.ReadValue();
         if (leftTrigger > 0.3f && !_leftTriggerPressed)
         {
             _leftTriggerPressed = true;
@@ -100,7 +125,23 @@ public class GamepadInputProvider : IInputProvider
     }
 
     /// <summary>
-    /// Check if gamepad is actively being used
+    /// Get the number of connected gamepads
+    /// </summary>
+    public static int GetGamepadCount()
+    {
+        return Gamepad.all.Count;
+    }
+
+    /// <summary>
+    /// Check if a specific gamepad index is connected
+    /// </summary>
+    public static bool IsGamepadConnected(int index)
+    {
+        return index >= 0 && index < Gamepad.all.Count;
+    }
+
+    /// <summary>
+    /// Check if gamepad is actively being used (any button or significant stick movement)
     /// </summary>
     public static bool IsGamepadActive()
     {
