@@ -21,20 +21,28 @@ public class ScoreManager : MonoBehaviour
         public int PlaneCollisions; // Collided with another plane
     }
 
-    // Player stats dictionary (supports up to 4 players)
-    private Dictionary<ulong, PlayerStats> _playerStats = new Dictionary<ulong, PlayerStats>();
+    // Player stats dictionary - key is "clientId_localPlayerIndex"
+    private Dictionary<string, PlayerStats> _playerStats = new Dictionary<string, PlayerStats>();
 
     // Legacy score properties for backward compatibility
-    public int Player1Score => GetStats(0).Kills;
-    public int Player2Score => GetStats(1).Kills;
+    public int Player1Score => GetStats(0, 0).Kills;
+    public int Player2Score => GetStats(1, 0).Kills;
+
+    /// <summary>
+    /// Create unique player ID from clientId and localPlayerIndex
+    /// </summary>
+    public static string GetPlayerId(ulong clientId, int localPlayerIndex)
+    {
+        return $"{clientId}_{localPlayerIndex}";
+    }
 
     // Match timer
     public float MatchTime { get; private set; }
     public bool MatchStarted { get; private set; }
 
-    // Events for UI
-    public event Action<ulong, int> OnScoreChanged; // (scorerClientId, newKills)
-    public event Action<ulong, PlayerStats> OnStatsChanged; // (clientId, stats)
+    // Events for UI - now include localPlayerIndex for couch co-op support
+    public event Action<ulong, int, int> OnScoreChanged; // (clientId, localPlayerIndex, newKills)
+    public event Action<ulong, int, PlayerStats> OnStatsChanged; // (clientId, localPlayerIndex, stats)
     public event Action OnMatchStarted;
 
     private void Awake()
@@ -89,14 +97,15 @@ public class ScoreManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Get or create stats for a player
+    /// Get or create stats for a player (supports local co-op)
     /// </summary>
-    public PlayerStats GetStats(ulong clientId)
+    public PlayerStats GetStats(ulong clientId, int localPlayerIndex = 0)
     {
-        if (!_playerStats.TryGetValue(clientId, out var stats))
+        string playerId = GetPlayerId(clientId, localPlayerIndex);
+        if (!_playerStats.TryGetValue(playerId, out var stats))
         {
             stats = new PlayerStats();
-            _playerStats[clientId] = stats;
+            _playerStats[playerId] = stats;
         }
         return stats;
     }
@@ -141,7 +150,7 @@ public class ScoreManager : MonoBehaviour
     /// <summary>
     /// Add kill score for a player. Call from server when bullet hits opponent.
     /// </summary>
-    public void AddScore(ulong scorerClientId)
+    public void AddScore(ulong scorerClientId, int localPlayerIndex = 0)
     {
         // Only server can add scores, but this method is called directly from Bullet
         if (!NetworkManager.Singleton.IsServer)
@@ -150,49 +159,49 @@ public class ScoreManager : MonoBehaviour
             return;
         }
 
-        var stats = GetStats(scorerClientId);
+        var stats = GetStats(scorerClientId, localPlayerIndex);
         stats.Kills++;
-        Debug.Log($"[ScoreManager] Player {scorerClientId} scored kill! Total kills: {stats.Kills}");
+        Debug.Log($"[ScoreManager] Player {scorerClientId}_{localPlayerIndex} scored kill! Total kills: {stats.Kills}");
 
         // Fire events
-        OnScoreChanged?.Invoke(scorerClientId, stats.Kills);
-        OnStatsChanged?.Invoke(scorerClientId, stats);
+        OnScoreChanged?.Invoke(scorerClientId, localPlayerIndex, stats.Kills);
+        OnStatsChanged?.Invoke(scorerClientId, localPlayerIndex, stats);
 
         // Sync to all clients
-        SyncScoreToClients(scorerClientId, stats.Kills);
+        SyncScoreToClients(scorerClientId, localPlayerIndex, stats.Kills);
     }
 
     /// <summary>
     /// Record death for a player (ground crash or out of bounds). Call from server.
     /// </summary>
-    public void AddDeath(ulong clientId)
+    public void AddDeath(ulong clientId, int localPlayerIndex = 0)
     {
         if (!NetworkManager.Singleton.IsServer) return;
 
-        var stats = GetStats(clientId);
+        var stats = GetStats(clientId, localPlayerIndex);
         stats.Deaths++;
-        Debug.Log($"[ScoreManager] Player {clientId} died! Total deaths: {stats.Deaths}");
+        Debug.Log($"[ScoreManager] Player {clientId}_{localPlayerIndex} died! Total deaths: {stats.Deaths}");
 
-        OnStatsChanged?.Invoke(clientId, stats);
-        SyncStatsToClients(clientId, stats);
+        OnStatsChanged?.Invoke(clientId, localPlayerIndex, stats);
+        SyncStatsToClients(clientId, localPlayerIndex, stats);
     }
 
     /// <summary>
     /// Record plane collision for a player. Call from server.
     /// </summary>
-    public void AddPlaneCollision(ulong clientId)
+    public void AddPlaneCollision(ulong clientId, int localPlayerIndex = 0)
     {
         if (!NetworkManager.Singleton.IsServer) return;
 
-        var stats = GetStats(clientId);
+        var stats = GetStats(clientId, localPlayerIndex);
         stats.PlaneCollisions++;
-        Debug.Log($"[ScoreManager] Player {clientId} collided with plane! Total collisions: {stats.PlaneCollisions}");
+        Debug.Log($"[ScoreManager] Player {clientId}_{localPlayerIndex} collided with plane! Total collisions: {stats.PlaneCollisions}");
 
-        OnStatsChanged?.Invoke(clientId, stats);
-        SyncStatsToClients(clientId, stats);
+        OnStatsChanged?.Invoke(clientId, localPlayerIndex, stats);
+        SyncStatsToClients(clientId, localPlayerIndex, stats);
     }
 
-    private void SyncScoreToClients(ulong scorerClientId, int newScore)
+    private void SyncScoreToClients(ulong scorerClientId, int localPlayerIndex, int newScore)
     {
         // Find any player to send RPC through
         var players = FindObjectsOfType<PlayerController>();
@@ -200,13 +209,13 @@ public class ScoreManager : MonoBehaviour
         {
             if (player.IsServer)
             {
-                player.SyncScoreClientRpc(scorerClientId, newScore);
+                player.SyncScoreClientRpc(scorerClientId, localPlayerIndex, newScore);
                 break;
             }
         }
     }
 
-    private void SyncStatsToClients(ulong clientId, PlayerStats stats)
+    private void SyncStatsToClients(ulong clientId, int localPlayerIndex, PlayerStats stats)
     {
         // Find any player to send RPC through
         var players = FindObjectsOfType<PlayerController>();
@@ -214,7 +223,7 @@ public class ScoreManager : MonoBehaviour
         {
             if (player.IsServer)
             {
-                player.SyncStatsClientRpc(clientId, stats.Kills, stats.Deaths, stats.PlaneCollisions);
+                player.SyncStatsClientRpc(clientId, localPlayerIndex, stats.Kills, stats.Deaths, stats.PlaneCollisions);
                 break;
             }
         }
@@ -223,31 +232,31 @@ public class ScoreManager : MonoBehaviour
     /// <summary>
     /// Called by PlayerController ClientRpc to update score on clients
     /// </summary>
-    public void UpdateScoreFromServer(ulong scorerClientId, int newScore)
+    public void UpdateScoreFromServer(ulong scorerClientId, int localPlayerIndex, int newScore)
     {
-        var stats = GetStats(scorerClientId);
+        var stats = GetStats(scorerClientId, localPlayerIndex);
         stats.Kills = newScore;
-        OnScoreChanged?.Invoke(scorerClientId, newScore);
+        OnScoreChanged?.Invoke(scorerClientId, localPlayerIndex, newScore);
     }
 
     /// <summary>
     /// Called by PlayerController ClientRpc to update all stats on clients
     /// </summary>
-    public void UpdateStatsFromServer(ulong clientId, int kills, int deaths, int planeCollisions)
+    public void UpdateStatsFromServer(ulong clientId, int localPlayerIndex, int kills, int deaths, int planeCollisions)
     {
-        var stats = GetStats(clientId);
+        var stats = GetStats(clientId, localPlayerIndex);
         stats.Kills = kills;
         stats.Deaths = deaths;
         stats.PlaneCollisions = planeCollisions;
-        OnStatsChanged?.Invoke(clientId, stats);
+        OnStatsChanged?.Invoke(clientId, localPlayerIndex, stats);
     }
 
     /// <summary>
-    /// Get score (kills) for a specific client
+    /// Get score (kills) for a specific player
     /// </summary>
-    public int GetScore(ulong clientId)
+    public int GetScore(ulong clientId, int localPlayerIndex = 0)
     {
-        return GetStats(clientId).Kills;
+        return GetStats(clientId, localPlayerIndex).Kills;
     }
 
     /// <summary>

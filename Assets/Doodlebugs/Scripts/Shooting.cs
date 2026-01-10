@@ -46,7 +46,9 @@ public class Shooting : NetworkBehaviour
         if (shootPressed)
         {
             float planeSpeed = planeRb != null ? planeRb.linearVelocity.magnitude : 0f;
-            ShootServerRpc(firePoint.position, firePoint.rotation, planeSpeed);
+            int localPlayerIndex = playerController != null && playerController.LocalPlayerIndex >= 0
+                ? playerController.LocalPlayerIndex : 0;
+            ShootServerRpc(firePoint.position, firePoint.rotation, planeSpeed, localPlayerIndex);
         }
     }
 
@@ -79,7 +81,7 @@ public class Shooting : NetworkBehaviour
     }
 
     [ServerRpc]
-    void ShootServerRpc(Vector3 position, Quaternion rotation, float planeSpeed, ServerRpcParams rpcParams = default)
+    void ShootServerRpc(Vector3 position, Quaternion rotation, float planeSpeed, int localPlayerIndex, ServerRpcParams rpcParams = default)
     {
         // Get shooter's client ID from RPC sender
         ulong shooterClientId = rpcParams.Receive.SenderClientId;
@@ -92,11 +94,11 @@ public class Shooting : NetworkBehaviour
             netObj.Spawn(true);
         }
 
-        // Set shooter ID for scoring
+        // Set shooter ID and local player index for scoring
         var bulletScript = bullet.GetComponent<Bullet>();
         if (bulletScript != null)
         {
-            bulletScript.SetShooter(shooterClientId);
+            bulletScript.SetShooter(shooterClientId, localPlayerIndex);
         }
 
         var rb = bullet.GetComponent<Rigidbody2D>();

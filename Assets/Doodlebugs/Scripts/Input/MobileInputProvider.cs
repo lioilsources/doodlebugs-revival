@@ -24,25 +24,18 @@ public class MobileInputProvider : IInputProvider
 
     public void Initialize()
     {
-        // Try new Input System GravitySensor first
+        // Use new Input System GravitySensor
         gravitySensor = GravitySensor.current;
         if (gravitySensor != null)
         {
             InputSystem.EnableDevice(gravitySensor);
             gyroAvailable = true;
-            Debug.Log("[MobileInputProvider] GravitySensor enabled (New Input System)");
-        }
-        // Fallback to old Input system
-        else if (SystemInfo.supportsGyroscope)
-        {
-            Input.gyro.enabled = true;
-            gyroAvailable = true;
-            Debug.Log("[MobileInputProvider] Gyroscope enabled (Legacy Input)");
+            Debug.Log("[MobileInputProvider] GravitySensor enabled");
         }
         else
         {
             gyroAvailable = false;
-            Debug.LogWarning("[MobileInputProvider] Gyroscope not supported");
+            Debug.LogWarning("[MobileInputProvider] GravitySensor not available");
         }
     }
 
@@ -112,33 +105,20 @@ public class MobileInputProvider : IInputProvider
 
     private Vector3 GetGravity()
     {
-        // Prefer new Input System
         if (gravitySensor != null)
         {
             return gravitySensor.gravity.ReadValue();
         }
-        // Fallback to legacy
-        return Input.gyro.gravity;
+        return Vector3.zero;
     }
 
     private void CheckTouchShoot()
     {
-        // Try new Input System Touchscreen first
         var touchscreen = Touchscreen.current;
         if (touchscreen != null)
         {
             var primaryTouch = touchscreen.primaryTouch;
             if (primaryTouch.press.wasPressedThisFrame)
-            {
-                shootPressed = true;
-                return;
-            }
-        }
-        // Fallback to legacy Input
-        else if (Input.touchCount > 0)
-        {
-            UnityEngine.Touch touch = Input.GetTouch(0);
-            if (touch.phase == UnityEngine.TouchPhase.Began)
             {
                 shootPressed = true;
                 return;

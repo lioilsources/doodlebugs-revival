@@ -131,6 +131,11 @@ public class PlayerController : NetworkBehaviour, IDamagable
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
+
+        // Subscribe to local player index changes to update color when set
+        netLocalPlayerIndex.OnValueChanged += OnLocalPlayerIndexChanged;
+
+        // Set initial color (may be updated when LocalPlayerIndex is set)
         SetPlaneColor();
 
         // Cache visual effects reference
@@ -185,15 +190,6 @@ public class PlayerController : NetworkBehaviour, IDamagable
         }
     }
 
-    // Player colors for up to 4 players
-    private static readonly Color[] PlayerColors = new Color[]
-    {
-        new Color(0.3f, 0.5f, 1f),    // Blue (Player 1 / Host)
-        new Color(1f, 0.3f, 0.3f),    // Red (Player 2) - original sprite color, no shader needed
-        new Color(0.3f, 0.9f, 0.3f),  // Green (Player 3)
-        new Color(1f, 0.8f, 0.2f)     // Yellow (Player 4)
-    };
-
     private void SetPlaneColor()
     {
         if (plane == null) return;
@@ -201,18 +197,25 @@ public class PlayerController : NetworkBehaviour, IDamagable
         var spriteRenderer = plane.GetComponent<SpriteRenderer>();
         if (spriteRenderer == null) return;
 
-        int playerIndex = (int)OwnerClientId;
+        // Get color from PlayerColorManager using clientId + localPlayerIndex
+        int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
+        Color targetColor;
+        string colorName;
 
-        // Player 2 (index 1) keeps original red color - no shader needed
-        if (playerIndex == 1)
+        if (PlayerColorManager.Instance != null)
         {
-            Debug.Log($"[PlayerController] Player 2 keeps original red color");
-            return;
+            targetColor = PlayerColorManager.Instance.GetColor(OwnerClientId, localIdx);
+            colorName = PlayerColorManager.Instance.GetColorName(OwnerClientId, localIdx);
+        }
+        else
+        {
+            // Fallback if manager not available
+            int fallbackIndex = (int)OwnerClientId + localIdx;
+            targetColor = PlayerColorManager.GetColorByIndex(fallbackIndex);
+            colorName = PlayerColorManager.GetColorNameByIndex(fallbackIndex);
         }
 
-        // All other players get color replaced via shader
-        Color targetColor = playerIndex < PlayerColors.Length ? PlayerColors[playerIndex] : Color.white;
-
+        // Apply color via shader
         Shader colorReplaceShader = Shader.Find("Custom/ColorReplace");
         if (colorReplaceShader != null)
         {
@@ -222,7 +225,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             mat.SetColor("_TargetColor", targetColor);
             mat.SetFloat("_Threshold", 0.4f);
             spriteRenderer.material = mat;
-            Debug.Log($"[PlayerController] Applied {GetColorName(playerIndex)} color shader to Player {playerIndex + 1}");
+            Debug.Log($"[PlayerController] Applied {colorName} color to player (client={OwnerClientId}, local={localIdx})");
         }
         else
         {
@@ -230,16 +233,19 @@ public class PlayerController : NetworkBehaviour, IDamagable
         }
     }
 
-    private string GetColorName(int playerIndex)
+    public override void OnNetworkDespawn()
     {
-        switch (playerIndex)
-        {
-            case 0: return "blue";
-            case 1: return "red";
-            case 2: return "green";
-            case 3: return "yellow";
-            default: return "white";
-        }
+        base.OnNetworkDespawn();
+        netLocalPlayerIndex.OnValueChanged -= OnLocalPlayerIndexChanged;
+    }
+
+    /// <summary>
+    /// Called when local player index changes - update plane color
+    /// </summary>
+    private void OnLocalPlayerIndexChanged(int previousValue, int newValue)
+    {
+        Debug.Log($"[PlayerController] LocalPlayerIndex changed from {previousValue} to {newValue}");
+        SetPlaneColor();
     }
 
     /// <summary>
@@ -400,7 +406,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private void RequestRespawnServerRpc()
     {
         // Player flew out of bounds - record death
-        ScoreManager.Instance?.AddDeath(OwnerClientId);
+        int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
+        ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
         RespawnWithExplosionClientRpc();
     }
 
@@ -695,10 +702,11 @@ public class PlayerController : NetworkBehaviour, IDamagable
             RespawnWithExplosionClientRpc();
         }
 
-        if (collider.gameObject.CompareTag("Respawn") || collider.gameObject.CompareTag("Ground"))
+        if (collider.gameObject.CompareTag("Ground"))
         {
             // Crashed into ground/obstacle - record death
-            ScoreManager.Instance?.AddDeath(OwnerClientId);
+            int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
+            ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
             visualEffects?.TriggerDamageFlash();
             RespawnWithExplosionClientRpc();
         }
@@ -706,7 +714,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (collider.gameObject.CompareTag("Player"))
         {
             // Collided with another plane
-            ScoreManager.Instance?.AddPlaneCollision(OwnerClientId);
+            int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
+            ScoreManager.Instance?.AddPlaneCollision(OwnerClientId, localIdx);
             visualEffects?.TriggerDamageFlash();
             RespawnWithExplosionClientRpc();
         }
@@ -774,12 +783,12 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// Sync score to all clients. Called by ScoreManager.
     /// </summary>
     [ClientRpc]
-    public void SyncScoreClientRpc(ulong scorerClientId, int newScore)
+    public void SyncScoreClientRpc(ulong scorerClientId, int localPlayerIndex, int newScore)
     {
         // Update local ScoreManager on clients
         if (ScoreManager.Instance != null)
         {
-            ScoreManager.Instance.UpdateScoreFromServer(scorerClientId, newScore);
+            ScoreManager.Instance.UpdateScoreFromServer(scorerClientId, localPlayerIndex, newScore);
         }
     }
 
@@ -799,11 +808,11 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// Sync player stats to all clients. Called by ScoreManager.
     /// </summary>
     [ClientRpc]
-    public void SyncStatsClientRpc(ulong clientId, int kills, int deaths, int planeCollisions)
+    public void SyncStatsClientRpc(ulong clientId, int localPlayerIndex, int kills, int deaths, int planeCollisions)
     {
         if (ScoreManager.Instance != null)
         {
-            ScoreManager.Instance.UpdateStatsFromServer(clientId, kills, deaths, planeCollisions);
+            ScoreManager.Instance.UpdateStatsFromServer(clientId, localPlayerIndex, kills, deaths, planeCollisions);
         }
     }
 }

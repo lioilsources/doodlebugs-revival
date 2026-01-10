@@ -51,14 +51,20 @@ public class GamepadDebugUI : MonoBehaviour
 
     void Update()
     {
-        // Triple tap to toggle debug
-        if (Input.touchCount == 3 && Input.GetTouch(0).phase == UnityEngine.TouchPhase.Began)
+        // Triple tap to toggle debug (using new Input System)
+        var touchscreen = Touchscreen.current;
+        if (touchscreen != null && touchscreen.touches.Count >= 3)
         {
-            showDebug = !showDebug;
+            var touch = touchscreen.touches[0];
+            if (touch.phase.ReadValue() == UnityEngine.InputSystem.TouchPhase.Began)
+            {
+                showDebug = !showDebug;
+            }
         }
 
         // Or triple click with mouse (for editor testing)
-        if (Input.GetMouseButtonDown(0))
+        var mouse = Mouse.current;
+        if (mouse != null && mouse.leftButton.wasPressedThisFrame)
         {
             if (Time.time - lastTapTime < 0.3f)
             {
@@ -74,6 +80,13 @@ public class GamepadDebugUI : MonoBehaviour
                 tapCount = 1;
             }
             lastTapTime = Time.time;
+        }
+
+        // Desktop: F12 to toggle debug
+        var keyboard = Keyboard.current;
+        if (keyboard != null && keyboard.f12Key.wasPressedThisFrame)
+        {
+            showDebug = !showDebug;
         }
     }
 
@@ -158,21 +171,25 @@ public class GamepadDebugUI : MonoBehaviour
             }
         }
 
-        // Old Input system joystick check
-        info += $"\n--- Legacy Input ---\n";
-        string[] joysticks = Input.GetJoystickNames();
-        info += $"Joysticks: {joysticks.Length}\n";
-        for (int i = 0; i < joysticks.Length; i++)
+        // All connected joystick/gamepad devices
+        info += $"\n--- Connected Joysticks ---\n";
+        var joysticks = InputSystem.devices.Where(d => d is Joystick || d is Gamepad).ToList();
+        info += $"Count: {joysticks.Count}\n";
+        for (int i = 0; i < joysticks.Count; i++)
         {
-            info += $"  [{i}]: '{joysticks[i]}'\n";
+            info += $"  [{i}]: '{joysticks[i].displayName}'\n";
         }
 
-        info += "\n(Triple-tap to hide)";
+        info += "\n(F12 or triple-tap to hide)";
 
-        // Draw background box and text (right side to avoid phone notch)
+        // Draw background box and text
+        // Desktop: left side (no notch)
+        // Mobile: right side (avoid phone notch)
         float width = 400;
         float height = 500;
-        float x = Screen.width - width - 10;
+        bool isMobile = Application.platform == RuntimePlatform.Android ||
+                        Application.platform == RuntimePlatform.IPhonePlayer;
+        float x = isMobile ? Screen.width - width - 10 : 10;
         GUI.Box(new Rect(x, 10, width, height), "");
         GUI.Label(new Rect(x, 10, width, height), info, style);
     }

@@ -132,11 +132,11 @@ public class ScreenSetup : MonoBehaviour
             new Vector2(camPos.x + rightX + borderThickness / 2f, camPos.y),
             new Vector2(borderThickness, camHeight * 2));
 
-        // Ground boundary (with Respawn tag)
+        // Ground boundary
         borders[2] = CreateCollider("Ground",
             new Vector2(camPos.x, camPos.y + bottomY - borderThickness / 2f),
             new Vector2(camWidth * 2, borderThickness),
-            "Respawn");
+            "Ground");
 
         // Space boundary
         borders[3] = CreateCollider("Space",

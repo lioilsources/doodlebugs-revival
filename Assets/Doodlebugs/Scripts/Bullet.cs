@@ -11,15 +11,18 @@ public class Bullet : NetworkBehaviour
     // Track who shot this bullet for scoring
     private NetworkVariable<ulong> _shooterClientId = new NetworkVariable<ulong>(0,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<int> _shooterLocalPlayerIndex = new NetworkVariable<int>(0,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     /// <summary>
-    /// Set the shooter's client ID. Call from server after spawning.
+    /// Set the shooter's client ID and local player index. Call from server after spawning.
     /// </summary>
-    public void SetShooter(ulong shooterClientId)
+    public void SetShooter(ulong shooterClientId, int localPlayerIndex = 0)
     {
         if (IsServer)
         {
             _shooterClientId.Value = shooterClientId;
+            _shooterLocalPlayerIndex.Value = localPlayerIndex;
         }
     }
 
@@ -42,7 +45,7 @@ public class Bullet : NetworkBehaviour
                         // Add score to shooter (server-side call)
                         if (ScoreManager.Instance != null)
                         {
-                            ScoreManager.Instance.AddScore(_shooterClientId.Value);
+                            ScoreManager.Instance.AddScore(_shooterClientId.Value, _shooterLocalPlayerIndex.Value);
                         }
                     }
                 }

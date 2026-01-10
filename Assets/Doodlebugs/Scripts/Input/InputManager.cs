@@ -197,7 +197,7 @@ public class InputManager : MonoBehaviour
 
         if (isMobilePlatform)
         {
-            bool touchActive = Input.touchCount > 0;
+            bool touchActive = Touchscreen.current != null && Touchscreen.current.primaryTouch.press.isPressed;
 
             if (gamepadActive && !isUsingGamepad)
             {
@@ -214,7 +214,7 @@ public class InputManager : MonoBehaviour
         }
         else
         {
-            bool keyboardActive = Input.anyKey && !gamepadActive;
+            bool keyboardActive = Keyboard.current != null && Keyboard.current.anyKey.isPressed && !gamepadActive;
 
             if (gamepadActive && !isUsingGamepad)
             {

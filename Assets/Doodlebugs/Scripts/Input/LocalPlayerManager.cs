@@ -71,7 +71,11 @@ public class LocalPlayerManager : MonoBehaviour
 
         // Check toggle keys (using new Input System)
         var keyboard = Keyboard.current;
-        if (keyboard == null) return;
+        if (keyboard == null)
+        {
+            Debug.LogWarning("[LocalPlayerManager] Keyboard.current is NULL!");
+            return;
+        }
 
         // Key 0 - disable P1 only
         if (keyboard.digit0Key.wasPressedThisFrame)
@@ -80,10 +84,26 @@ public class LocalPlayerManager : MonoBehaviour
         }
 
         // Keys 1-4 toggle P1-P4
-        if (keyboard.digit1Key.wasPressedThisFrame) TogglePlayer(0);
-        if (keyboard.digit2Key.wasPressedThisFrame) TogglePlayer(1);
-        if (keyboard.digit3Key.wasPressedThisFrame) TogglePlayer(2);
-        if (keyboard.digit4Key.wasPressedThisFrame) TogglePlayer(3);
+        if (keyboard.digit1Key.wasPressedThisFrame)
+        {
+            Debug.Log("[LocalPlayerManager] Key 1 pressed - toggling P1");
+            TogglePlayer(0);
+        }
+        if (keyboard.digit2Key.wasPressedThisFrame)
+        {
+            Debug.Log("[LocalPlayerManager] Key 2 pressed - toggling P2");
+            TogglePlayer(1);
+        }
+        if (keyboard.digit3Key.wasPressedThisFrame)
+        {
+            Debug.Log("[LocalPlayerManager] Key 3 pressed - toggling P3");
+            TogglePlayer(2);
+        }
+        if (keyboard.digit4Key.wasPressedThisFrame)
+        {
+            Debug.Log("[LocalPlayerManager] Key 4 pressed - toggling P4");
+            TogglePlayer(3);
+        }
     }
 
     public void TogglePlayer(int index)
