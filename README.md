@@ -1,3 +1,12 @@
+9/1/2026
+- gamepad support for desktop (XBox tested) and mobile (DualShock tested, Backbone not working)
+- migrate to new Unity Input System Package for all: gamepad, gyro, touch
+- up to 4 players in local wifi
+- updated HUD and stats (kill, destroy, colision) with device names
+- shaders: outline for own player
+- shaders: golden for expert shaders (you get expert after 20 kills)
+- Happy mobile app for vibe
+
 3/1/2026
 - new qyro controls: X movement; Y speed
 - dynamic clouds motion and size

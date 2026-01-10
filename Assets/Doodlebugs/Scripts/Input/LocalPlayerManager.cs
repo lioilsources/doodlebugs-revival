@@ -5,7 +5,8 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Manages up to 4 local players on desktop with keyboard controls.
+/// Manages up to 4 local players on desktop with keyboard + gamepad controls.
+/// Each player can use their assigned gamepad (Gamepad.all[index]) OR keyboard.
 /// Toggle players with keys 0-4 (0 disables P1, 1-4 toggles P1-P4).
 /// P1 is enabled by default on startup.
 /// </summary>
@@ -18,7 +19,7 @@ public class LocalPlayerManager : MonoBehaviour
     private const int MAX_LOCAL_PLAYERS = 4;
 
     private bool[] playerEnabled = new bool[MAX_LOCAL_PLAYERS];
-    private DesktopInputProvider[] inputProviders = new DesktopInputProvider[MAX_LOCAL_PLAYERS];
+    private HybridInputProvider[] inputProviders = new HybridInputProvider[MAX_LOCAL_PLAYERS];
     private NetworkObject[] playerNetworkObjects = new NetworkObject[MAX_LOCAL_PLAYERS];
 
     public event Action<int, bool> OnPlayerToggled; // (playerIndex, enabled)
@@ -36,10 +37,10 @@ public class LocalPlayerManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        // Create input providers for all players
+        // Create hybrid input providers for all players (keyboard + gamepad)
         for (int i = 0; i < MAX_LOCAL_PLAYERS; i++)
         {
-            inputProviders[i] = new DesktopInputProvider(i);
+            inputProviders[i] = new HybridInputProvider(i);
         }
     }
 
