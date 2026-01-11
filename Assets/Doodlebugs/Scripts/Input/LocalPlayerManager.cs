@@ -29,6 +29,14 @@ public class LocalPlayerManager : MonoBehaviour
 
     private void Awake()
     {
+        // Only run on desktop
+        if (IsMobilePlatform())
+        {
+            Debug.Log("[LocalPlayerManager] Mobile platform - LocalPlayerManager disabled");
+            Destroy(gameObject);
+            return;
+        }
+
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -46,19 +54,14 @@ public class LocalPlayerManager : MonoBehaviour
 
     private void Start()
     {
-        // P1 auto-enabled on startup (only on desktop)
-        // We mark it enabled but don't spawn yet - wait for network
-        if (!IsMobilePlatform())
-        {
-            playerEnabled[0] = true;
-            Debug.Log("[LocalPlayerManager] P1 enabled (waiting for network to spawn)");
-        }
+        // P1 will be enabled when host starts via OnHostStarted()
+        // Don't enable here - wait for network to be ready
+        Debug.Log("[LocalPlayerManager] Waiting for host to start before enabling P1");
     }
 
     private void Update()
     {
-        // Only process toggle keys on desktop
-        if (IsMobilePlatform()) return;
+        // Manager is destroyed on mobile in Awake(), so this only runs on desktop
 
         // Update all active input providers
         for (int i = 0; i < MAX_LOCAL_PLAYERS; i++)
@@ -218,18 +221,18 @@ public class LocalPlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Called when network connection established - respawn enabled players
+    /// Called when host starts - enables P1 and spawns the player object.
+    /// Only works on desktop hosts.
     /// </summary>
-    public void OnNetworkStarted()
+    public void OnHostStarted()
     {
-        if (!NetworkManager.Singleton.IsServer) return;
-
-        for (int i = 0; i < MAX_LOCAL_PLAYERS; i++)
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsHost)
         {
-            if (playerEnabled[i] && playerNetworkObjects[i] == null)
-            {
-                SpawnPlayerObject(i);
-            }
+            Debug.Log("[LocalPlayerManager] OnHostStarted called but not a host - ignoring");
+            return;
         }
+
+        Debug.Log("[LocalPlayerManager] Host started - enabling P1");
+        EnablePlayer(0);
     }
 }
