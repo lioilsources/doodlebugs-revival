@@ -93,6 +93,16 @@ public class GameHUD : MonoBehaviour
         {
             StartCoroutine(WaitForScoreManager());
         }
+
+        // Subscribe to local player toggle events
+        if (LocalPlayerManager.Instance != null)
+        {
+            LocalPlayerManager.Instance.OnPlayerToggled += OnLocalPlayerToggled;
+        }
+        else
+        {
+            StartCoroutine(WaitForLocalPlayerManager());
+        }
     }
 
     private void OnDisable()
@@ -101,6 +111,11 @@ public class GameHUD : MonoBehaviour
         {
             ScoreManager.Instance.OnScoreChanged -= OnScoreChanged;
             ScoreManager.Instance.OnStatsChanged -= OnStatsChanged;
+        }
+
+        if (LocalPlayerManager.Instance != null)
+        {
+            LocalPlayerManager.Instance.OnPlayerToggled -= OnLocalPlayerToggled;
         }
     }
 
@@ -112,6 +127,42 @@ public class GameHUD : MonoBehaviour
         }
         ScoreManager.Instance.OnScoreChanged += OnScoreChanged;
         ScoreManager.Instance.OnStatsChanged += OnStatsChanged;
+    }
+
+    private IEnumerator WaitForLocalPlayerManager()
+    {
+        while (LocalPlayerManager.Instance == null)
+        {
+            yield return new WaitForSeconds(0.1f);
+        }
+        LocalPlayerManager.Instance.OnPlayerToggled += OnLocalPlayerToggled;
+    }
+
+    private void OnLocalPlayerToggled(int localPlayerIndex, bool enabled)
+    {
+        // Local players are owned by the local client (host)
+        if (NetworkManager.Singleton == null) return;
+
+        ulong localClientId = NetworkManager.Singleton.LocalClientId;
+        string uniqueId = GetPlayerUniqueId(localClientId, localPlayerIndex);
+
+        if (!enabled)
+        {
+            // Player disabled - remove HUD entry immediately
+            if (_playerEntriesById.TryGetValue(uniqueId, out var entry))
+            {
+                Debug.Log($"[GameHUD] Local player {localPlayerIndex + 1} disabled - removing HUD entry");
+
+                if (entry.container != null)
+                {
+                    Destroy(entry.container);
+                }
+
+                _playerEntriesById.Remove(uniqueId);
+                _playerEntries.Remove(entry);
+            }
+        }
+        // If enabled, UpdatePlayerEntries() will create the entry when PlayerController spawns
     }
 
     private void Update()
@@ -153,6 +204,33 @@ public class GameHUD : MonoBehaviour
     {
         var players = FindObjectsOfType<PlayerController>();
 
+        // Build set of active player IDs
+        var activePlayerIds = new HashSet<string>();
+        foreach (var player in players)
+        {
+            activePlayerIds.Add(GetPlayerUniqueId(player));
+        }
+
+        // Remove entries for disconnected players
+        for (int i = _playerEntries.Count - 1; i >= 0; i--)
+        {
+            var entry = _playerEntries[i];
+            if (!activePlayerIds.Contains(entry.uniqueId))
+            {
+                // Player disconnected - remove HUD entry
+                Debug.Log($"[GameHUD] Removing HUD entry for disconnected player {entry.uniqueId}");
+
+                if (entry.container != null)
+                {
+                    Destroy(entry.container);
+                }
+
+                _playerEntriesById.Remove(entry.uniqueId);
+                _playerEntries.RemoveAt(i);
+            }
+        }
+
+        // Add/update entries for active players
         foreach (var player in players)
         {
             string uniqueId = GetPlayerUniqueId(player);
