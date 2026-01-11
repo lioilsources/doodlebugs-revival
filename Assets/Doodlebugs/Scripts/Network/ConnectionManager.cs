@@ -25,7 +25,7 @@ namespace Doodlebugs.Network
         public event Action<ConnectionState> OnStateChanged;
         public event Action<string> OnStatusMessage;
 
-        private const int MAX_PLAYERS = 4;
+        private const int MAX_PLAYERS = 7;  // 4 local on desktop host + 3 remote clients
 
         private void Awake()
         {
@@ -132,7 +132,13 @@ namespace Doodlebugs.Network
             {
                 transport.ConnectionData.Address = data.hostAddress;
                 transport.ConnectionData.Port = (ushort)data.port;
-                Debug.Log($"[ConnectionManager] Transport configured: {data.hostAddress}:{data.port}");
+
+                // Increase timeouts for mobile networks (default values are too aggressive)
+                transport.ConnectTimeoutMS = 5000;      // 5 seconds (default: 1000)
+                transport.MaxConnectAttempts = 10;      // 10 attempts (default: 60)
+                transport.HeartbeatTimeoutMS = 1500;    // 1.5 seconds (default: 500)
+
+                Debug.Log($"[ConnectionManager] Transport configured: {data.hostAddress}:{data.port}, ConnectTimeout={transport.ConnectTimeoutMS}ms, HeartbeatTimeout={transport.HeartbeatTimeoutMS}ms");
             }
 
             // Start as client
@@ -146,12 +152,26 @@ namespace Doodlebugs.Network
             SetState(ConnectionState.WaitingForOpponent);
             SetStatus("Waiting for opponent...");
 
-            // Enable and configure connection approval
-            NetworkManager.Singleton.NetworkConfig.ConnectionApproval = true;
+            // Configure transport timeouts for mobile networks
+            var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            if (transport != null)
+            {
+                transport.ConnectTimeoutMS = 5000;      // 5 seconds
+                transport.MaxConnectAttempts = 10;      // 10 attempts
+                transport.HeartbeatTimeoutMS = 1500;    // 1.5 seconds
+                Debug.Log($"[ConnectionManager] Host transport configured: ConnectTimeout={transport.ConnectTimeoutMS}ms, HeartbeatTimeout={transport.HeartbeatTimeoutMS}ms");
+            }
+
+            // ConnectionApproval must be enabled in Unity Editor on NetworkManager component
+            // Here we just assign the callback (safe to do at runtime)
             NetworkManager.Singleton.ConnectionApprovalCallback = ApproveConnection;
+            Debug.Log("[ConnectionManager] ConnectionApprovalCallback assigned");
 
             // Start as host
             NetworkManager.Singleton.StartHost();
+
+            // Notify LocalPlayerManager to spawn P1 (desktop only)
+            LocalPlayerManager.Instance?.OnHostStarted();
 
             // Start broadcasting
             _discovery?.StartBroadcast(1, MAX_PLAYERS);
@@ -163,6 +183,8 @@ namespace Doodlebugs.Network
 
         private void ApproveConnection(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response)
         {
+            Debug.Log($"[ConnectionManager] ApproveConnection CALLED for ClientNetworkId={request.ClientNetworkId}");
+
             int currentPlayers = NetworkManager.Singleton.ConnectedClientsIds.Count;
 
             if (currentPlayers >= MAX_PLAYERS)
@@ -174,12 +196,20 @@ namespace Doodlebugs.Network
             else
             {
                 response.Approved = true;
-                // For host: LocalPlayerManager handles player spawning (supports couch co-op)
-                // Host is always clientId 0 and first to connect (currentPlayers == 0)
-                // For clients: NetworkManager creates player object automatically
+
+                // Determine if we should auto-create player object:
+                // - Desktop host: LocalPlayerManager handles spawning (CreatePlayerObject = false)
+                // - Mobile host: No LocalPlayerManager, need auto-spawn (CreatePlayerObject = true)
+                // - All clients: Auto-spawn (CreatePlayerObject = true)
                 bool isHostConnection = currentPlayers == 0 && NetworkManager.Singleton.IsServer;
-                response.CreatePlayerObject = !isHostConnection;
-                Debug.Log($"[ConnectionManager] Connection approved - ClientNetworkId={request.ClientNetworkId}, IsServer={NetworkManager.Singleton.IsServer}, CurrentPlayers={currentPlayers}, CreatePlayerObject={response.CreatePlayerObject}");
+                bool hasLocalPlayerManager = LocalPlayerManager.Instance != null;
+
+                // Desktop host with LocalPlayerManager: false (LocalPlayerManager spawns)
+                // Mobile host without LocalPlayerManager: true (auto-spawn)
+                // All clients: true (auto-spawn)
+                response.CreatePlayerObject = !isHostConnection || !hasLocalPlayerManager;
+
+                Debug.Log($"[ConnectionManager] Connection approved - ClientNetworkId={request.ClientNetworkId}, IsServer={NetworkManager.Singleton.IsServer}, CurrentPlayers={currentPlayers}, HasLocalPlayerManager={hasLocalPlayerManager}, CreatePlayerObject={response.CreatePlayerObject}");
             }
         }
 
@@ -191,11 +221,8 @@ namespace Doodlebugs.Network
             {
                 int playerCount = NetworkManager.Singleton.ConnectedClientsIds.Count;
 
-                // Notify LocalPlayerManager to spawn enabled local players
-                if (clientId == NetworkManager.Singleton.LocalClientId)
-                {
-                    LocalPlayerManager.Instance?.OnNetworkStarted();
-                }
+                // LocalPlayerManager.OnHostStarted() is called directly after StartHost()
+                // No need to call it here anymore
 
                 if (playerCount >= MAX_PLAYERS)
                 {
@@ -221,7 +248,14 @@ namespace Doodlebugs.Network
 
         private void OnClientDisconnected(ulong clientId)
         {
-            Debug.Log($"[ConnectionManager] Client disconnected: {clientId}");
+            Debug.Log($"[ConnectionManager] Client disconnected: {clientId}, LocalClientId={NetworkManager.Singleton.LocalClientId}, IsHost={NetworkManager.Singleton.IsHost}, IsClient={NetworkManager.Singleton.IsClient}");
+
+            // Additional diagnostics for debugging disconnect issues
+            var transport = NetworkManager.Singleton.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+            if (transport != null)
+            {
+                Debug.Log($"[ConnectionManager] Transport state - ConnectTimeoutMS={transport.ConnectTimeoutMS}, HeartbeatTimeoutMS={transport.HeartbeatTimeoutMS}");
+            }
 
             if (NetworkManager.Singleton.IsHost)
             {

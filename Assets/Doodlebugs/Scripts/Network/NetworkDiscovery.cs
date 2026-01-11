@@ -23,7 +23,12 @@ namespace Doodlebugs.Network
         public const int BROADCAST_PORT = 47777;
         public const int GAME_PORT = 7777;
         public const float BROADCAST_INTERVAL = 1f;
-        public const float DISCOVERY_TIMEOUT = 5f;
+        public const float DISCOVERY_TIMEOUT_DESKTOP = 5f;
+        public const float DISCOVERY_TIMEOUT_MOBILE = 10f;  // Mobile needs more time to receive broadcasts
+
+        private static float DiscoveryTimeout => IsMobile ? DISCOVERY_TIMEOUT_MOBILE : DISCOVERY_TIMEOUT_DESKTOP;
+        private static bool IsMobile => Application.platform == RuntimePlatform.Android ||
+                                        Application.platform == RuntimePlatform.IPhonePlayer;
 
         public event Action<DiscoveryData> OnServerFound;
         public event Action OnDiscoveryTimeout;
@@ -147,7 +152,7 @@ namespace Doodlebugs.Network
             _isListening = true;
             _cancellationSource = new CancellationTokenSource();
 
-            Debug.Log($"[NetworkDiscovery] Starting to listen for hosts on port {BROADCAST_PORT}");
+            Debug.Log($"[NetworkDiscovery] Starting to listen for hosts on port {BROADCAST_PORT}, timeout={DiscoveryTimeout}s, isMobile={IsMobile}");
             _ = ListenLoopAsync(_cancellationSource.Token);
         }
 
@@ -181,7 +186,7 @@ namespace Doodlebugs.Network
                 while (!token.IsCancellationRequested && _isListening)
                 {
                     // Check timeout
-                    if (Time.realtimeSinceStartup - startTime > DISCOVERY_TIMEOUT)
+                    if (Time.realtimeSinceStartup - startTime > DiscoveryTimeout)
                     {
                         Debug.Log("[NetworkDiscovery] Discovery timeout - no host found");
                         MainThreadDispatcher.Enqueue(() => OnDiscoveryTimeout?.Invoke());
@@ -235,12 +240,15 @@ namespace Doodlebugs.Network
             }
             catch (SocketException e)
             {
-                Debug.LogError($"[NetworkDiscovery] Socket error: {e.Message}");
+                Debug.LogError($"[NetworkDiscovery] Socket error (code={e.SocketErrorCode}): {e.Message}");
+                Debug.LogError($"[NetworkDiscovery] This may indicate port {BROADCAST_PORT} is in use or blocked on this device");
                 MainThreadDispatcher.Enqueue(() => OnDiscoveryTimeout?.Invoke());
             }
             catch (Exception e)
             {
-                Debug.LogError($"[NetworkDiscovery] Listen loop error: {e}");
+                Debug.LogError($"[NetworkDiscovery] Listen loop error ({e.GetType().Name}): {e.Message}");
+                // Don't silently fail - trigger timeout so game doesn't hang
+                MainThreadDispatcher.Enqueue(() => OnDiscoveryTimeout?.Invoke());
             }
         }
 
