@@ -5,8 +5,10 @@ using UnityEngine.UI;
 using Unity.Netcode;
 
 /// <summary>
-/// Game HUD displaying scores and speed bars for all players on the left side.
-/// Supports dynamic player count (up to 4 players).
+/// Game HUD displaying scores and speed bars for all players.
+/// Supports dynamic player count (up to 20 players).
+/// Players sorted by performance: kills (desc) → deaths (asc) → collisions (asc).
+/// Format: "deviceName#N K|D|C" for local players, "deviceName K|D|C" for remote.
 /// </summary>
 public class GameHUD : MonoBehaviour
 {
@@ -38,12 +40,12 @@ public class GameHUD : MonoBehaviour
         public PlayerController player;
         public GameObject container;
         public Text scoreText;
-        public Text statsText; // Ground crashes, plane collisions, out of bounds
         public Image speedBarFill;
         public Image speedBarBg;
         public Vector3 originalScoreScale;
         public Coroutine pulseCoroutine;
         public string lastKnownName; // Track name changes from NetworkVariable sync
+        public bool isLocalPlayer;   // True for local co-op players on this machine
     }
 
     private List<PlayerHUDEntry> _playerEntries = new List<PlayerHUDEntry>();
@@ -248,26 +250,36 @@ public class GameHUD : MonoBehaviour
 
                 // Check if player name was updated (NetworkVariable sync may arrive after HUD creation)
                 string currentName = player.PlayerName;
+                // For local players, strip existing " #N" or "#N" suffix
+                if (entry.isLocalPlayer && !string.IsNullOrEmpty(currentName))
+                {
+                    currentName = System.Text.RegularExpressions.Regex.Replace(currentName, @"\s*#\d+$", "");
+                }
                 if (!string.IsNullOrEmpty(currentName) && currentName != entry.lastKnownName)
                 {
                     entry.lastKnownName = currentName;
-                    // Update score text with new name, preserving the score
-                    if (entry.scoreText != null)
-                    {
-                        string scoreText = entry.scoreText.text;
-                        int colonIndex = scoreText.LastIndexOf(':');
-                        string scorePart = colonIndex >= 0 ? scoreText.Substring(colonIndex) : ": 0";
-                        entry.scoreText.text = $"{currentName}{scorePart}";
-                    }
+                    // Refresh display with new name
+                    UpdatePlayerDisplay(entry.clientId, entry.localPlayerIndex);
                 }
             }
         }
 
-        // Sort entries by client ID, then local player index
+        // Sort entries by performance: kills (desc) → deaths (asc) → collisions (asc)
         _playerEntries.Sort((a, b) =>
         {
-            int cmp = a.clientId.CompareTo(b.clientId);
-            return cmp != 0 ? cmp : a.localPlayerIndex.CompareTo(b.localPlayerIndex);
+            var statsA = ScoreManager.Instance?.GetStats(a.clientId, a.localPlayerIndex);
+            var statsB = ScoreManager.Instance?.GetStats(b.clientId, b.localPlayerIndex);
+
+            // 1. Kills descending (more kills = higher rank)
+            int cmp = (statsB?.Kills ?? 0).CompareTo(statsA?.Kills ?? 0);
+            if (cmp != 0) return cmp;
+
+            // 2. Deaths ascending (fewer deaths = higher rank)
+            cmp = (statsA?.Deaths ?? 0).CompareTo(statsB?.Deaths ?? 0);
+            if (cmp != 0) return cmp;
+
+            // 3. PlaneCollisions ascending (fewer collisions = higher rank)
+            return (statsA?.PlaneCollisions ?? 0).CompareTo(statsB?.PlaneCollisions ?? 0);
         });
 
         // Reorder UI elements
@@ -287,7 +299,8 @@ public class GameHUD : MonoBehaviour
             clientId = player.OwnerClientId,
             localPlayerIndex = localIdx,
             uniqueId = uniqueId,
-            player = player
+            player = player,
+            isLocalPlayer = player.IsLocalPlayer
         };
 
         // Get color from PlayerColorManager using clientId + localPlayerIndex
@@ -310,49 +323,40 @@ public class GameHUD : MonoBehaviour
         entry.container = container;
 
         var containerRect = container.AddComponent<RectTransform>();
-        containerRect.sizeDelta = new Vector2(400, 170); // Increased for 2x larger fonts
+        containerRect.sizeDelta = new Vector2(400, 55); // Compact for more players
 
         var containerLayout = container.AddComponent<VerticalLayoutGroup>();
-        containerLayout.spacing = 1;
+        containerLayout.spacing = 2;
         containerLayout.childAlignment = TextAnchor.UpperRight;
         containerLayout.childControlWidth = true;
         containerLayout.childControlHeight = false;
 
-        // Create score text (with player indicator)
+        // Create score text (with player indicator and all stats on one line)
         var scoreObj = new GameObject("Score");
         scoreObj.transform.SetParent(container.transform, false);
 
         var scoreRect = scoreObj.AddComponent<RectTransform>();
-        scoreRect.sizeDelta = new Vector2(400, 80);
+        scoreRect.sizeDelta = new Vector2(400, 36);
 
         entry.scoreText = scoreObj.AddComponent<Text>();
-        // Use device name if available, fallback to P# format (using color index for player number)
-        string displayName = !string.IsNullOrEmpty(player.PlayerName) ? player.PlayerName : $"P{colorIndex + 1}";
-        entry.lastKnownName = displayName;
-        entry.scoreText.text = $"{displayName}: 0";
-        entry.scoreText.fontSize = 72; // Large - kills are the most important stat
+        // Use device name if available, fallback to P# format
+        string baseName = !string.IsNullOrEmpty(player.PlayerName) ? player.PlayerName : $"P{colorIndex + 1}";
+        // For local players, strip existing " #N" or "#N" suffix before adding our own
+        if (player.IsLocalPlayer)
+        {
+            baseName = System.Text.RegularExpressions.Regex.Replace(baseName, @"\s*#\d+$", "");
+        }
+        entry.lastKnownName = baseName;
+        // Format: "deviceName#N K|D|C" for local players, "deviceName K|D|C" for remote
+        string displayName = player.IsLocalPlayer ? $"{baseName}#{localIdx + 1}" : baseName;
+        entry.scoreText.text = $"{displayName} 0|0|0";
+        entry.scoreText.fontSize = 32; // Smaller font for compact display
         entry.scoreText.alignment = TextAnchor.MiddleRight;
         entry.scoreText.horizontalOverflow = HorizontalWrapMode.Overflow;
         entry.scoreText.verticalOverflow = VerticalWrapMode.Overflow;
         entry.scoreText.color = playerColor;
         entry.scoreText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         entry.originalScoreScale = entry.scoreText.transform.localScale;
-
-        // Create stats text (crashes, collisions, out of bounds)
-        var statsObj = new GameObject("Stats");
-        statsObj.transform.SetParent(container.transform, false);
-
-        var statsRect = statsObj.AddComponent<RectTransform>();
-        statsRect.sizeDelta = new Vector2(400, 60);
-
-        entry.statsText = statsObj.AddComponent<Text>();
-        entry.statsText.text = "D:0 C:0";
-        entry.statsText.fontSize = 52;
-        entry.statsText.alignment = TextAnchor.MiddleRight;
-        entry.statsText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        entry.statsText.verticalOverflow = VerticalWrapMode.Overflow;
-        entry.statsText.color = new Color(playerColor.r, playerColor.g, playerColor.b, 0.7f);
-        entry.statsText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
         // Create speed bar background
         var speedBarBgObj = new GameObject("SpeedBarBg");
@@ -452,24 +456,34 @@ public class GameHUD : MonoBehaviour
 
     private void UpdateScoreDisplay(ulong clientId, int localPlayerIndex, int score)
     {
-        // Find the specific entry for this player
-        string uniqueId = GetPlayerUniqueId(clientId, localPlayerIndex);
-        if (_playerEntriesById.TryGetValue(uniqueId, out var entry) && entry.scoreText != null)
-        {
-            // Use device name if available, fallback to P# format
-            string displayName = entry.lastKnownName ?? $"P{localPlayerIndex + 1}";
-            entry.scoreText.text = $"{displayName}: {score}";
-        }
+        // Update uses combined format - delegate to UpdatePlayerDisplay
+        UpdatePlayerDisplay(clientId, localPlayerIndex);
     }
 
     private void UpdateStatsDisplay(ulong clientId, int localPlayerIndex, ScoreManager.PlayerStats stats)
     {
+        // Update uses combined format - delegate to UpdatePlayerDisplay
+        UpdatePlayerDisplay(clientId, localPlayerIndex);
+    }
+
+    private void UpdatePlayerDisplay(ulong clientId, int localPlayerIndex)
+    {
         // Find the specific entry for this player
         string uniqueId = GetPlayerUniqueId(clientId, localPlayerIndex);
-        if (_playerEntriesById.TryGetValue(uniqueId, out var entry) && entry.statsText != null)
+        if (_playerEntriesById.TryGetValue(uniqueId, out var entry) && entry.scoreText != null)
         {
-            // D = Deaths (crashes + out of bounds), C = Plane Collisions
-            entry.statsText.text = $"D:{stats.Deaths} C:{stats.PlaneCollisions}";
+            // Use stored base name (already stripped of #N suffix for local players)
+            string baseName = entry.lastKnownName ?? $"P{localPlayerIndex + 1}";
+            // Format: "deviceName#N K|D|C" for local players, "deviceName K|D|C" for remote
+            string displayName = entry.isLocalPlayer ? $"{baseName}#{localPlayerIndex + 1}" : baseName;
+
+            // Get full stats
+            var stats = ScoreManager.Instance?.GetStats(clientId, localPlayerIndex);
+            int kills = stats?.Kills ?? 0;
+            int deaths = stats?.Deaths ?? 0;
+            int collisions = stats?.PlaneCollisions ?? 0;
+
+            entry.scoreText.text = $"{displayName} {kills}|{deaths}|{collisions}";
         }
     }
 
