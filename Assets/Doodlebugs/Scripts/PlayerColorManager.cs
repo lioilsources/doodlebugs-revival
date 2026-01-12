@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Manages player colors for up to 10 players (4 local + 4 remote + 2 extra).
-/// Colors are assigned in order as players join.
+/// Manages player colors for up to 20 players (4 local + 16 remote).
+/// Colors cycle through 10 options as players join.
 /// </summary>
 public class PlayerColorManager : MonoBehaviour
 {

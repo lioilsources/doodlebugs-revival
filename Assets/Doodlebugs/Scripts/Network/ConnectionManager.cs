@@ -25,7 +25,7 @@ namespace Doodlebugs.Network
         public event Action<ConnectionState> OnStateChanged;
         public event Action<string> OnStatusMessage;
 
-        private const int MAX_PLAYERS = 7;  // 4 local on desktop host + 3 remote clients
+        private const int MAX_PLAYERS = 20;  // 4 local on desktop host + 16 remote clients (LAN party limit)
 
         private void Awake()
         {

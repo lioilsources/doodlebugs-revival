@@ -170,6 +170,16 @@ public class LocalPlayerManager : MonoBehaviour
         }
         if (playerNetworkObjects[index] != null) return; // Already spawned
 
+        // Check total player count before spawning (network clients + local players already spawned)
+        int networkClients = NetworkManager.Singleton.ConnectedClientsIds.Count;
+        int localPlayersSpawned = playerNetworkObjects.Count(p => p != null);
+        int totalAfterSpawn = networkClients + localPlayersSpawned;  // +1 is already counted in networkClients for host
+        if (totalAfterSpawn >= 20)
+        {
+            Debug.Log($"[LocalPlayerManager] Cannot spawn P{index + 1} - game full ({totalAfterSpawn}/20)");
+            return;
+        }
+
         // Calculate spawn position (spread players horizontally)
         Vector3 spawnPos = GetSpawnPosition(index);
 
