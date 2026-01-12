@@ -8,7 +8,7 @@ using System.Linq;
 /// </summary>
 public class GamepadDebugUI : MonoBehaviour
 {
-    [SerializeField] private bool showDebug = true;
+    [SerializeField] private bool showDebug = false;
     [SerializeField] private int fontSize = 24;
 
     private GUIStyle style;

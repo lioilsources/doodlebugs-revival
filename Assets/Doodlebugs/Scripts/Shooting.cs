@@ -11,8 +11,11 @@ public class Shooting : NetworkBehaviour
     public GameObject bulletPrefab;
     public float baseBulletForce = 20f;
 
-    // Profile-aware bullet settings
-    private PilotMaturityProfile Profile => PilotMaturityManager.Instance?.CurrentProfile;
+    // Profile-aware bullet settings (uses player's own maturity level)
+    private PilotMaturityProfile Profile =>
+        playerController != null && PilotMaturityManager.Instance != null
+            ? PilotMaturityManager.Instance.GetProfile(playerController.MaturityLevel)
+            : null;
     private float bulletForce => baseBulletForce * (Profile?.bulletForceMultiplier ?? 1f);
     private float bulletGravityScale => Profile?.bulletGravityScale ?? 2f;
 

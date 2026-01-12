@@ -27,8 +27,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private float baseEngineRestartMin = -0.8f;
     private float baseEngineRestartMax = -0.6f;
 
-    // Profile-aware properties
-    private PilotMaturityProfile Profile => PilotMaturityManager.Instance?.CurrentProfile;
+    // Profile-aware properties (uses player's own maturity level, not global)
+    private PilotMaturityProfile Profile => PilotMaturityManager.Instance?.GetProfile(_maturityLevel);
     private float rotateSpeed => Profile?.rotateSpeed ?? baseRotateSpeed;
     private float maxSpeed => Profile?.maxSpeed ?? baseMaxSpeed;
     private float maxGravity => Profile?.maxGravity ?? baseMaxGravity;
@@ -73,6 +73,40 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// Check if this is a local couch co-op player
     /// </summary>
     public bool IsLocalPlayer => netLocalPlayerIndex.Value >= 0;
+
+    // Per-player maturity tracking
+    private PilotMaturityLevel _maturityLevel = PilotMaturityLevel.Novice;
+
+    /// <summary>
+    /// Event fired when this player's maturity level changes.
+    /// </summary>
+    public event System.Action<PilotMaturityLevel> OnMaturityChanged;
+
+    /// <summary>
+    /// Get this player's current maturity level.
+    /// </summary>
+    public PilotMaturityLevel MaturityLevel => _maturityLevel;
+
+    /// <summary>
+    /// Check and upgrade maturity level based on kills.
+    /// Thresholds: 10 kills = Advanced, 20 kills = Expert
+    /// </summary>
+    public void CheckMaturityUpgrade(int totalKills)
+    {
+        PilotMaturityLevel newLevel = _maturityLevel;
+
+        if (totalKills >= 20)
+            newLevel = PilotMaturityLevel.Expert;
+        else if (totalKills >= 10)
+            newLevel = PilotMaturityLevel.Advanced;
+
+        if (newLevel != _maturityLevel)
+        {
+            _maturityLevel = newLevel;
+            Debug.Log($"[PlayerController] Player {OwnerClientId}_{LocalPlayerIndex} maturity upgraded to {newLevel}");
+            OnMaturityChanged?.Invoke(newLevel);
+        }
+    }
 
     // Local accessors for network variables
     private float speed
@@ -240,12 +274,18 @@ public class PlayerController : NetworkBehaviour, IDamagable
     }
 
     /// <summary>
-    /// Called when local player index changes - update plane color
+    /// Called when local player index changes - update plane color and visuals
     /// </summary>
     private void OnLocalPlayerIndexChanged(int previousValue, int newValue)
     {
         Debug.Log($"[PlayerController] LocalPlayerIndex changed from {previousValue} to {newValue}");
         SetPlaneColor();
+
+        // Update glow visibility (local players don't get outline)
+        if (visualEffects != null)
+        {
+            visualEffects.UpdateGlowVisibility();
+        }
     }
 
     /// <summary>
@@ -268,6 +308,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         {
             netPlayerName.Value = new Unity.Collections.FixedString64Bytes($"P{index + 1}");
         }
+        // Note: OnLocalPlayerIndexChanged callback will update visuals on all clients
     }
 
     /// <summary>

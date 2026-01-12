@@ -163,10 +163,11 @@ public class ScoreManager : MonoBehaviour
         stats.Kills++;
         Debug.Log($"[ScoreManager] Player {scorerClientId}_{localPlayerIndex} scored kill! Total kills: {stats.Kills}");
 
-        // Check for maturity level upgrade (novice → advanced → expert)
-        if (PilotMaturityManager.Instance != null)
+        // Check for maturity level upgrade (per-player, not global)
+        var player = FindPlayerByClientAndIndex(scorerClientId, localPlayerIndex);
+        if (player != null)
         {
-            PilotMaturityManager.Instance.CheckLevelUpgrade(stats.Kills);
+            player.CheckMaturityUpgrade(stats.Kills);
         }
 
         // Fire events
@@ -274,6 +275,27 @@ public class ScoreManager : MonoBehaviour
         int seconds = Mathf.FloorToInt(MatchTime % 60f);
         int tenths = Mathf.FloorToInt((MatchTime * 10f) % 10f);
         return $"{minutes}:{seconds:D2}.{tenths}";
+    }
+
+    /// <summary>
+    /// Find a PlayerController by clientId and localPlayerIndex.
+    /// </summary>
+    private PlayerController FindPlayerByClientAndIndex(ulong clientId, int localPlayerIndex)
+    {
+        var players = FindObjectsOfType<PlayerController>();
+        foreach (var player in players)
+        {
+            if (player.OwnerClientId == clientId && player.LocalPlayerIndex == localPlayerIndex)
+            {
+                return player;
+            }
+            // For network players (non-local), localPlayerIndex is -1
+            if (player.OwnerClientId == clientId && localPlayerIndex == 0 && player.LocalPlayerIndex == -1)
+            {
+                return player;
+            }
+        }
+        return null;
     }
 
     /// <summary>
