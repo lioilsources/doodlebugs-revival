@@ -219,9 +219,23 @@ public class LocalPlayerManager : MonoBehaviour
 
     private Vector3 GetSpawnPosition(int index)
     {
-        // Spread spawn positions horizontally
-        float xOffset = (index - 1.5f) * 3f; // -4.5, -1.5, 1.5, 4.5
-        return new Vector3(xOffset, 2f, 0f);
+        // Try to spawn behind a cloud using CloudManager queue system
+        if (CloudManager.Instance != null && CloudManager.Instance.AreCloudsReady())
+        {
+            // Use the same method as respawn - gets available cloud with cooldown protection
+            Vector3? cloudPos = CloudManager.Instance.GetInitialSpawnPosition();
+            if (cloudPos.HasValue)
+            {
+                Debug.Log($"[LocalPlayerManager] P{index + 1} spawning behind cloud at {cloudPos.Value}");
+                return cloudPos.Value;
+            }
+        }
+
+        // Fallback: spread spawn positions horizontally
+        float[] positions = { -15f, -8f, 8f, 15f };
+        float spawnX = positions[index % positions.Length];
+        Debug.Log($"[LocalPlayerManager] P{index + 1} spawning at fallback position x={spawnX}");
+        return new Vector3(spawnX, 10f, 0f);
     }
 
     private bool IsMobilePlatform()

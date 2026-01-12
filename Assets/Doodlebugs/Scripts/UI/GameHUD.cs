@@ -8,7 +8,8 @@ using Unity.Netcode;
 /// Game HUD displaying scores and speed bars for all players.
 /// Supports dynamic player count (up to 20 players).
 /// Players sorted by performance: kills (desc) → deaths (asc) → collisions (asc).
-/// Format: "deviceName#N K|D|C" for local players, "deviceName K|D|C" for remote.
+/// Format: "deviceName#N#L K|D|C" for local players, "deviceName#L K|D|C" for remote.
+/// L = maturity level: N=Novice (0-9 kills), A=Advanced (10-19), E=Expert (20+)
 /// </summary>
 public class GameHUD : MonoBehaviour
 {
@@ -347,8 +348,11 @@ public class GameHUD : MonoBehaviour
             baseName = System.Text.RegularExpressions.Regex.Replace(baseName, @"\s*#\d+$", "");
         }
         entry.lastKnownName = baseName;
-        // Format: "deviceName#N K|D|C" for local players, "deviceName K|D|C" for remote
-        string displayName = player.IsLocalPlayer ? $"{baseName}#{localIdx + 1}" : baseName;
+        // Format: "deviceName#N#L K|D|C" for local players, "deviceName#L K|D|C" for remote
+        // L = maturity level (N=Novice, A=Advanced, E=Expert)
+        string displayName = player.IsLocalPlayer
+            ? $"{baseName}#{localIdx + 1}#N"
+            : $"{baseName}#N";
         entry.scoreText.text = $"{displayName} 0|0|0";
         entry.scoreText.fontSize = 32; // Smaller font for compact display
         entry.scoreText.alignment = TextAnchor.MiddleRight;
@@ -474,8 +478,6 @@ public class GameHUD : MonoBehaviour
         {
             // Use stored base name (already stripped of #N suffix for local players)
             string baseName = entry.lastKnownName ?? $"P{localPlayerIndex + 1}";
-            // Format: "deviceName#N K|D|C" for local players, "deviceName K|D|C" for remote
-            string displayName = entry.isLocalPlayer ? $"{baseName}#{localPlayerIndex + 1}" : baseName;
 
             // Get full stats
             var stats = ScoreManager.Instance?.GetStats(clientId, localPlayerIndex);
@@ -483,8 +485,27 @@ public class GameHUD : MonoBehaviour
             int deaths = stats?.Deaths ?? 0;
             int collisions = stats?.PlaneCollisions ?? 0;
 
+            // Get maturity level abbreviation based on kills
+            string levelAbbr = GetMaturityAbbreviation(kills);
+
+            // Format: "deviceName#N#L K|D|C" for local players, "deviceName#L K|D|C" for remote
+            string displayName = entry.isLocalPlayer
+                ? $"{baseName}#{localPlayerIndex + 1}#{levelAbbr}"
+                : $"{baseName}#{levelAbbr}";
+
             entry.scoreText.text = $"{displayName} {kills}|{deaths}|{collisions}";
         }
+    }
+
+    /// <summary>
+    /// Get maturity level abbreviation based on kills count.
+    /// N = Novice (0-9), A = Advanced (10-19), E = Expert (20+)
+    /// </summary>
+    private string GetMaturityAbbreviation(int kills)
+    {
+        if (kills >= 20) return "E";
+        if (kills >= 10) return "A";
+        return "N";
     }
 
     private void PlayScoreEffect(ulong clientId, int localPlayerIndex)
