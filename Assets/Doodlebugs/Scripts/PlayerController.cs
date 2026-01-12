@@ -333,13 +333,16 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
     /// <summary>
     /// Shorten device name to fit in HUD, with fallback.
+    /// Always appends OwnerClientId to uniquely identify the player.
     /// </summary>
     private string ShortenDeviceName(string deviceModel, string fallback, int maxLength)
     {
-        if (string.IsNullOrEmpty(deviceModel) || deviceModel == "unknown")
-            return $"{fallback} #{(int)OwnerClientId + 1}";
+        int clientNum = (int)OwnerClientId + 1;
 
-        // Remove common prefixes
+        if (string.IsNullOrEmpty(deviceModel) || deviceModel == "unknown")
+            return $"{fallback}#{clientNum}";
+
+        // Remove common prefixes and clean up device names
         string name = deviceModel
             .Replace("Apple ", "")
             .Replace("Samsung ", "")
@@ -348,11 +351,17 @@ public class PlayerController : NetworkBehaviour, IDamagable
             .Replace("Xiaomi ", "")
             .Trim();
 
+        // iOS: Remove variant suffix (e.g., "iPhone14,2" -> "iPhone14")
+        int commaIndex = name.IndexOf(',');
+        if (commaIndex > 0)
+            name = name.Substring(0, commaIndex);
+
         // Truncate if too long
         if (name.Length > maxLength)
             name = name.Substring(0, maxLength);
 
-        return name;
+        // Always append client number for unique identification
+        return $"{name}#{clientNum}";
     }
 
     void Update()

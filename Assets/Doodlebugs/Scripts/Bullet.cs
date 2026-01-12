@@ -40,7 +40,12 @@ public class Bullet : NetworkBehaviour
                 if (targetPlayer != null)
                 {
                     // Only score if hitting opponent (not self)
-                    if (targetPlayer.OwnerClientId != _shooterClientId.Value)
+                    // For local co-op: same clientId but different localPlayerIndex = valid kill
+                    int targetLocalIdx = targetPlayer.LocalPlayerIndex >= 0 ? targetPlayer.LocalPlayerIndex : 0;
+                    bool isSamePlayer = targetPlayer.OwnerClientId == _shooterClientId.Value &&
+                                        targetLocalIdx == _shooterLocalPlayerIndex.Value;
+
+                    if (!isSamePlayer)
                     {
                         // Add score to shooter (server-side call)
                         if (ScoreManager.Instance != null)
