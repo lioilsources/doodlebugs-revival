@@ -63,15 +63,22 @@ public class PilotMaturityManager : MonoBehaviour
         return currentLevel;
     }
 
-    // For future: upgrade based on hits
+    /// <summary>
+    /// Check if player should level up based on total kills.
+    /// Thresholds: 10 kills = Advanced, 20 kills = Expert
+    /// </summary>
     public void CheckLevelUpgrade(int totalHits)
     {
+        Debug.Log($"[PilotMaturity] CheckLevelUpgrade called with {totalHits} kills, currentLevel={currentLevel}");
+
         if (totalHits >= 20 && currentLevel != PilotMaturityLevel.Expert)
         {
+            Debug.Log($"[PilotMaturity] Upgrading to Expert!");
             SetLevel(PilotMaturityLevel.Expert);
         }
         else if (totalHits >= 10 && currentLevel == PilotMaturityLevel.Novice)
         {
+            Debug.Log($"[PilotMaturity] Upgrading to Advanced!");
             SetLevel(PilotMaturityLevel.Advanced);
         }
     }

@@ -345,6 +345,38 @@ public class CloudManager : MonoBehaviour
         return _networkedCloudsSpawned && _clouds.Count > 0;
     }
 
+    /// <summary>
+    /// Get initial spawn position behind an available cloud.
+    /// Uses cooldown system to prevent multiple players at same cloud.
+    /// Returns null if no clouds available (caller should use fallback).
+    /// </summary>
+    public Vector3? GetInitialSpawnPosition()
+    {
+        if (!AreCloudsReady() || _clouds.Count == 0)
+        {
+            Debug.Log("[CloudManager] GetInitialSpawnPosition: clouds not ready");
+            return null;
+        }
+
+        int? availableCloud = GetAvailableCloudIndex();
+        if (!availableCloud.HasValue)
+        {
+            Debug.Log("[CloudManager] GetInitialSpawnPosition: no available cloud (all on cooldown)");
+            return null;
+        }
+
+        int cloudIndex = availableCloud.Value;
+        _cloudCooldowns[cloudIndex] = Time.time + CLOUD_COOLDOWN;
+
+        var cloudPos = _clouds[cloudIndex].transform.position;
+        float offsetX = Random.Range(-5f, -2f);
+        float offsetY = Random.Range(-1f, 1f);
+        var spawnPos = new Vector3(cloudPos.x + offsetX, cloudPos.y + offsetY, 0f);
+
+        Debug.Log($"[CloudManager] GetInitialSpawnPosition: cloud {cloudIndex}, pos: {spawnPos}");
+        return spawnPos;
+    }
+
     #region Respawn Queue System
 
     /// <summary>

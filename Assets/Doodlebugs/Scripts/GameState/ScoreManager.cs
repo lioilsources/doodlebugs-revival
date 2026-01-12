@@ -163,6 +163,12 @@ public class ScoreManager : MonoBehaviour
         stats.Kills++;
         Debug.Log($"[ScoreManager] Player {scorerClientId}_{localPlayerIndex} scored kill! Total kills: {stats.Kills}");
 
+        // Check for maturity level upgrade (novice → advanced → expert)
+        if (PilotMaturityManager.Instance != null)
+        {
+            PilotMaturityManager.Instance.CheckLevelUpgrade(stats.Kills);
+        }
+
         // Fire events
         OnScoreChanged?.Invoke(scorerClientId, localPlayerIndex, stats.Kills);
         OnStatsChanged?.Invoke(scorerClientId, localPlayerIndex, stats);

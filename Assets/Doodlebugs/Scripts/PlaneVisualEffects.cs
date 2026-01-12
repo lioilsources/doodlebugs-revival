@@ -168,9 +168,11 @@ public class PlaneVisualEffects : NetworkBehaviour
 
     private void HandleLevelChange(PilotMaturityLevel newLevel)
     {
+        Debug.Log($"[PlaneVisualEffects] HandleLevelChange: {newLevel}, IsOwner={IsOwner}");
         if (IsOwner)
         {
             bool expert = newLevel == PilotMaturityLevel.Expert;
+            Debug.Log($"[PlaneVisualEffects] Sending expert status: {expert}");
             UpdateExpertStatusServerRpc(expert);
         }
     }
@@ -197,16 +199,22 @@ public class PlaneVisualEffects : NetworkBehaviour
 
     private void UpdateSparkleVisibility(bool expert)
     {
+        Debug.Log($"[PlaneVisualEffects] UpdateSparkleVisibility: expert={expert}, sparkleParticles={sparkleParticles != null}");
         if (sparkleParticles != null)
         {
             if (expert)
             {
+                Debug.Log("[PlaneVisualEffects] Playing sparkle particles!");
                 sparkleParticles.Play();
             }
             else
             {
                 sparkleParticles.Stop();
             }
+        }
+        else
+        {
+            Debug.LogWarning("[PlaneVisualEffects] sparkleParticles is NULL - cannot show expert effect!");
         }
     }
 
