@@ -12,7 +12,7 @@ public class PlaneVisualEffects : NetworkBehaviour
 {
     [Header("Glow Outline")]
     [SerializeField] private SpriteRenderer glowOutlineRenderer;
-    [SerializeField] private Color ownerGlowColor = new Color(0.5f, 1f, 1f, 0.6f);
+    [SerializeField] private Color ownerGlowColor = Color.white;
 
     [Header("Expert Sparkles")]
     [SerializeField] private ParticleSystem sparkleParticles;
@@ -32,12 +32,16 @@ public class PlaneVisualEffects : NetworkBehaviour
 
     private Material planeMaterialInstance;
     private Coroutine flashCoroutine;
+    private PlayerController playerController;
 
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
 
-        // Owner-only glow outline
+        // Get PlayerController reference first (needed for glow visibility check)
+        playerController = GetComponent<PlayerController>();
+
+        // Glow outline: only for network clients, not local couch co-op players
         UpdateGlowVisibility();
 
         // Setup damage flash material
@@ -49,10 +53,10 @@ public class PlaneVisualEffects : NetworkBehaviour
         // Subscribe to expert status changes
         isExpert.OnValueChanged += OnExpertStatusChanged;
 
-        // If owner, subscribe to level changes
-        if (IsOwner && PilotMaturityManager.Instance != null)
+        // If owner, subscribe to player's maturity changes (not global)
+        if (IsOwner && playerController != null)
         {
-            PilotMaturityManager.Instance.OnLevelChanged += HandleLevelChange;
+            playerController.OnMaturityChanged += HandleLevelChange;
             // Check initial expert status
             RefreshExpertStatus();
         }
@@ -68,9 +72,9 @@ public class PlaneVisualEffects : NetworkBehaviour
         // Cleanup subscriptions
         isExpert.OnValueChanged -= OnExpertStatusChanged;
 
-        if (IsOwner && PilotMaturityManager.Instance != null)
+        if (IsOwner && playerController != null)
         {
-            PilotMaturityManager.Instance.OnLevelChanged -= HandleLevelChange;
+            playerController.OnMaturityChanged -= HandleLevelChange;
         }
     }
 
@@ -154,12 +158,21 @@ public class PlaneVisualEffects : NetworkBehaviour
         }
     }
 
-    private void UpdateGlowVisibility()
+    /// <summary>
+    /// Update glow outline visibility. Called on spawn and when local player index changes.
+    /// </summary>
+    public void UpdateGlowVisibility()
     {
         if (glowOutlineRenderer != null)
         {
-            glowOutlineRenderer.enabled = IsOwner;
-            if (IsOwner)
+            // Only show outline for network clients (not local couch co-op players)
+            // Local players: playerController.IsLocalPlayer = true → no outline
+            // Network clients: playerController.IsLocalPlayer = false → white outline
+            bool isLocalPlayer = playerController != null && playerController.IsLocalPlayer;
+            bool showOutline = IsOwner && !isLocalPlayer;
+
+            glowOutlineRenderer.enabled = showOutline;
+            if (showOutline)
             {
                 glowOutlineRenderer.color = ownerGlowColor;
             }
@@ -179,9 +192,9 @@ public class PlaneVisualEffects : NetworkBehaviour
 
     private void RefreshExpertStatus()
     {
-        if (PilotMaturityManager.Instance != null)
+        if (playerController != null)
         {
-            bool expert = PilotMaturityManager.Instance.GetLevel() == PilotMaturityLevel.Expert;
+            bool expert = playerController.MaturityLevel == PilotMaturityLevel.Expert;
             UpdateExpertStatusServerRpc(expert);
         }
     }
