@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using Unity.Netcode;
 
@@ -30,6 +31,11 @@ public class CloudManager : MonoBehaviour
     private GameObject _cloudPrefab;
     private bool _networkedCloudsSpawned = false;
     private bool _localCloudsSpawned = false;
+
+    // Respawn queue system - prevents multiple players spawning at same cloud
+    private Dictionary<int, float> _cloudCooldowns = new Dictionary<int, float>();
+    private Queue<PlayerController> _respawnQueue = new Queue<PlayerController>();
+    private const float CLOUD_COOLDOWN = 1.5f;
 
     /// <summary>
     /// Auto-initialize when scene loads
@@ -338,6 +344,87 @@ public class CloudManager : MonoBehaviour
     {
         return _networkedCloudsSpawned && _clouds.Count > 0;
     }
+
+    #region Respawn Queue System
+
+    /// <summary>
+    /// Request respawn for a player. If cloud available, respawn immediately. Otherwise queue.
+    /// </summary>
+    public void RequestRespawn(PlayerController player)
+    {
+        if (!AreCloudsReady() || _clouds.Count == 0)
+        {
+            // Fallback - immediate respawn at fixed position
+            player.ExecuteRespawnAtPosition(GetFallbackPosition(player));
+            return;
+        }
+
+        int? availableCloud = GetAvailableCloudIndex();
+        if (availableCloud.HasValue)
+        {
+            // Cloud available - spawn immediately
+            SpawnPlayerAtCloud(player, availableCloud.Value);
+        }
+        else
+        {
+            // All clouds occupied - add to queue
+            _respawnQueue.Enqueue(player);
+            Debug.Log($"[CloudManager] Player queued for respawn, queue size: {_respawnQueue.Count}");
+        }
+    }
+
+    private int? GetAvailableCloudIndex()
+    {
+        var available = new List<int>();
+        for (int i = 0; i < _clouds.Count; i++)
+        {
+            if (!_cloudCooldowns.ContainsKey(i) || Time.time > _cloudCooldowns[i])
+                available.Add(i);
+        }
+
+        if (available.Count == 0) return null;
+        return available[Random.Range(0, available.Count)];
+    }
+
+    private void SpawnPlayerAtCloud(PlayerController player, int cloudIndex)
+    {
+        _cloudCooldowns[cloudIndex] = Time.time + CLOUD_COOLDOWN;
+
+        var cloudPos = _clouds[cloudIndex].transform.position;
+        float offsetX = Random.Range(-5f, -2f);
+        float offsetY = Random.Range(-1f, 1f);
+        var spawnPos = new Vector3(cloudPos.x + offsetX, cloudPos.y + offsetY, 0f);
+
+        Debug.Log($"[CloudManager] Spawning player at cloud {cloudIndex}, pos: {spawnPos}");
+        player.ExecuteRespawnAtPosition(spawnPos);
+    }
+
+    private Vector3 GetFallbackPosition(PlayerController player)
+    {
+        int playerIndex = player.LocalPlayerIndex >= 0 ? player.LocalPlayerIndex : (int)player.OwnerClientId;
+        float[] positions = { -15f, -8f, 8f, 15f };
+        return new Vector3(positions[playerIndex % positions.Length], 10f, 0f);
+    }
+
+    private void Update()
+    {
+        // Process respawn queue - try to spawn waiting players
+        if (_respawnQueue.Count > 0)
+        {
+            int? availableCloud = GetAvailableCloudIndex();
+            if (availableCloud.HasValue)
+            {
+                var player = _respawnQueue.Dequeue();
+                if (player != null && player.gameObject != null)
+                {
+                    SpawnPlayerAtCloud(player, availableCloud.Value);
+                    Debug.Log($"[CloudManager] Dequeued player, remaining queue: {_respawnQueue.Count}");
+                }
+            }
+        }
+    }
+
+    #endregion
 
     private void OnDestroy()
     {
