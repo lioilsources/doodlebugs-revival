@@ -417,7 +417,25 @@ public class PlayerController : NetworkBehaviour, IDamagable
         // Player flew out of bounds - record death
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
         ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
-        RespawnWithExplosionClientRpc();
+        HandleDeathAndRespawn();
+    }
+
+    /// <summary>
+    /// Common death handler - shows explosion and requests respawn via CloudManager.
+    /// </summary>
+    private void HandleDeathAndRespawn()
+    {
+        visualEffects?.TriggerDamageFlash();
+        ShowExplosionClientRpc();
+
+        if (CloudManager.Instance != null)
+        {
+            CloudManager.Instance.RequestRespawn(this);
+        }
+        else
+        {
+            ExecuteRespawnAtPosition(GetFallbackSpawnPosition());
+        }
     }
 
     private void HandleMovement()
@@ -558,27 +576,41 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (!IsServer)
             return;
 
-        visualEffects?.TriggerDamageFlash();
-        RespawnWithExplosionClientRpc();
+        HandleDeathAndRespawn();
+    }
+
+    /// <summary>
+    /// Get fallback spawn position when CloudManager is not available.
+    /// Uses LocalPlayerIndex to differentiate local co-op players.
+    /// </summary>
+    private Vector3 GetFallbackSpawnPosition()
+    {
+        int playerIndex = LocalPlayerIndex >= 0 ? LocalPlayerIndex : (int)OwnerClientId;
+        float[] positions = { -15f, -8f, 8f, 15f };
+        return new Vector3(positions[playerIndex % positions.Length], 10f, 0f);
+    }
+
+    /// <summary>
+    /// Called by CloudManager when a spawn position is assigned.
+    /// </summary>
+    public void ExecuteRespawnAtPosition(Vector3 position)
+    {
+        RespawnAtPositionClientRpc(position);
     }
 
     [ClientRpc]
-    private void RespawnWithExplosionClientRpc()
+    private void ShowExplosionClientRpc()
     {
-        // Show explosion effect on all clients
         if (hitEffect != null)
         {
-            // Spawn at plane position but with z=0 to ensure visibility
             Vector3 explosionPos = new Vector3(transform.position.x, transform.position.y, 0f);
             var effect = Instantiate(hitEffect, explosionPos, Quaternion.identity);
 
-            // Ensure explosion is on top (visible) - set sorting order
             var spriteRenderer = effect.GetComponent<SpriteRenderer>();
             if (spriteRenderer != null)
             {
                 spriteRenderer.sortingOrder = 100;
             }
-            // Also check particle system renderer
             var particleRenderer = effect.GetComponent<ParticleSystemRenderer>();
             if (particleRenderer != null)
             {
@@ -587,42 +619,23 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
             Destroy(effect, 0.5f);
         }
-        else
-        {
-            Debug.LogWarning("[PlayerController] hitEffect is null!");
-        }
+    }
 
+    [ClientRpc]
+    private void RespawnAtPositionClientRpc(Vector3 position)
+    {
         // Only owner can teleport (ClientNetworkTransform = owner authority)
         if (!IsOwner) return;
 
-        // Spawn behind a random cloud if available
-        Vector3 newPos;
-        if (CloudManager.Instance != null && CloudManager.Instance.AreCloudsReady())
-        {
-            var cloudPos = CloudManager.Instance.GetRandomCloudPosition();
-            // Spawn behind cloud (left of it) with slight random offset
-            float offsetX = Random.Range(-5f, -2f);
-            float offsetY = Random.Range(-1f, 1f);
-            newPos = new Vector3(cloudPos.x + offsetX, cloudPos.y + offsetY, 0f);
-        }
-        else
-        {
-            // Fallback: different spawn position for each player
-            float spawnX = (OwnerClientId == 0) ? -15f : 15f;
-            newPos = new Vector3(spawnX, 10f, 0f);
-        }
-
-        // Both players face right (z=0), they spawn on opposite sides
         Quaternion newRotation = Quaternion.Euler(0, 0, 0);
 
-        // Owner does the teleport (ClientNetworkTransform = owner authority)
         if (networkTransform != null)
         {
-            networkTransform.Teleport(newPos, newRotation, transform.localScale);
+            networkTransform.Teleport(position, newRotation, transform.localScale);
         }
         else
         {
-            transform.position = newPos;
+            transform.position = position;
             transform.rotation = newRotation;
         }
 
@@ -637,7 +650,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             rb.linearVelocity = transform.right * speed;
         }
 
-        Debug.Log($"[PlayerController] Respawned player {OwnerClientId} at {newPos}, speed={speed}");
+        Debug.Log($"[PlayerController] Respawned player {OwnerClientId} (local={LocalPlayerIndex}) at {position}");
     }
 
     [ClientRpc]
@@ -707,8 +720,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (collider.gameObject.CompareTag("Bullet"))
         {
             // Bullet hit - stats handled by Bullet.cs (gives kill to shooter)
-            visualEffects?.TriggerDamageFlash();
-            RespawnWithExplosionClientRpc();
+            HandleDeathAndRespawn();
         }
 
         if (collider.gameObject.CompareTag("Ground"))
@@ -716,8 +728,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             // Crashed into ground/obstacle - record death
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
             ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
-            visualEffects?.TriggerDamageFlash();
-            RespawnWithExplosionClientRpc();
+            HandleDeathAndRespawn();
         }
 
         if (collider.gameObject.CompareTag("Player"))
@@ -725,8 +736,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             // Collided with another plane
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
             ScoreManager.Instance?.AddPlaneCollision(OwnerClientId, localIdx);
-            visualEffects?.TriggerDamageFlash();
-            RespawnWithExplosionClientRpc();
+            HandleDeathAndRespawn();
         }
 
     }
