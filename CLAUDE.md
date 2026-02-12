@@ -141,25 +141,81 @@ void OnTriggerEnter2D(Collider2D collider) {
 
 ```
 Assets/
-├── Doodlebugs/                    # Main game code
-│   ├── Scripts/                   # Core game logic
-│   │   ├── PlayerController.cs    # Player plane control & collision
-│   │   ├── Shooting.cs            # Bullet spawning & shooting
-│   │   ├── Bullet.cs              # Projectile behavior
-│   │   ├── GameManager.cs         # Singleton network manager
-│   │   ├── NetworkObjectSpawner.cs # Spawning helper
-│   │   └── NetworkObjectDespawner.cs # Despawning helper
-│   ├── Prefabs/                   # Network prefabs
-│   │   ├── PlaneHolder.prefab     # Player aircraft
-│   │   ├── Bullet.prefab          # Projectile
-│   │   ├── NetworkPrefabsList.asset # Netcode registry
-│   │   └── explosion.prefab       # Hit effect
-│   └── Scenes/
-│       └── SampleScene.unity      # Main gameplay scene
-├── Bird.cs                        # Bird AI logic
-├── Cloud.cs                       # Environmental hazard
-├── CameraBehaviour.cs             # Camera following
-└── [3rd party assets]             # 2DWarMachines, Warped Caves, TextMesh Pro
+├── Doodlebugs/                        # Main game code
+│   ├── Audio/                         # Sound effects
+│   │   ├── engine_client.wav
+│   │   └── engine_host.wav
+│   ├── Editor/                        # Editor-only scripts
+│   │   ├── PilotMaturityProfileCreator.cs
+│   │   └── iOSPostProcessBuild.cs
+│   ├── Materials/                     # Custom materials
+│   │   ├── GlowOutlineMaterial.mat
+│   │   └── PixelOutlineMaterial.mat
+│   ├── Prefabs/                       # Network prefabs
+│   │   ├── PlaneHolder.prefab         # Player aircraft
+│   │   ├── Bullet.prefab             # Projectile
+│   │   ├── Cloud.prefab              # Cloud obstacle
+│   │   ├── InputManager.prefab       # Input management
+│   │   ├── explosion.prefab          # Hit effect
+│   │   ├── NetworkPrefabsList.asset  # Netcode registry
+│   │   └── MaturityProfiles/         # Pilot progression profiles
+│   ├── Scenes/
+│   │   └── Scene01.unity             # Main gameplay scene
+│   ├── Scripts/                       # Core game logic
+│   │   ├── PlayerController.cs       # Player plane control & collision
+│   │   ├── Shooting.cs               # Bullet spawning & shooting
+│   │   ├── Bullet.cs                 # Projectile behavior
+│   │   ├── Cloud.cs                  # Cloud obstacle behavior
+│   │   ├── CloudManager.cs           # Cloud spawning & management
+│   │   ├── BackgroundManager.cs      # Random background selection (networked)
+│   │   ├── EngineAudio.cs            # Engine sound management
+│   │   ├── DevMath.cs                # Math utilities
+│   │   ├── IDamagable.cs             # Damage interface
+│   │   ├── PlaneVisualEffects.cs     # Visual effects (outline, flash)
+│   │   ├── PlayerColorManager.cs     # Player color assignment
+│   │   ├── PlayerDebug.cs            # Debug utilities
+│   │   ├── NetworkObjectSpawner.cs   # Network spawning helper
+│   │   ├── NetworkObjectDespawner.cs # Network despawning helper
+│   │   ├── PilotMaturity*.cs         # Pilot progression system (3 files)
+│   │   ├── Camera/                   # Camera & screen management
+│   │   │   ├── BoundaryManager.cs
+│   │   │   ├── CameraAspectHandler.cs
+│   │   │   └── ScreenSetup.cs
+│   │   ├── Debug/
+│   │   │   └── GamepadDebugUI.cs
+│   │   ├── GameState/                # Game flow & scoring
+│   │   │   ├── GameSetup.cs
+│   │   │   └── ScoreManager.cs
+│   │   ├── Input/                    # Input system (multi-platform)
+│   │   │   ├── IInputProvider.cs     # Input interface
+│   │   │   ├── DesktopInputProvider.cs
+│   │   │   ├── GamepadInputProvider.cs
+│   │   │   ├── MobileInputProvider.cs
+│   │   │   ├── HybridInputProvider.cs
+│   │   │   ├── InputManager.cs
+│   │   │   └── LocalPlayerManager.cs # Local multiplayer (split gamepad)
+│   │   ├── Network/                  # Networking
+│   │   │   ├── ConnectionManager.cs  # Host/client connection flow
+│   │   │   ├── ClientNetworkTransform.cs
+│   │   │   └── NetworkDiscovery.cs   # LAN discovery
+│   │   └── UI/                       # UI components
+│   │       ├── ConnectionUI.cs
+│   │       └── GameHUD.cs
+│   ├── Shaders/                      # Custom shaders
+│   │   ├── ColorReplace.shader
+│   │   ├── DamageFlash.shader
+│   │   ├── PixelOutline.shader
+│   │   └── SoftGlow.shader
+│   └── Sprites/                      # Game sprites (consolidated from 3rd party)
+│       ├── Background/               # Nebula Red.png
+│       ├── BiPlane/                   # BiPlane1.png, BiPlane2.png
+│       ├── Bullet/                    # uzi 2_00006.png
+│       ├── Cloud/                     # Cloud.png
+│       └── Explosion/                # enemy-death-1..5.png
+├── Animations/                        # Explosion animation clip & controller
+├── CameraBehaviour.cs                 # Legacy camera script
+├── Plugins/                           # Platform plugins & ParrelSync
+└── [config assets]                    # InputSystem, DefaultNetworkPrefabs
 ```
 
 ## Known Issues & Patterns
