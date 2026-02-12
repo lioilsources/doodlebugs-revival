@@ -170,6 +170,9 @@ namespace Doodlebugs.Network
             // Start as host
             NetworkManager.Singleton.StartHost();
 
+            // Select random background for this session
+            BackgroundManager.Instance?.SelectRandomBackground();
+
             // Notify LocalPlayerManager to spawn P1 (desktop only)
             LocalPlayerManager.Instance?.OnHostStarted();
 
