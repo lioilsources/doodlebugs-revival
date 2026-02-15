@@ -2,8 +2,8 @@ using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
-/// Manages dynamic background selection at game start.
-/// Randomly selects a background and synchronizes across all clients.
+/// Manages dynamic background and foreground selection at game start.
+/// Randomly selects a background profile and synchronizes across all clients.
 /// </summary>
 public class BackgroundManager : NetworkBehaviour
 {
@@ -13,7 +13,7 @@ public class BackgroundManager : NetworkBehaviour
     [SerializeField] private SpriteRenderer backgroundRenderer;
 
     [Header("Available Backgrounds")]
-    [SerializeField] private Sprite[] backgrounds;
+    [SerializeField] private BackgroundProfile[] profiles;
 
     private int _currentBackgroundIndex = -1;
 
@@ -31,7 +31,6 @@ public class BackgroundManager : NetworkBehaviour
     {
         base.OnNetworkSpawn();
 
-        // Server selects random background when network starts
         if (IsServer)
         {
             SelectRandomBackground();
@@ -50,18 +49,17 @@ public class BackgroundManager : NetworkBehaviour
             return;
         }
 
-        if (backgrounds == null || backgrounds.Length == 0)
+        if (profiles == null || profiles.Length == 0)
         {
-            Debug.LogWarning("[BackgroundManager] No backgrounds configured");
+            Debug.LogWarning("[BackgroundManager] No background profiles configured");
             return;
         }
 
-        int newIndex = Random.Range(0, backgrounds.Length);
+        int newIndex = Random.Range(0, profiles.Length);
 
-        // Avoid selecting the same background twice in a row if possible
-        if (backgrounds.Length > 1 && newIndex == _currentBackgroundIndex)
+        if (profiles.Length > 1 && newIndex == _currentBackgroundIndex)
         {
-            newIndex = (newIndex + 1) % backgrounds.Length;
+            newIndex = (newIndex + 1) % profiles.Length;
         }
 
         Debug.Log($"[BackgroundManager] Server selected background index: {newIndex}");
@@ -79,7 +77,7 @@ public class BackgroundManager : NetworkBehaviour
             return;
         }
 
-        if (backgrounds == null || index < 0 || index >= backgrounds.Length)
+        if (profiles == null || index < 0 || index >= profiles.Length)
         {
             Debug.LogWarning($"[BackgroundManager] Invalid background index: {index}");
             return;
@@ -91,22 +89,33 @@ public class BackgroundManager : NetworkBehaviour
     [ClientRpc]
     private void SetBackgroundClientRpc(int index)
     {
-        if (backgrounds == null || index < 0 || index >= backgrounds.Length)
+        if (profiles == null || index < 0 || index >= profiles.Length)
         {
             Debug.LogWarning($"[BackgroundManager] Invalid background index received: {index}");
             return;
         }
 
         _currentBackgroundIndex = index;
+        var profile = profiles[index];
 
-        if (backgroundRenderer != null)
+        if (backgroundRenderer != null && profile.backgroundSprite != null)
         {
-            backgroundRenderer.sprite = backgrounds[index];
-            Debug.Log($"[BackgroundManager] Background changed to: {backgrounds[index].name}");
+            backgroundRenderer.sprite = profile.backgroundSprite;
+            Debug.Log($"[BackgroundManager] Background changed to: {profile.backgroundSprite.name}");
         }
         else
         {
-            Debug.LogWarning("[BackgroundManager] No background renderer assigned");
+            Debug.LogWarning("[BackgroundManager] No background renderer or sprite assigned");
+        }
+
+        if (ForegroundScroller.Instance != null)
+        {
+            ForegroundScroller.Instance.SetForeground(
+                profile.foregroundSprite,
+                profile.foregroundScrollSpeed,
+                profile.foregroundYPosition,
+                profile.foregroundScale
+            );
         }
     }
 
@@ -118,5 +127,5 @@ public class BackgroundManager : NetworkBehaviour
     /// <summary>
     /// Gets the total number of available backgrounds.
     /// </summary>
-    public int BackgroundCount => backgrounds?.Length ?? 0;
+    public int BackgroundCount => profiles?.Length ?? 0;
 }

@@ -734,6 +734,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (!IsServer)
             return;
 
+        if (collider.gameObject.layer == LayerMask.NameToLayer("Foreground"))
+            return;
+
         if (collider.name == "Space")
         {
             SpaceClientRpc();
