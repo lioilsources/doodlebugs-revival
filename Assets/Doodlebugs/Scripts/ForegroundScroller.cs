@@ -57,7 +57,10 @@ public class ForegroundScroller : MonoBehaviour
         spriteA.transform.localScale = Vector3.one * scale;
         spriteB.transform.localScale = Vector3.one * scale;
 
-        float startX = Camera.main.transform.position.x;
+        // Position SpriteA so its left edge aligns with camera left edge
+        float camLeft = Camera.main.transform.position.x
+            - Camera.main.orthographicSize * Camera.main.aspect;
+        float startX = camLeft + _spriteWorldWidth / 2f;
         spriteA.transform.position = new Vector3(startX, yPosition, 0f);
         spriteB.transform.position = new Vector3(startX + _spriteWorldWidth, yPosition, 0f);
 
