@@ -17,6 +17,9 @@ public class GamepadDebugUI : MonoBehaviour
 
     void Start()
     {
+        // Disabled for now — re-enable in Inspector or remove this line when needed
+        enabled = false;
+        return;
         style = new GUIStyle();
         style.fontSize = fontSize;
         style.normal.textColor = Color.white;

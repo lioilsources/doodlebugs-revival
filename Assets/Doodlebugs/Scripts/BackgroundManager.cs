@@ -3,7 +3,8 @@ using UnityEngine;
 
 /// <summary>
 /// Manages dynamic background and foreground selection at game start.
-/// Randomly selects a background profile and synchronizes across all clients.
+/// Randomly selects a background profile and synchronizes across all clients
+/// via NetworkVariable so late-joining clients also receive the selection.
 /// </summary>
 public class BackgroundManager : NetworkBehaviour
 {
@@ -15,7 +16,7 @@ public class BackgroundManager : NetworkBehaviour
     [Header("Available Backgrounds")]
     [SerializeField] private BackgroundProfile[] profiles;
 
-    private int _currentBackgroundIndex = -1;
+    private NetworkVariable<int> _backgroundIndex = new NetworkVariable<int>(-1);
 
     private void Awake()
     {
@@ -31,10 +32,24 @@ public class BackgroundManager : NetworkBehaviour
     {
         base.OnNetworkSpawn();
 
+        _backgroundIndex.OnValueChanged += OnBackgroundIndexChanged;
+
+        // Late-joining client: apply already-selected background
+        if (_backgroundIndex.Value >= 0)
+        {
+            ApplyBackground(_backgroundIndex.Value);
+        }
+
         if (IsServer)
         {
             SelectRandomBackground();
         }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        _backgroundIndex.OnValueChanged -= OnBackgroundIndexChanged;
+        base.OnNetworkDespawn();
     }
 
     /// <summary>
@@ -57,13 +72,13 @@ public class BackgroundManager : NetworkBehaviour
 
         int newIndex = Random.Range(0, profiles.Length);
 
-        if (profiles.Length > 1 && newIndex == _currentBackgroundIndex)
+        if (profiles.Length > 1 && newIndex == _backgroundIndex.Value)
         {
             newIndex = (newIndex + 1) % profiles.Length;
         }
 
         Debug.Log($"[BackgroundManager] Server selected background index: {newIndex}");
-        SetBackgroundClientRpc(newIndex);
+        _backgroundIndex.Value = newIndex;
     }
 
     /// <summary>
@@ -83,19 +98,22 @@ public class BackgroundManager : NetworkBehaviour
             return;
         }
 
-        SetBackgroundClientRpc(index);
+        _backgroundIndex.Value = index;
     }
 
-    [ClientRpc]
-    private void SetBackgroundClientRpc(int index)
+    private void OnBackgroundIndexChanged(int oldValue, int newValue)
+    {
+        ApplyBackground(newValue);
+    }
+
+    private void ApplyBackground(int index)
     {
         if (profiles == null || index < 0 || index >= profiles.Length)
         {
-            Debug.LogWarning($"[BackgroundManager] Invalid background index received: {index}");
+            Debug.LogWarning($"[BackgroundManager] Invalid background index: {index}");
             return;
         }
 
-        _currentBackgroundIndex = index;
         var profile = profiles[index];
 
         if (backgroundRenderer != null && profile.backgroundSprite != null)
@@ -122,7 +140,7 @@ public class BackgroundManager : NetworkBehaviour
     /// <summary>
     /// Gets the current background index.
     /// </summary>
-    public int CurrentBackgroundIndex => _currentBackgroundIndex;
+    public int CurrentBackgroundIndex => _backgroundIndex.Value;
 
     /// <summary>
     /// Gets the total number of available backgrounds.
