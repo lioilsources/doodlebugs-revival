@@ -42,7 +42,7 @@ public class ForegroundScroller : MonoBehaviour
         if (sprite == null)
         {
             sprite = ForegroundSpriteGenerator.CreatePlaceholderForeground();
-            Debug.Log("[ForegroundScroller] Using generated placeholder foreground sprite");
+            // Debug.Log("[ForegroundScroller] Using generated placeholder foreground sprite");
         }
 
         // Clean up any existing tiles
@@ -111,9 +111,8 @@ public class ForegroundScroller : MonoBehaviour
                 moving.transform.position.y,
                 0f
             );
-            // Regenerate tiles so foreground "heals" when scrolling back
-            DestroyTiles(moving);
-            BuildTiles(moving);
+            // Reactivate all tiles so foreground "heals" when scrolling back
+            ReactivateTiles(moving);
         }
     }
 
@@ -189,7 +188,7 @@ public class ForegroundScroller : MonoBehaviour
         // Disable main SpriteRenderer - tiles replace it visually
         sr.enabled = false;
 
-        Debug.Log($"[ForegroundScroller] Built {tileCount} tiles for {sr.name} ({cols}x{rows} grid)");
+        // Debug.Log($"[ForegroundScroller] Built {tileCount} tiles for {sr.name} ({cols}x{rows} grid)");
     }
 
     private bool HasOpaquePixel(Color32[] pixels, int texWidth, int startX, int startY, int w, int h)
@@ -203,6 +202,12 @@ public class ForegroundScroller : MonoBehaviour
             }
         }
         return false;
+    }
+
+    private void ReactivateTiles(SpriteRenderer sr)
+    {
+        for (int i = 0; i < sr.transform.childCount; i++)
+            sr.transform.GetChild(i).gameObject.SetActive(true);
     }
 
     private void DestroyTiles(SpriteRenderer sr)
