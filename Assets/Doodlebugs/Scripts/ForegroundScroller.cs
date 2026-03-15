@@ -1,10 +1,12 @@
 using UnityEngine;
+using Unity.Netcode;
 
 /// <summary>
 /// Scrolls two copies of a foreground sprite infinitely to the left.
 /// Splits each sprite into small destructible tiles with BoxCollider2D
 /// so bullets destroy individual tiles on contact.
-/// Purely local/visual - no networking needed.
+/// Uses NetworkManager.ServerTime for deterministic scroll position
+/// so all clients have identical tile positions for collision sync.
 /// Called by BackgroundManager when background/foreground changes.
 /// </summary>
 public class ForegroundScroller : MonoBehaviour
@@ -22,6 +24,10 @@ public class ForegroundScroller : MonoBehaviour
     private float _scrollSpeed;
     private float _spriteWorldWidth;
     private bool _active;
+
+    // Epoch for deterministic absolute positioning (synced via ServerTime)
+    private double _scrollStartTime;
+    private float _epochPosAx, _epochPosBx, _yPosition;
 
     private void Awake()
     {
@@ -70,6 +76,11 @@ public class ForegroundScroller : MonoBehaviour
         BuildTiles(spriteA);
         BuildTiles(spriteB);
 
+        _yPosition = yPosition;
+        _scrollStartTime = GetNetworkTime();
+        _epochPosAx = spriteA.transform.position.x;
+        _epochPosBx = spriteB.transform.position.x;
+
         _active = true;
     }
 
@@ -89,9 +100,11 @@ public class ForegroundScroller : MonoBehaviour
     {
         if (!_active) return;
 
-        float delta = _scrollSpeed * Time.deltaTime;
-        spriteA.transform.position += Vector3.right * delta;
-        spriteB.transform.position += Vector3.right * delta;
+        // Absolute position from network time — no deltaTime accumulation drift
+        float elapsed = (float)(GetNetworkTime() - _scrollStartTime);
+        float offset = _scrollSpeed * elapsed;
+        spriteA.transform.position = new Vector3(_epochPosAx + offset, _yPosition, 0f);
+        spriteB.transform.position = new Vector3(_epochPosBx + offset, _yPosition, 0f);
 
         float camLeft = Camera.main.transform.position.x
             - Camera.main.orthographicSize * Camera.main.aspect;
@@ -113,6 +126,11 @@ public class ForegroundScroller : MonoBehaviour
             );
             // Reactivate all tiles so foreground "heals" when scrolling back
             ReactivateTiles(moving);
+
+            // Reset epoch so absolute position stays accurate after wrap
+            _scrollStartTime = GetNetworkTime();
+            _epochPosAx = spriteA.transform.position.x;
+            _epochPosBx = spriteB.transform.position.x;
         }
     }
 
@@ -208,6 +226,12 @@ public class ForegroundScroller : MonoBehaviour
     {
         for (int i = 0; i < sr.transform.childCount; i++)
             sr.transform.GetChild(i).gameObject.SetActive(true);
+    }
+
+    private double GetNetworkTime()
+    {
+        var nm = NetworkManager.Singleton;
+        return (nm != null && nm.IsListening) ? nm.ServerTime.Time : Time.timeAsDouble;
     }
 
     private void DestroyTiles(SpriteRenderer sr)
