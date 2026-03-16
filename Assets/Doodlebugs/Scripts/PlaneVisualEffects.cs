@@ -32,7 +32,9 @@ public class PlaneVisualEffects : NetworkBehaviour
 
     private Material planeMaterialInstance;
     private Coroutine flashCoroutine;
+    private Coroutine invulnerabilityBlinkCoroutine;
     private PlayerController playerController;
+    private PlaneStats planeStats;
 
     public override void OnNetworkSpawn()
     {
@@ -49,6 +51,15 @@ public class PlaneVisualEffects : NetworkBehaviour
 
         // Configure sparkle particles for orbiting effect
         ConfigureSparkleParticles();
+
+        // Cache PlaneStats reference
+        planeStats = GetComponent<PlaneStats>();
+
+        // Subscribe to invulnerability changes for blink effect
+        if (planeStats != null)
+        {
+            planeStats.NetInvulnerable.OnValueChanged += OnInvulnerabilityChanged;
+        }
 
         // Subscribe to expert status changes
         isExpert.OnValueChanged += OnExpertStatusChanged;
@@ -71,6 +82,11 @@ public class PlaneVisualEffects : NetworkBehaviour
 
         // Cleanup subscriptions
         isExpert.OnValueChanged -= OnExpertStatusChanged;
+
+        if (planeStats != null)
+        {
+            planeStats.NetInvulnerable.OnValueChanged -= OnInvulnerabilityChanged;
+        }
 
         if (IsOwner && playerController != null)
         {
@@ -250,6 +266,42 @@ public class PlaneVisualEffects : NetworkBehaviour
             StopCoroutine(flashCoroutine);
         }
         flashCoroutine = StartCoroutine(DamageFlashCoroutine());
+    }
+
+    private void OnInvulnerabilityChanged(bool prev, bool current)
+    {
+        if (current)
+        {
+            if (invulnerabilityBlinkCoroutine != null)
+                StopCoroutine(invulnerabilityBlinkCoroutine);
+            invulnerabilityBlinkCoroutine = StartCoroutine(InvulnerabilityBlinkCoroutine());
+        }
+        else
+        {
+            if (invulnerabilityBlinkCoroutine != null)
+            {
+                StopCoroutine(invulnerabilityBlinkCoroutine);
+                invulnerabilityBlinkCoroutine = null;
+            }
+            // Ensure sprite is visible
+            if (planeRenderer != null)
+                planeRenderer.enabled = true;
+        }
+    }
+
+    private IEnumerator InvulnerabilityBlinkCoroutine()
+    {
+        if (planeRenderer == null) yield break;
+
+        float blinkRate = 10f; // blinks per second
+        while (planeStats != null && planeStats.IsInvulnerable)
+        {
+            planeRenderer.enabled = !planeRenderer.enabled;
+            yield return new WaitForSeconds(1f / (blinkRate * 2f));
+        }
+
+        planeRenderer.enabled = true;
+        invulnerabilityBlinkCoroutine = null;
     }
 
     private IEnumerator DamageFlashCoroutine()

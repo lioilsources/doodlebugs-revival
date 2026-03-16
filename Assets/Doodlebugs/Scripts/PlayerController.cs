@@ -134,10 +134,23 @@ public class PlayerController : NetworkBehaviour, IDamagable
     public bool IsEngineOff => engineOff;
     public float Speed => speed;
 
+    /// <summary>
+    /// Get the PlaneStats component (for Shooting, HUD, etc.)
+    /// </summary>
+    public PlaneStats PlaneStats => planeStats;
+
     public GameObject hitEffect;
 
     // Visual effects controller
     private PlaneVisualEffects visualEffects;
+
+    // Plane stats (shield, health, handling, damage)
+    private PlaneStats planeStats;
+
+    // Last attacker tracking (for kill attribution)
+    private ulong _lastAttackerClientId;
+    private int _lastAttackerLocalPlayerIndex;
+    private bool _hasLastAttacker;
 
     // Cached boundary references
     private Collider2D leftBoundary;
@@ -174,6 +187,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         // Cache visual effects reference
         visualEffects = GetComponent<PlaneVisualEffects>();
+
+        // Cache plane stats reference
+        planeStats = GetComponent<PlaneStats>();
 
         // Ensure Rigidbody is initialized
         if (rb == null)
@@ -462,12 +478,15 @@ public class PlayerController : NetworkBehaviour, IDamagable
     }
 
     /// <summary>
-    /// Common death handler - shows explosion and requests respawn via CloudManager.
+    /// Common death handler - shows explosion, resets stats, and requests respawn via CloudManager.
     /// </summary>
     private void HandleDeathAndRespawn()
     {
         visualEffects?.TriggerDamageFlash();
         ShowExplosionClientRpc();
+
+        // Reset plane stats on respawn (server-side)
+        planeStats?.ResetStats();
 
         if (CloudManager.Instance != null)
         {
@@ -587,12 +606,13 @@ public class PlayerController : NetworkBehaviour, IDamagable
         direction.Normalize();
         angle = Vector3.Cross(direction, transform.up).z;
 
-        // Rotation speed proportional to plane speed
+        // Rotation speed proportional to plane speed, scaled by handling
         // Faster rotation when engine is off (multiplier varies by profile)
+        float handlingFactor = planeStats != null ? planeStats.Handling : 1f;
         float speedFactor = rb.linearVelocity.magnitude / defaultSpeed;  // 1.0 at defaultSpeed
         float currentRotateSpeed = engineOff
-            ? rotateSpeed * engineOffRotateMultiplier
-            : rotateSpeed * speedFactor;
+            ? rotateSpeed * engineOffRotateMultiplier * handlingFactor
+            : rotateSpeed * speedFactor * handlingFactor;
 
         // turn on/off - proportional to input strength
         if (x != 0)
@@ -616,6 +636,57 @@ public class PlayerController : NetworkBehaviour, IDamagable
     {
         if (!IsServer)
             return;
+
+        if (planeStats != null)
+        {
+            bool dead = planeStats.TakeDamage(damage);
+            if (dead)
+            {
+                HandleCombatDeath();
+            }
+            else
+            {
+                visualEffects?.TriggerDamageFlash();
+            }
+        }
+        else
+        {
+            // Fallback: instant kill if PlaneStats not attached
+            HandleCombatDeath();
+        }
+    }
+
+    /// <summary>
+    /// Set the last attacker for kill attribution. Called by Bullet before Hit().
+    /// </summary>
+    public void SetLastAttacker(ulong clientId, int localPlayerIndex)
+    {
+        _lastAttackerClientId = clientId;
+        _lastAttackerLocalPlayerIndex = localPlayerIndex;
+        _hasLastAttacker = true;
+    }
+
+    /// <summary>
+    /// Handle death from combat (bullet or plane collision). Drops power-up.
+    /// </summary>
+    private void HandleCombatDeath()
+    {
+        // Record death for this player
+        int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
+        ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+
+        // Attribute kill to last attacker (bullet deaths)
+        if (_hasLastAttacker)
+        {
+            ScoreManager.Instance?.AddScore(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
+            _hasLastAttacker = false;
+        }
+
+        // Spawn power-up at death position
+        if (PowerUpManager.Instance != null)
+        {
+            PowerUpManager.Instance.SpawnPowerUp(transform.position);
+        }
 
         HandleDeathAndRespawn();
     }
@@ -763,13 +834,14 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         if (collider.gameObject.CompareTag("Bullet"))
         {
-            // Bullet hit - stats handled by Bullet.cs (gives kill to shooter)
-            HandleDeathAndRespawn();
+            // Bullet hit - damage pipeline handled by Bullet.cs calling Hit()
+            // Don't HandleDeathAndRespawn here - Bullet.cs calls damagable.Hit() which handles it
+            return;
         }
 
         if (collider.gameObject.CompareTag("Ground"))
         {
-            // Crashed into ground/obstacle - record death
+            // Crashed into ground/obstacle - instant kill, no power-up drop
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
             ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
             HandleDeathAndRespawn();
@@ -777,10 +849,16 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         if (collider.gameObject.CompareTag("Player"))
         {
-            // Collided with another plane
+            // Collided with another plane - instant kill, drops power-up
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
             ScoreManager.Instance?.AddPlaneCollision(OwnerClientId, localIdx);
-            HandleDeathAndRespawn();
+            HandleCombatDeath();
+        }
+
+        if (collider.gameObject.CompareTag("PowerUp"))
+        {
+            // Power-up pickup handled by PowerUp.cs OnTriggerEnter2D
+            return;
         }
 
     }
