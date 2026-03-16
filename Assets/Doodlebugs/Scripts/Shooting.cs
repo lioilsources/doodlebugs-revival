@@ -18,9 +18,13 @@ public class Shooting : NetworkBehaviour
             : null;
     private float bulletForce => baseBulletForce * (Profile?.bulletForceMultiplier ?? 1f);
     private float bulletGravityScale => Profile?.bulletGravityScale ?? 2f;
+    private float fireRateCooldown => Profile?.fireRateCooldown ?? 0.3f;
 
     // Reference to PlayerController for local player index
     private PlayerController playerController;
+
+    // Fire rate cooldown tracking
+    private float _lastFireTime;
 
     public override void OnNetworkSpawn()
     {
@@ -46,8 +50,9 @@ public class Shooting : NetworkBehaviour
 
         bool shootPressed = GetShootInput();
 
-        if (shootPressed)
+        if (shootPressed && Time.time >= _lastFireTime + fireRateCooldown)
         {
+            _lastFireTime = Time.time;
             float planeSpeed = planeRb != null ? planeRb.linearVelocity.magnitude : 0f;
             int localPlayerIndex = playerController != null && playerController.LocalPlayerIndex >= 0
                 ? playerController.LocalPlayerIndex : 0;
@@ -97,11 +102,19 @@ public class Shooting : NetworkBehaviour
             netObj.Spawn(true);
         }
 
-        // Set shooter ID and local player index for scoring
+        // Set shooter ID, local player index, and damage for scoring
         var bulletScript = bullet.GetComponent<Bullet>();
         if (bulletScript != null)
         {
             bulletScript.SetShooter(shooterClientId, localPlayerIndex);
+
+            // Apply damage multiplier from PlaneStats
+            var planeStats = playerController?.PlaneStats;
+            if (planeStats != null)
+            {
+                int bulletDamage = Mathf.RoundToInt(1 * planeStats.DamageMultiplier);
+                bulletScript.SetDamage(Mathf.Max(1, bulletDamage));
+            }
         }
 
         var rb = bullet.GetComponent<Rigidbody2D>();

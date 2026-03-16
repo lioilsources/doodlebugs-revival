@@ -32,6 +32,11 @@ public class GameHUD : MonoBehaviour
 
     // Player colors now managed by PlayerColorManager
 
+    [Header("Stat Bar Colors")]
+    [SerializeField] private Color shieldBarColor = new Color(0.3f, 0.5f, 1.0f); // Blue
+    [SerializeField] private Color healthBarColor = new Color(0.9f, 0.2f, 0.2f); // Red
+    [SerializeField] private Color damageBoostColor = new Color(1.0f, 0.4f, 0.1f); // Orange
+
     // Player UI elements - dynamically created
     private class PlayerHUDEntry
     {
@@ -43,6 +48,11 @@ public class GameHUD : MonoBehaviour
         public Text scoreText;
         public Image speedBarFill;
         public Image speedBarBg;
+        public Image shieldBarFill;
+        public Image shieldBarBg;
+        public Image healthBarFill;
+        public Image healthBarBg;
+        public Text statusText; // handling + damage boost indicator
         public Vector3 originalScoreScale;
         public Coroutine pulseCoroutine;
         public string lastKnownName; // Track name changes from NetworkVariable sync
@@ -324,7 +334,7 @@ public class GameHUD : MonoBehaviour
         entry.container = container;
 
         var containerRect = container.AddComponent<RectTransform>();
-        containerRect.sizeDelta = new Vector2(400, 55); // Compact for more players
+        containerRect.sizeDelta = new Vector2(400, 110); // Room for score + shield + health + speed + status
 
         var containerLayout = container.AddComponent<VerticalLayoutGroup>();
         containerLayout.spacing = 2;
@@ -362,12 +372,18 @@ public class GameHUD : MonoBehaviour
         entry.scoreText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         entry.originalScoreScale = entry.scoreText.transform.localScale;
 
+        // Create shield bar
+        CreateStatBar(container.transform, "ShieldBar", shieldBarColor, out entry.shieldBarBg, out entry.shieldBarFill);
+
+        // Create health bar
+        CreateStatBar(container.transform, "HealthBar", healthBarColor, out entry.healthBarBg, out entry.healthBarFill);
+
         // Create speed bar background
         var speedBarBgObj = new GameObject("SpeedBarBg");
         speedBarBgObj.transform.SetParent(container.transform, false);
 
         var speedBarBgRect = speedBarBgObj.AddComponent<RectTransform>();
-        speedBarBgRect.sizeDelta = new Vector2(400, 16);
+        speedBarBgRect.sizeDelta = new Vector2(400, 10);
 
         entry.speedBarBg = speedBarBgObj.AddComponent<Image>();
         entry.speedBarBg.color = new Color(0.2f, 0.2f, 0.2f, 0.8f);
@@ -384,6 +400,19 @@ public class GameHUD : MonoBehaviour
 
         entry.speedBarFill = speedBarFillObj.AddComponent<Image>();
         entry.speedBarFill.color = engineOnColor;
+
+        // Create status text (handling + damage boost)
+        var statusObj = new GameObject("StatusText");
+        statusObj.transform.SetParent(container.transform, false);
+        var statusRect = statusObj.AddComponent<RectTransform>();
+        statusRect.sizeDelta = new Vector2(400, 20);
+        entry.statusText = statusObj.AddComponent<Text>();
+        entry.statusText.fontSize = 18;
+        entry.statusText.alignment = TextAnchor.MiddleRight;
+        entry.statusText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        entry.statusText.color = Color.white;
+        entry.statusText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        entry.statusText.text = "";
 
         // Store entry
         _playerEntries.Add(entry);
@@ -406,6 +435,27 @@ public class GameHUD : MonoBehaviour
         Debug.Log($"[GameHUD] Created HUD entry for P{colorIndex + 1} (ClientId: {player.OwnerClientId}, LocalIdx: {localIdx})");
     }
 
+    private void CreateStatBar(Transform parent, string name, Color fillColor,
+        out Image bgImage, out Image fillImage)
+    {
+        var bgObj = new GameObject(name + "Bg");
+        bgObj.transform.SetParent(parent, false);
+        var bgRect = bgObj.AddComponent<RectTransform>();
+        bgRect.sizeDelta = new Vector2(400, 10);
+        bgImage = bgObj.AddComponent<Image>();
+        bgImage.color = new Color(0.2f, 0.2f, 0.2f, 0.8f);
+
+        var fillObj = new GameObject(name + "Fill");
+        fillObj.transform.SetParent(bgObj.transform, false);
+        var fillRect = fillObj.AddComponent<RectTransform>();
+        fillRect.anchorMin = Vector2.zero;
+        fillRect.anchorMax = Vector2.one;
+        fillRect.offsetMin = new Vector2(2, 2);
+        fillRect.offsetMax = new Vector2(-2, -2);
+        fillImage = fillObj.AddComponent<Image>();
+        fillImage.color = fillColor;
+    }
+
     private void UpdateAllSpeedBars()
     {
         foreach (var entry in _playerEntries)
@@ -421,6 +471,52 @@ public class GameHUD : MonoBehaviour
             {
                 UpdateSpeedBarFill(entry.speedBarFill, 0f);
             }
+
+            // Update stat bars from PlaneStats
+            UpdateStatBars(entry);
+        }
+    }
+
+    private void UpdateStatBars(PlayerHUDEntry entry)
+    {
+        if (entry.player == null) return;
+
+        var stats = entry.player.PlaneStats;
+        if (stats == null) return;
+
+        // Shield bar (0-3)
+        if (entry.shieldBarFill != null)
+        {
+            float shieldNorm = stats.Shield / 3f;
+            UpdateSpeedBarFill(entry.shieldBarFill, shieldNorm);
+        }
+
+        // Health bar (0-3)
+        if (entry.healthBarFill != null)
+        {
+            float healthNorm = stats.Health / 3f;
+            UpdateSpeedBarFill(entry.healthBarFill, healthNorm);
+        }
+
+        // Status text: handling indicator + damage boost
+        if (entry.statusText != null)
+        {
+            string status = "";
+
+            // Handling indicator (wrench icon when degraded)
+            if (stats.Handling < 0.95f)
+            {
+                int handlingPct = Mathf.RoundToInt(stats.Handling * 100f);
+                status += $"<color=#FFD700>Ctrl:{handlingPct}%</color> ";
+            }
+
+            // Damage boost indicator
+            if (stats.DamageMultiplier > 1.05f)
+            {
+                status += $"<color=#FF6600>DMG x{stats.DamageMultiplier:F1}</color>";
+            }
+
+            entry.statusText.text = status;
         }
     }
 

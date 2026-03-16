@@ -14,6 +14,21 @@ public class Bullet : NetworkBehaviour
     private NetworkVariable<int> _shooterLocalPlayerIndex = new NetworkVariable<int>(0,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    // Variable damage (affected by shooter's DamageMultiplier)
+    private NetworkVariable<int> _damage = new NetworkVariable<int>(1,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    /// <summary>
+    /// Set bullet damage. Call from server after spawning.
+    /// </summary>
+    public void SetDamage(int damage)
+    {
+        if (IsServer)
+        {
+            _damage.Value = damage;
+        }
+    }
+
     /// <summary>
     /// Set the shooter's client ID and local player index. Call from server after spawning.
     /// </summary>
@@ -35,28 +50,22 @@ public class Bullet : NetworkBehaviour
             var damagable = other.gameObject.GetComponent<IDamagable>();
             if (damagable != null)
             {
-                // Check if this is a player hit (for scoring)
+                // Set last attacker on target for kill attribution
                 var targetPlayer = other.gameObject.GetComponent<PlayerController>();
                 if (targetPlayer != null)
                 {
-                    // Only score if hitting opponent (not self)
-                    // For local co-op: same clientId but different localPlayerIndex = valid kill
                     int targetLocalIdx = targetPlayer.LocalPlayerIndex >= 0 ? targetPlayer.LocalPlayerIndex : 0;
                     bool isSamePlayer = targetPlayer.OwnerClientId == _shooterClientId.Value &&
                                         targetLocalIdx == _shooterLocalPlayerIndex.Value;
 
                     if (!isSamePlayer)
                     {
-                        // Add score to shooter (server-side call)
-                        if (ScoreManager.Instance != null)
-                        {
-                            ScoreManager.Instance.AddScore(_shooterClientId.Value, _shooterLocalPlayerIndex.Value);
-                        }
+                        targetPlayer.SetLastAttacker(_shooterClientId.Value, _shooterLocalPlayerIndex.Value);
                     }
                 }
 
-                // Player handles its own explosion, don't create duplicate
-                damagable.Hit(1);
+                // Apply damage through IDamagable pipeline
+                damagable.Hit(_damage.Value);
             }
             else
             {

@@ -37,6 +37,9 @@ public class PilotMaturityProfile : ScriptableObject
     [Tooltip("Gravity scale for bullets (0 = straight, 1 = normal, 2 = heavy drop)")]
     public float bulletGravityScale = 0f;
 
+    [Tooltip("Minimum time between shots in seconds (Novice=0.4, Advanced=0.3, Expert=0.25)")]
+    public float fireRateCooldown = 0.4f;
+
     // Fallback factory - creates Novice profile (uses class default values)
     public static PilotMaturityProfile CreateFallback()
     {
