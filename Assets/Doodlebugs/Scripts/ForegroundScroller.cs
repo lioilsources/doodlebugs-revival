@@ -160,19 +160,30 @@ public class ForegroundScroller : MonoBehaviour
         float ppuScale = (float)texW / sr.sprite.rect.width;
         float adjustedPPU = ppu * ppuScale;
 
+        // Sprite rect in downscaled texture coordinates
+        int spriteX0 = Mathf.RoundToInt(sr.sprite.rect.x * ppuScale);
+        int spriteY0 = Mathf.RoundToInt(sr.sprite.rect.y * ppuScale);
+        int spriteW  = Mathf.RoundToInt(sr.sprite.rect.width  * ppuScale);
+        int spriteH  = Mathf.RoundToInt(sr.sprite.rect.height * ppuScale);
+
+        // Sprite pivot in downscaled texture coordinates
+        // (Sprite.pivot returns pixel coords within the original texture)
+        float pivotX = sr.sprite.pivot.x * ppuScale;
+        float pivotY = sr.sprite.pivot.y * ppuScale;
+
         int foregroundLayer = LayerMask.NameToLayer("Foreground");
-        int cols = Mathf.CeilToInt((float)texW / tilePixelSize);
-        int rows = Mathf.CeilToInt((float)texH / tilePixelSize);
+        int cols = Mathf.CeilToInt((float)spriteW / tilePixelSize);
+        int rows = Mathf.CeilToInt((float)spriteH / tilePixelSize);
         int tileCount = 0;
 
         for (int row = 0; row < rows; row++)
         {
             for (int col = 0; col < cols; col++)
             {
-                int px = col * tilePixelSize;
-                int py = row * tilePixelSize;
-                int w = Mathf.Min(tilePixelSize, texW - px);
-                int h = Mathf.Min(tilePixelSize, texH - py);
+                int px = spriteX0 + col * tilePixelSize;
+                int py = spriteY0 + row * tilePixelSize;
+                int w = Mathf.Min(tilePixelSize, spriteX0 + spriteW - px);
+                int h = Mathf.Min(tilePixelSize, spriteY0 + spriteH - py);
 
                 if (!HasOpaquePixel(pixels, texW, px, py, w, h))
                     continue;
@@ -181,9 +192,9 @@ public class ForegroundScroller : MonoBehaviour
                 var pivot = new Vector2(0.5f, 0.5f);
                 var tileSprite = Sprite.Create(tex, rect, pivot, adjustedPPU);
 
-                // Position relative to sprite center (which is at local 0,0)
-                float localX = (px + w * 0.5f - texW * 0.5f) / adjustedPPU;
-                float localY = (py + h * 0.5f - texH * 0.5f) / adjustedPPU;
+                // Position relative to sprite pivot (which is at local 0,0)
+                float localX = (px + w * 0.5f - pivotX) / adjustedPPU;
+                float localY = (py + h * 0.5f - pivotY) / adjustedPPU;
 
                 var tileGO = new GameObject($"Tile_{col}_{row}");
                 tileGO.transform.SetParent(sr.transform, false);
