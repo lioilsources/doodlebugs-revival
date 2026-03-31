@@ -209,7 +209,9 @@ public class ForegroundScroller : MonoBehaviour
                 var box = tileGO.AddComponent<BoxCollider2D>();
                 box.isTrigger = true;
 
-                tileGO.AddComponent<ForegroundTile>();
+                var ft = tileGO.AddComponent<ForegroundTile>();
+                ft.Col = col;
+                ft.Row = row;
                 tileCount++;
             }
         }
