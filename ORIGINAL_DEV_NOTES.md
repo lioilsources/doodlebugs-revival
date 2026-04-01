@@ -1,4 +1,4 @@
-12/11/2026
+12/1/2026
 - couch desktop battle for up to 4 players on keyboard/gamepad (enabled by 1-4 on keyboard)
 - local wifi battle for up to 20 players (desktop host can add 4 local players; desktop client has only one slot)
 - respawn behind random cloud

@@ -4,11 +4,11 @@ Instructions for Claude Code when working in this repository.
 
 ## Project
 
-2D multiplayer arcade air combat game. Unity 2022.3.4f1. WWI biplanes. Physics-based movement, one-hit kill, WiFi/couch multiplayer.
+2D multiplayer arcade air combat game. Unity 6000.2.9f1. WWI biplanes. Physics-based movement, one-hit kill, WiFi/couch multiplayer.
 
 ## Tech Stack
 
-- Unity 2022.3.4f1
+- Unity 6000.2.9f1
 - Netcode for GameObjects 1.14.1
 - Unity Input System 1.7.0
 - Platforms: Desktop (Win/macOS), iOS, Android
@@ -16,7 +16,7 @@ Instructions for Claude Code when working in this repository.
 ## Key Commands
 
 **Run the game:**
-1. Open in Unity 2022.3.4f1
+1. Open in Unity 6000.2.9f1
 2. Scene: `Assets/Doodlebugs/Scenes/Scene01.unity`
 3. Play → Start Host
 

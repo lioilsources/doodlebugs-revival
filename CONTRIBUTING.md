@@ -2,7 +2,7 @@
 
 ## Setup
 
-1. Install **Unity 2022.3.4f1** (exact version — Netcode is version-sensitive)
+1. Install **Unity 6000.2.9f1** (exact version — Netcode is version-sensitive)
 2. Clone the repo and open the project folder in Unity Hub
 3. Load scene: `Assets/Doodlebugs/Scenes/Scene01.unity`
 

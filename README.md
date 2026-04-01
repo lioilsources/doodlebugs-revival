@@ -27,7 +27,7 @@ See [GALLERY.md](GALLERY.md)
 
 ## Getting Started
 
-**Requirements:** Unity 2022.3.4f1
+**Requirements:** Unity 6000.2.9f1
 
 1. Open the project in Unity
 2. Load scene: `Assets/Doodlebugs/Scenes/Scene01.unity`
@@ -49,7 +49,7 @@ See [GALLERY.md](GALLERY.md)
 
 ## Tech Stack
 
-- Unity 2022.3.4f1
+- Unity 6000.2.9f1
 - Unity Netcode for GameObjects 1.14.1
 - Unity Input System 1.7.0
 - ParrelSync (multi-editor testing)
