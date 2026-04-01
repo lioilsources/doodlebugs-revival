@@ -67,6 +67,9 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 | `Scripts/Network/ConnectionManager.cs` | Host/client connect flow |
 | `Scripts/Input/` | Multi-platform input (desktop/gamepad/gyro/touch) |
 | `Scripts/Camera/` | Dynamic screen size, boundaries |
+| `Scripts/ForegroundScroller.cs` | Infinite parallax scroll (two sprite copies, loops left) |
+| `Scripts/ForegroundTile.cs` | Single destructible tile — disappears on bullet hit |
+| `Scripts/ForegroundSpriteGenerator.cs` | Generates placeholder foreground sprite at runtime from alpha |
 
 ## Code Rules
 
@@ -76,6 +79,15 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 - No `SendMessage()` — use direct calls or events
 - No hardcoded collision strings — prefer tags or layers
 - Test multiplayer changes with ParrelSync before committing
+
+## Foreground / Parallax Destruction Layer
+
+- Foreground scrolls infinitely left via `ForegroundScroller` (two sprite copies swapped)
+- Each background has its own foreground sprite; tiles are 100×100 px
+- Planes fly **behind** the foreground (render order), bullets collide with it
+- On bullet hit: `ForegroundTile` destroys itself (local, non-networked — visual only)
+- Colliders are `BoxCollider2D` auto-generated per tile from sprite alpha
+- `ForegroundSpriteGenerator` creates a runtime silhouette if no sprite is assigned
 
 ## Known Issues
 
