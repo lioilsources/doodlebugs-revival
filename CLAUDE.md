@@ -91,5 +91,4 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 
 ## Known Issues
 
-- Bullet/Cloud collision de-sync: sometimes explodes on one screen but not the other (local `Destroy` on `Bullet.cs`)
-- Legacy `SendMessage()` still used in boundary collision (PlaygroundLeft/Right)
+- Bullet/Cloud collision: occasionally de-syncs visually (investigate if reproduced)
