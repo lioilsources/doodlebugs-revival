@@ -1,0 +1,272 @@
+name: Release
+
+# Triggered when a tag is pushed matching any of these patterns:
+#   v1.2.3          → full release
+#   v1.2.3-beta.1   → pre-release
+#   release/1.2.3   → full release
+#   alpha/1.2.3     → pre-release
+#   beta/1.2.3      → pre-release
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+      - 'release/**'
+      - 'alpha/**'
+      - 'beta/**'
+
+# Required secrets (Settings → Secrets and variables → Actions):
+#   UNITY_LICENSE   – XML content of the Unity license file
+#   UNITY_EMAIL     – Unity account e-mail
+#   UNITY_PASSWORD  – Unity account password
+#
+# To obtain UNITY_LICENSE:
+#   1. Run the workflow at https://game.ci/docs/github/activation
+#      (game-ci/unity-request-activation-file) and download the .alf file.
+#   2. Upload it at https://license.unity3d.com and download the .ulf file.
+#   3. Paste the .ulf file contents into the UNITY_LICENSE secret.
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false        # never cancel a running release
+
+env:
+  UNITY_VERSION: 6000.2.9f1
+  BUILDS_PATH: build
+
+jobs:
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Desktop builds (Windows, Linux, macOS) + Android
+  # game-ci runs Unity inside a Docker container on the ubuntu runner,
+  # so a single runner type handles all four platforms.
+  # ──────────────────────────────────────────────────────────────────────────
+  build-cross:
+    name: Build / ${{ matrix.targetPlatform }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - targetPlatform: StandaloneWindows64
+            artifactName: doodlebugs-windows-x64
+            ext: .zip
+          - targetPlatform: StandaloneLinux64
+            artifactName: doodlebugs-linux-x64
+            ext: .tar.gz
+          - targetPlatform: StandaloneOSX
+            artifactName: doodlebugs-macos
+            ext: .zip
+          - targetPlatform: Android
+            artifactName: doodlebugs-android
+            ext: .apk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history needed for version detection
+          lfs: true
+
+      # The Library folder caches imported assets; skipping it costs ~10 min.
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-${{ matrix.targetPlatform }}-
+            Library-
+
+      - name: Build – ${{ matrix.targetPlatform }}
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: ${{ matrix.targetPlatform }}
+          buildName: ${{ matrix.artifactName }}
+          buildsPath: ${{ env.BUILDS_PATH }}
+          versioning: Tag       # sets Application.version from the git tag
+
+      # ── Package each platform into a single distributable file ────────────
+
+      - name: Package – Windows
+        if: matrix.targetPlatform == 'StandaloneWindows64'
+        run: |
+          cd "${{ env.BUILDS_PATH }}/StandaloneWindows64"
+          zip -r "../../${{ matrix.artifactName }}.zip" .
+
+      - name: Package – Linux
+        if: matrix.targetPlatform == 'StandaloneLinux64'
+        run: |
+          # tar preserves the executable bit on the Linux binary
+          cd "${{ env.BUILDS_PATH }}/StandaloneLinux64"
+          tar -czf "../../${{ matrix.artifactName }}.tar.gz" .
+
+      - name: Package – macOS
+        if: matrix.targetPlatform == 'StandaloneOSX'
+        run: |
+          cd "${{ env.BUILDS_PATH }}/StandaloneOSX"
+          zip -r "../../${{ matrix.artifactName }}.zip" .
+
+      - name: Package – Android APK
+        if: matrix.targetPlatform == 'Android'
+        run: |
+          APK=$(find "${{ env.BUILDS_PATH }}/Android" -name "*.apk" | head -1)
+          mv "$APK" "${{ matrix.artifactName }}.apk"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifactName }}
+          path: ${{ matrix.artifactName }}${{ matrix.ext }}
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # iOS build
+  # Unity → Xcode project; xcodebuild → unsigned .ipa
+  # Requires macOS runner; game-ci installs Unity via Unity Hub.
+  # NOTE: for a signed IPA suitable for TestFlight/App Store, add
+  #   APPLE_TEAM_ID, IOS_CERTIFICATE_BASE64, IOS_PROVISIONING_PROFILE_BASE64,
+  #   and IOS_CERTIFICATE_PASSWORD secrets, then replace the unsigned archive
+  #   step below with a proper export-options-plist based export.
+  # ──────────────────────────────────────────────────────────────────────────
+  build-ios:
+    name: Build / iOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-iOS-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-iOS-
+            Library-
+
+      - name: Build iOS Xcode project
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: iOS
+          buildName: doodlebugs-ios
+          buildsPath: ${{ env.BUILDS_PATH }}
+          versioning: Tag
+
+      - name: Archive iOS app (unsigned)
+        run: |
+          XCODE_PROJECT="${{ env.BUILDS_PATH }}/iOS/doodlebugs-ios/Unity-iPhone.xcodeproj"
+          xcodebuild archive \
+            -project "$XCODE_PROJECT" \
+            -scheme "Unity-iPhone" \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "${{ env.BUILDS_PATH }}/doodlebugs.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            2>&1 | tail -50
+
+      - name: Export unsigned IPA
+        run: |
+          # An .ipa is just a zip with a Payload/<App>.app directory inside.
+          APP=$(find "${{ env.BUILDS_PATH }}/doodlebugs.xcarchive/Products" -name "*.app" | head -1)
+          if [ -n "$APP" ]; then
+            mkdir -p Payload
+            cp -r "$APP" Payload/
+            zip -qr doodlebugs-ios.ipa Payload/
+            echo "✓ IPA created from archive"
+          else
+            # Fallback: ship the raw Xcode project so devs can build locally
+            echo "App not found in archive – packaging Xcode project instead"
+            cd "${{ env.BUILDS_PATH }}/iOS"
+            zip -r ../../doodlebugs-ios-xcode.zip .
+          fi
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: doodlebugs-ios
+          path: |
+            doodlebugs-ios.ipa
+            doodlebugs-ios-xcode.zip
+          if-no-files-found: warn
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Create the GitHub Release and attach every build artifact
+  # ──────────────────────────────────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    needs: [build-cross, build-ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to create releases and upload assets
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true   # flatten into a single directory
+
+      - name: List artifacts
+        run: find artifacts -type f | sort
+
+      - name: Determine release type
+        id: meta
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" == alpha/* || "$TAG" == *"-alpha"* || "$TAG" == *".alpha"* ]]; then
+            echo "prerelease=true"  >> "$GITHUB_OUTPUT"
+            echo "label=Alpha"     >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG" == beta/* || "$TAG" == *"-beta"* || "$TAG" == *".beta"* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "label=Beta"      >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG" == release/* ]]; then
+            echo "prerelease=false"   >> "$GITHUB_OUTPUT"
+            echo "label=Release"      >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false"   >> "$GITHUB_OUTPUT"
+            echo "label=Release"      >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Doodlebugs Revival ${{ github.ref_name }}"
+          draft: false
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          generate_release_notes: true   # auto-generates changelog from commits/PRs
+          files: artifacts/**/*
+          body: |
+            ## Doodlebugs Revival — ${{ steps.meta.outputs.label }} `${{ github.ref_name }}`
+
+            ### Downloads
+
+            | Platform | File |
+            |----------|------|
+            | Windows (x64) | `doodlebugs-windows-x64.zip` |
+            | Linux (x64) | `doodlebugs-linux-x64.tar.gz` |
+            | macOS | `doodlebugs-macos.zip` |
+            | Android | `doodlebugs-android.apk` |
+            | iOS (unsigned) | `doodlebugs-ios.ipa` |
+
+            > **iOS:** The IPA is unsigned. Install via [AltStore](https://altstore.io) or sideloading.
+            > **Android:** Enable *Install from unknown sources* before installing the APK.
+
+            ---
