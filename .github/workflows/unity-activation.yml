@@ -35,7 +35,7 @@ jobs:
           unityVersion: 6000.2.9f1
 
       - name: Upload .alf as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.alf.outputs.filePath }}
           path: ${{ steps.alf.outputs.filePath }}
