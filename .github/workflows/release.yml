@@ -32,6 +32,9 @@ concurrency:
 env:
   UNITY_VERSION: 6000.2.9f1
   BUILDS_PATH: build
+  # game-ci/unity-builder@v4 has not yet released a Node.js 24 build;
+  # this flag allows it to continue running on Node.js 20 in the meantime.
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
 
@@ -62,14 +65,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0   # full history needed for version detection
           lfs: true
 
       # The Library folder caches imported assets; skipping it costs ~10 min.
       - name: Cache Unity Library
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: Library
           key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
@@ -118,7 +121,7 @@ jobs:
           mv "$APK" "${{ matrix.artifactName }}.apk"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifactName }}
           path: ${{ matrix.artifactName }}${{ matrix.ext }}
@@ -138,13 +141,13 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           lfs: true
 
       - name: Cache Unity Library
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: Library
           key: Library-iOS-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
@@ -197,7 +200,7 @@ jobs:
           fi
 
       - name: Upload iOS artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: doodlebugs-ios
           path: |
@@ -218,7 +221,7 @@ jobs:
 
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
           merge-multiple: true   # flatten into a single directory
