@@ -1,0 +1,42 @@
+name: Unity – Request Activation File
+
+# Run this workflow ONCE to obtain the UNITY_LICENSE secret.
+# After that you never need to run it again (unless the license expires).
+#
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │  HOW TO USE                                                             │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │  1. GitHub → Actions → "Unity – Request Activation File" → Run workflow │
+# │  2. Wait for the job to finish, then download the artifact              │
+# │     "Unity_<version>_<platform>.alf"                                   │
+# │  3. Open https://license.unity3d.com/manual                            │
+# │     Upload the .alf file → download the returned .ulf file             │
+# │  4. GitHub → Settings → Secrets and variables → Actions                │
+# │     Add/update these three secrets:                                     │
+# │       UNITY_LICENSE  ← paste the full contents of the .ulf file        │
+# │       UNITY_EMAIL    ← your Unity account e-mail                       │
+# │       UNITY_PASSWORD ← your Unity account password                     │
+# │  5. The release.yml workflow can now build successfully.                │
+# └─────────────────────────────────────────────────────────────────────────┘
+
+on:
+  workflow_dispatch:   # manual trigger only — never runs automatically
+
+jobs:
+  activation:
+    name: Request manual activation file
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Request .alf activation file
+        id: alf
+        uses: game-ci/unity-request-activation-file@v2
+        with:
+          unityVersion: 6000.2.9f1
+
+      - name: Upload .alf as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.alf.outputs.filePath }}
+          path: ${{ steps.alf.outputs.filePath }}
+          retention-days: 1   # sensitive file — keep for 1 day only
