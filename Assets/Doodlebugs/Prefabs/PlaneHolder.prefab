@@ -143,6 +143,7 @@ GameObject:
   - component: {fileID: 2188902042656179623}
   - component: {fileID: 7658229749847302818}
   - component: {fileID: 1299583055293810430}
+  - component: {fileID: -1163544380385501550}
   m_Layer: 0
   m_Name: PlaneHolder
   m_TagString: Player
@@ -493,6 +494,28 @@ MonoBehaviour:
   sparkleColor: {r: 1, g: 0.85, b: 0, a: 1}
   planeRenderer: {fileID: 8201192011639502119}
   flashDuration: 0.2
+--- !u!114 &-1163544380385501550
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3958523845536406060}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e7fc51fcedf7449c5a4908392424ddac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlaneStats
+  NetShield:
+    m_InternalValue: 3
+  NetHealth:
+    m_InternalValue: 3
+  NetHandling:
+    m_InternalValue: 1
+  NetDamageMultiplier:
+    m_InternalValue: 1
+  NetInvulnerable:
+    m_InternalValue: 0
 --- !u!1 &6352380591613834099
 GameObject:
   m_ObjectHideFlags: 0
