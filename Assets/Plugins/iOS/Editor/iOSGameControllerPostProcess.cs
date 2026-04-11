@@ -1,3 +1,4 @@
+#if UNITY_IOS
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEditor.iOS.Xcode;
@@ -54,3 +55,4 @@ public class iOSGameControllerPostProcess
         UnityEngine.Debug.Log("[iOSGameControllerPostProcess] Added Game Controller support to iOS build");
     }
 }
+#endif
