@@ -23,6 +23,7 @@ public class ForegroundScroller : MonoBehaviour
 
     private float _scrollSpeed;
     private float _spriteWorldWidth;
+    private float _spriteBoundsMinX; // world-space offset from transform.position to left edge
     private bool _active;
 
     // Epoch for deterministic absolute positioning (synced via ServerTime)
@@ -62,14 +63,17 @@ public class ForegroundScroller : MonoBehaviour
 
         _scrollSpeed = scrollSpeed;
         _spriteWorldWidth = sprite.bounds.size.x * scale;
+        _spriteBoundsMinX = sprite.bounds.min.x * scale; // pivot-relative left edge offset
 
         spriteA.transform.localScale = Vector3.one * scale;
         spriteB.transform.localScale = Vector3.one * scale;
 
-        // Position SpriteA so its left edge aligns with camera left edge
+        // Position SpriteA so its left edge aligns with camera left edge.
+        // transform.position is at the sprite's pivot, so we subtract the
+        // left-edge offset to place the left edge exactly at camLeft.
         float camLeft = Camera.main.transform.position.x
             - Camera.main.orthographicSize * Camera.main.aspect;
-        float startX = camLeft + _spriteWorldWidth / 2f;
+        float startX = camLeft - _spriteBoundsMinX;
         spriteA.transform.position = new Vector3(startX, yPosition, 0f);
         spriteB.transform.position = new Vector3(startX + _spriteWorldWidth, yPosition, 0f);
 
@@ -115,12 +119,12 @@ public class ForegroundScroller : MonoBehaviour
 
     private void WrapIfNeeded(SpriteRenderer moving, SpriteRenderer other, float camLeft)
     {
-        float rightEdge = moving.transform.position.x + _spriteWorldWidth / 2f;
+        float rightEdge = moving.transform.position.x + _spriteBoundsMinX + _spriteWorldWidth;
         if (rightEdge < camLeft)
         {
-            float otherRightEdge = other.transform.position.x + _spriteWorldWidth / 2f;
+            float otherRightEdge = other.transform.position.x + _spriteBoundsMinX + _spriteWorldWidth;
             moving.transform.position = new Vector3(
-                otherRightEdge + _spriteWorldWidth / 2f,
+                otherRightEdge - _spriteBoundsMinX,
                 moving.transform.position.y,
                 0f
             );
