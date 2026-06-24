@@ -18,13 +18,22 @@ namespace Doodlebugs.Editor
             PlistDocument plist = new PlistDocument();
             plist.ReadFromFile(plistPath);
 
-            // Add local network usage description for UDP discovery
+            // Add local network usage description for UDP discovery + Multipeer
             plist.root.SetString("NSLocalNetworkUsageDescription",
-                "This app uses local network to find nearby players for multiplayer games.");
+                "This app uses the local network and nearby devices to find players for multiplayer games.");
 
-            // Add Bonjour services for discovery
+            // Bluetooth usage descriptions — Multipeer Connectivity (mobile-data fallback)
+            // links nearby devices over Bluetooth when no shared Wi-Fi is available.
+            plist.root.SetString("NSBluetoothAlwaysUsageDescription",
+                "This app uses Bluetooth to connect to nearby players for local multiplayer.");
+            plist.root.SetString("NSBluetoothPeripheralUsageDescription",
+                "This app uses Bluetooth to connect to nearby players for local multiplayer.");
+
+            // Bonjour services for discovery — UDP (LAN) + Multipeer (_tcp/_udp).
+            // The "doodlebugs" service type must match NativeLocalCoopManager.SERVICE_TYPE.
             var bonjourServices = plist.root.CreateArray("NSBonjourServices");
             bonjourServices.AddString("_doodlebugs._udp");
+            bonjourServices.AddString("_doodlebugs._tcp");
 
             plist.WriteToFile(plistPath);
         }

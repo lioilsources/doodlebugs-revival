@@ -15,6 +15,17 @@ namespace Doodlebugs.Network
         Disconnected
     }
 
+    /// <summary>
+    /// Which local-coop discovery/transport stack is in use.
+    ///   Lan       — UDP broadcast + UnityTransport (same Wi-Fi). Default.
+    ///   NativeP2P — iOS Multipeer / Android Nearby fallback used on mobile data.
+    /// </summary>
+    public enum LocalCoopMode
+    {
+        Lan,
+        NativeP2P
+    }
+
     public class ConnectionManager : MonoBehaviour
     {
         public static ConnectionManager Instance { get; private set; }
@@ -25,7 +36,28 @@ namespace Doodlebugs.Network
         public event Action<ConnectionState> OnStateChanged;
         public event Action<string> OnStatusMessage;
 
-        private const int MAX_PLAYERS = 20;  // 4 local on desktop host + 16 remote clients (LAN party limit)
+        private const int MAX_PLAYERS = 20;         // LAN: 4 local on desktop host + 16 remote clients
+        private const int MAX_PLAYERS_NATIVE = 8;   // Mobile-data native fallback limit
+
+        private LocalCoopMode _mode = LocalCoopMode.Lan;
+        private NativeLocalCoopManager _native;
+
+        private int MaxPlayers => _mode == LocalCoopMode.NativeP2P ? MAX_PLAYERS_NATIVE : MAX_PLAYERS;
+
+        private static bool IsMobile => Application.platform == RuntimePlatform.Android ||
+                                        Application.platform == RuntimePlatform.IPhonePlayer;
+
+        // Native P2P fallback only when on mobile (Android/iOS) AND on carrier data.
+        // On Wi-Fi we keep the existing UDP broadcast path unchanged.
+        private LocalCoopMode DetermineMode()
+        {
+            if (IsMobile &&
+                Application.internetReachability == NetworkReachability.ReachableViaCarrierDataNetwork)
+            {
+                return LocalCoopMode.NativeP2P;
+            }
+            return LocalCoopMode.Lan;
+        }
 
         private void Awake()
         {
@@ -45,18 +77,25 @@ namespace Doodlebugs.Network
 
         private void Start()
         {
-            // Subscribe to discovery events
+            // Subscribe to network events (both paths need these)
+            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+            NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+
+            _mode = DetermineMode();
+            Debug.Log($"[ConnectionManager] LocalCoopMode = {_mode} (reachability={Application.internetReachability})");
+
+            if (_mode == LocalCoopMode.NativeP2P)
+            {
+                StartNativeP2P();
+                return;
+            }
+
+            // LAN path (unchanged): subscribe to UDP discovery events and start it.
             if (_discovery != null)
             {
                 _discovery.OnServerFound += OnServerFound;
                 _discovery.OnDiscoveryTimeout += OnDiscoveryTimeout;
             }
-
-            // Subscribe to network events
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-            NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
-
-            // Auto-start discovery
             StartDiscovery();
         }
 
@@ -69,6 +108,16 @@ namespace Doodlebugs.Network
             {
                 _discovery.OnServerFound -= OnServerFound;
                 _discovery.OnDiscoveryTimeout -= OnDiscoveryTimeout;
+            }
+
+            // Tear down native fallback if it was in use
+            if (_native != null)
+            {
+                _native.OnBecomeHost -= NativeBecomeHost;
+                _native.OnBecomeClient -= NativeBecomeClient;
+                _native.OnStatus -= SetStatus;
+                _native.OnResetNetworking -= NativeResetNetworking;
+                _native.Stop();
             }
 
             // Shutdown network to release port
@@ -182,6 +231,75 @@ namespace Doodlebugs.Network
 
         #endregion
 
+        #region Native P2P Fallback (mobile data)
+
+        private void StartNativeP2P()
+        {
+            SetState(ConnectionState.Searching);
+
+            // Orchestrator + transport live on a child object; RequireComponent
+            // adds the NativeLocalTransport automatically.
+            var go = new GameObject("NativeLocalCoop");
+            go.transform.SetParent(transform);
+            _native = go.AddComponent<NativeLocalCoopManager>();
+
+            _native.OnBecomeHost += NativeBecomeHost;
+            _native.OnBecomeClient += NativeBecomeClient;
+            _native.OnStatus += SetStatus;
+            _native.OnResetNetworking += NativeResetNetworking;
+
+            _native.Begin();
+        }
+
+        // Invoked synchronously by the orchestrator when no lobby was found.
+        private void NativeBecomeHost()
+        {
+            SetState(ConnectionState.WaitingForOpponent);
+
+            NetworkManager.Singleton.NetworkConfig.NetworkTransport = _native.Transport;
+            NetworkManager.Singleton.ConnectionApprovalCallback = ApproveConnection;
+            NetworkManager.Singleton.StartHost();
+
+            BackgroundManager.Instance?.SelectRandomBackground();
+            LocalPlayerManager.Instance?.OnHostStarted();
+
+            Debug.Log("[ConnectionManager] Native host started");
+        }
+
+        // Invoked synchronously by the orchestrator when an existing lobby was found.
+        private void NativeBecomeClient(string hostPeerId)
+        {
+            SetState(ConnectionState.Connecting);
+
+            NetworkManager.Singleton.NetworkConfig.NetworkTransport = _native.Transport;
+            NetworkManager.Singleton.StartClient();
+
+            Debug.Log($"[ConnectionManager] Native client started, host={hostPeerId}");
+        }
+
+        // Split-brain yield: shut down the half-started host so the orchestrator can
+        // restart this device as a client of the surviving host.
+        private void NativeResetNetworking()
+        {
+            if (NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer)
+            {
+                NetworkManager.Singleton.Shutdown();
+            }
+        }
+
+        // Restart the native discovery flow after losing the host (mobile-data path).
+        private void NativeRestartDiscovery()
+        {
+            if (NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer)
+            {
+                NetworkManager.Singleton.Shutdown();
+            }
+            _native?.Stop();
+            _native?.Begin();
+        }
+
+        #endregion
+
         #region Network Callbacks
 
         private void ApproveConnection(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response)
@@ -190,11 +308,11 @@ namespace Doodlebugs.Network
 
             int currentPlayers = NetworkManager.Singleton.ConnectedClientsIds.Count;
 
-            if (currentPlayers >= MAX_PLAYERS)
+            if (currentPlayers >= MaxPlayers)
             {
                 response.Approved = false;
                 response.Reason = "Game is full";
-                Debug.Log("[ConnectionManager] Connection rejected - game full");
+                Debug.Log($"[ConnectionManager] Connection rejected - game full ({currentPlayers}/{MaxPlayers})");
             }
             else
             {
@@ -227,18 +345,20 @@ namespace Doodlebugs.Network
                 // LocalPlayerManager.OnHostStarted() is called directly after StartHost()
                 // No need to call it here anymore
 
-                if (playerCount >= MAX_PLAYERS)
+                if (playerCount >= MaxPlayers)
                 {
-                    // Stop broadcasting when game is full
-                    _discovery?.StopBroadcast();
+                    // Stop advertising the lobby when it is full
+                    if (_mode == LocalCoopMode.NativeP2P) _native?.StopAdvertisingLobby();
+                    else _discovery?.StopBroadcast();
+
                     SetState(ConnectionState.Connected);
                     SetStatus("Game starting!");
                 }
-                else
+                else if (_mode == LocalCoopMode.Lan)
                 {
-                    // Update broadcast with current player count
+                    // Update broadcast with current player count (native keeps advertising as-is)
                     _discovery?.StopBroadcast();
-                    _discovery?.StartBroadcast(playerCount, MAX_PLAYERS);
+                    _discovery?.StartBroadcast(playerCount, MaxPlayers);
                 }
             }
             else if (NetworkManager.Singleton.IsClient && clientId == NetworkManager.Singleton.LocalClientId)
@@ -262,14 +382,22 @@ namespace Doodlebugs.Network
 
             if (NetworkManager.Singleton.IsHost)
             {
-                // Another player left, restart broadcasting
+                // Another player left, reopen the lobby for new joiners
                 int playerCount = NetworkManager.Singleton.ConnectedClientsIds.Count;
-                if (playerCount < MAX_PLAYERS)
+                if (playerCount < MaxPlayers)
                 {
                     SetState(ConnectionState.WaitingForOpponent);
                     SetStatus("Opponent left. Waiting for new opponent...");
-                    _discovery?.StopBroadcast();
-                    _discovery?.StartBroadcast(playerCount, MAX_PLAYERS);
+
+                    if (_mode == LocalCoopMode.NativeP2P)
+                    {
+                        _native?.StartAdvertisingLobby();
+                    }
+                    else
+                    {
+                        _discovery?.StopBroadcast();
+                        _discovery?.StartBroadcast(playerCount, MaxPlayers);
+                    }
                 }
             }
             else
@@ -279,7 +407,10 @@ namespace Doodlebugs.Network
                 SetStatus("Host disconnected");
 
                 // Restart discovery after a short delay
-                Invoke(nameof(RestartDiscovery), 2f);
+                if (_mode == LocalCoopMode.NativeP2P)
+                    Invoke(nameof(NativeRestartDiscovery), 2f);
+                else
+                    Invoke(nameof(RestartDiscovery), 2f);
             }
         }
 
