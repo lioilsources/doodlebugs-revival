@@ -1,0 +1,55 @@
+// Unity Android main gradle template.
+// Added for the mobile-data local co-op fallback: the Google Nearby Connections
+// dependency required by DoodlebugsNearby.java.
+//
+// NOTE: Enable "Custom Main Gradle Template" under
+// Player Settings > Publishing Settings so Unity uses this file. If your Unity
+// version regenerates a different template, re-add the single Nearby line below.
+apply plugin: 'com.android.library'
+**APPLY_PLUGINS**
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    // Local co-op mobile-data fallback (DoodlebugsNearby.java)
+    implementation 'com.google.android.gms:play-services-nearby:19.3.0'
+    // AndroidX annotations used by the Nearby helper
+    implementation 'androidx.annotation:annotation:1.7.1'
+**DEPS**}
+
+android {
+    namespace "com.unity3d.player"
+    ndkPath "**NDKPATH**"
+
+    compileSdkVersion **APIVERSION**
+    buildToolsVersion "**BUILDTOOLS**"
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        minSdkVersion **MINSDKVERSION**
+        targetSdkVersion **TARGETSDKVERSION**
+        ndk {
+            abiFilters **ABIFILTERS**
+        }
+        versionCode **VERSIONCODE**
+        versionName '**VERSIONNAME**'
+        consumerProguardFiles 'proguard-unity.txt'**USER_PROGUARD**
+    }
+
+    lintOptions {
+        abortOnError false
+    }
+
+    aaptOptions {
+        noCompress = **BUILTIN_NOCOMPRESS** + unityStreamingAssets.tokenize(', ')
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
+**PACKAGING_OPTIONS**
+}
+**REPOSITORIES**
+**IL_CPP_BUILD_SETUP**
+**SOURCE_BUILD_SETUP**
+**EXTERNAL_SOURCES**
