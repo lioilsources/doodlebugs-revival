@@ -10,18 +10,21 @@ public class ForegroundTile : MonoBehaviour
     {
         if (!other.gameObject.CompareTag("Bullet")) return;
 
-        // Launch 4 cardinal neighbours as flying debris
-        int[,] offsets = { { 0, 1 }, { 0, -1 }, { -1, 0 }, { 1, 0 } };
+        // Destroy 2x2 square: hit tile + right + below + below-right
+        int[,] offsets = { { 0, 0 }, { 1, 0 }, { 0, -1 }, { 1, -1 } };
         for (int i = 0; i < 4; i++)
         {
-            var neighbor = transform.parent?.Find(
-                $"Tile_{Col + offsets[i, 0]}_{Row + offsets[i, 1]}");
+            int c = Col + offsets[i, 0];
+            int r = Row + offsets[i, 1];
+            if (i == 0)
+            {
+                LaunchDebris();
+                continue;
+            }
+            var neighbor = transform.parent?.Find($"Tile_{c}_{r}");
             if (neighbor != null && neighbor.gameObject.activeSelf)
                 neighbor.GetComponent<ForegroundTile>()?.LaunchDebris();
         }
-
-        // Hit tile itself simply disappears
-        gameObject.SetActive(false);
     }
 
     public void LaunchDebris()

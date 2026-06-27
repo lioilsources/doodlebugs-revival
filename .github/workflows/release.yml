@@ -32,6 +32,10 @@ concurrency:
 env:
   UNITY_VERSION: 6000.2.9f1
   BUILDS_PATH: build
+  # game-ci/unity-builder@v4 uses Node.js 20, which GitHub deprecated in Sept 2025.
+  # This flag keeps the action running while a Node.js 24 build is not yet available.
+  # The deprecation WARNING will still appear in logs — that is expected and harmless.
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
 
@@ -62,20 +66,31 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0   # full history needed for version detection
           lfs: true
 
       # The Library folder caches imported assets; skipping it costs ~10 min.
       - name: Cache Unity Library
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: Library
           key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
           restore-keys: |
             Library-${{ matrix.targetPlatform }}-
             Library-
+
+      - name: Compute version from tag
+        id: version
+        shell: bash
+        run: |
+          # Strip slash-prefixes (alpha/, beta/, release/) and a leading v so that
+          # tags like "alpha/0.0.6" or "v1.2.3" both yield a plain semver string.
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG##*/}"   # drop everything up to and including the last /
+          VERSION="${VERSION#v}" # drop a leading v if present
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build – ${{ matrix.targetPlatform }}
         uses: game-ci/unity-builder@v4
@@ -88,7 +103,8 @@ jobs:
           targetPlatform: ${{ matrix.targetPlatform }}
           buildName: ${{ matrix.artifactName }}
           buildsPath: ${{ env.BUILDS_PATH }}
-          versioning: Tag       # sets Application.version from the git tag
+          versioning: Custom
+          version: ${{ steps.version.outputs.version }}
 
       # ── Package each platform into a single distributable file ────────────
 
@@ -118,7 +134,7 @@ jobs:
           mv "$APK" "${{ matrix.artifactName }}.apk"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifactName }}
           path: ${{ matrix.artifactName }}${{ matrix.ext }}
@@ -138,19 +154,28 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           lfs: true
 
       - name: Cache Unity Library
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: Library
           key: Library-iOS-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
           restore-keys: |
             Library-iOS-
             Library-
+
+      - name: Compute version from tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG##*/}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build iOS Xcode project
         uses: game-ci/unity-builder@v4
@@ -163,7 +188,8 @@ jobs:
           targetPlatform: iOS
           buildName: doodlebugs-ios
           buildsPath: ${{ env.BUILDS_PATH }}
-          versioning: Tag
+          versioning: Custom
+          version: ${{ steps.version.outputs.version }}
 
       - name: Archive iOS app (unsigned)
         run: |
@@ -197,7 +223,7 @@ jobs:
           fi
 
       - name: Upload iOS artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: doodlebugs-ios
           path: |
@@ -218,7 +244,7 @@ jobs:
 
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
           merge-multiple: true   # flatten into a single directory
