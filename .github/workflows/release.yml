@@ -158,6 +158,16 @@ jobs:
           APK=$(find "${{ env.BUILDS_PATH }}/Android" -name "*.apk" | head -1)
           mv "$APK" "${{ matrix.artifactName }}.apk"
 
+      - name: Upload to Firebase App Distribution
+        if: matrix.targetPlatform == 'Android'
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          groups: testers
+          releaseNotes: "Doodlebugs Revival ${{ github.ref_name }} (build ${{ github.run_number }})"
+          file: ${{ matrix.artifactName }}.apk
+
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
