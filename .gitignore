@@ -62,7 +62,9 @@ sysinfo.txt
 *.aab
 *.unitypackage
 iOS-Build/
+build-ios/
 macos-build.app/
+build-macos.app/
 Windows-Build/
 
 # Crashlytics generated file

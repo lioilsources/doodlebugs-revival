@@ -15,6 +15,8 @@ on:
       - 'beta/**'
 
 # Required secrets (Settings → Secrets and variables → Actions):
+#
+# Unity (required for all builds):
 #   UNITY_LICENSE   – XML content of the Unity license file
 #   UNITY_EMAIL     – Unity account e-mail
 #   UNITY_PASSWORD  – Unity account password
@@ -24,18 +26,37 @@ on:
 #      (game-ci/unity-request-activation-file) and download the .alf file.
 #   2. Upload it at https://license.unity3d.com and download the .ulf file.
 #   3. Paste the .ulf file contents into the UNITY_LICENSE secret.
+#
+# Android signing (required for Google Play):
+#   ANDROID_KEYSTORE_BASE64    – base64-encoded upload keystore (.jks)
+#   ANDROID_KEYSTORE_PASSWORD  – keystore password
+#   ANDROID_KEY_ALIAS          – key alias inside the keystore
+#   ANDROID_KEY_PASSWORD       – key password
+#
+# iOS signing + TestFlight (required for App Store / TestFlight):
+#   IOS_P12_BASE64                  – base64-encoded distribution certificate (.p12)
+#   IOS_P12_PASSWORD                – P12 password
+#   IOS_KEYCHAIN_PASSWORD           – ephemeral keychain password (any string)
+#   IOS_TEAM_ID                     – Apple Developer Team ID
+#   IOS_PROVISION_PROFILE_BASE64    – base64-encoded App Store provisioning profile
+#   APPSTORE_API_KEY_ID             – App Store Connect API key ID
+#   APPSTORE_ISSUER_ID              – App Store Connect issuer ID
+#   APPSTORE_API_PRIVATE_KEY        – App Store Connect API private key (.p8 contents)
+#
+# Use Distribution/scripts/setup-gh-secrets.sh to populate all secrets automatically.
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false        # never cancel a running release
 
 env:
-  UNITY_VERSION: 6000.2.9f1
+  UNITY_VERSION: 6000.3.13f1
   BUILDS_PATH: build
   # game-ci/unity-builder@v4 uses Node.js 20, which GitHub deprecated in Sept 2025.
   # This flag keeps the action running while a Node.js 24 build is not yet available.
   # The deprecation WARNING will still appear in logs — that is expected and harmless.
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  BUNDLE_ID_IOS: com.ol1n.doodlebugsRevival   # must match Unity Player Settings → iOS Bundle Identifier
 
 jobs:
 
@@ -105,6 +126,10 @@ jobs:
           buildsPath: ${{ env.BUILDS_PATH }}
           versioning: Custom
           version: ${{ steps.version.outputs.version }}
+          androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          androidKeyaliasName: ${{ secrets.ANDROID_KEY_ALIAS }}
+          androidKeyaliasPass: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       # ── Package each platform into a single distributable file ────────────
 
@@ -141,13 +166,11 @@ jobs:
           retention-days: 7
 
   # ──────────────────────────────────────────────────────────────────────────
-  # iOS build
-  # Unity → Xcode project; xcodebuild → unsigned .ipa
-  # Requires macOS runner; game-ci installs Unity via Unity Hub.
-  # NOTE: for a signed IPA suitable for TestFlight/App Store, add
-  #   APPLE_TEAM_ID, IOS_CERTIFICATE_BASE64, IOS_PROVISIONING_PROFILE_BASE64,
-  #   and IOS_CERTIFICATE_PASSWORD secrets, then replace the unsigned archive
-  #   step below with a proper export-options-plist based export.
+  # iOS build → signed IPA → TestFlight
+  # Unity → Xcode project; xcodebuild → signed .ipa via App Store export.
+  # Requires: IOS_P12_BASE64, IOS_P12_PASSWORD, IOS_KEYCHAIN_PASSWORD,
+  #           IOS_TEAM_ID, IOS_PROVISION_PROFILE_BASE64,
+  #           APPSTORE_API_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_API_PRIVATE_KEY
   # ──────────────────────────────────────────────────────────────────────────
   build-ios:
     name: Build / iOS
@@ -191,7 +214,37 @@ jobs:
           versioning: Custom
           version: ${{ steps.version.outputs.version }}
 
-      - name: Archive iOS app (unsigned)
+      - name: Import signing certificate
+        env:
+          IOS_P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+        run: |
+          echo -n "$IOS_P12_BASE64" | base64 --decode > signing.p12
+          security create-keychain -p "$IOS_KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$IOS_KEYCHAIN_PASSWORD" build.keychain
+          security import signing.p12 -k build.keychain -P "$IOS_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$IOS_KEYCHAIN_PASSWORD" build.keychain
+          rm signing.p12
+
+      - name: Install provisioning profile
+        env:
+          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo -n "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > profile.mobileprovision
+          DECODED=$(security cms -D -i profile.mobileprovision)
+          PROFILE_UUID=$(echo "$DECODED" | plutil -extract UUID raw -)
+          PROFILE_NAME=$(echo "$DECODED" | plutil -extract Name raw -)
+          PROFILE_TEAM_ID=$(echo "$DECODED" | plutil -extract TeamIdentifier.0 raw -)
+          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/${PROFILE_UUID}.mobileprovision
+          echo "PROFILE_NAME=$PROFILE_NAME" >> $GITHUB_ENV
+          echo "PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+          echo "PROFILE_TEAM_ID=$PROFILE_TEAM_ID" >> $GITHUB_ENV
+          rm profile.mobileprovision
+
+      - name: Archive iOS app
         run: |
           XCODE_PROJECT="${{ env.BUILDS_PATH }}/iOS/doodlebugs-ios/Unity-iPhone.xcodeproj"
           xcodebuild archive \
@@ -200,35 +253,63 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -archivePath "${{ env.BUILDS_PATH }}/doodlebugs.xcarchive" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" \
-            2>&1 | tail -50
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE="$PROFILE_UUID" \
+            DEVELOPMENT_TEAM="$PROFILE_TEAM_ID"
 
-      - name: Export unsigned IPA
+      - name: Export signed IPA
         run: |
-          # An .ipa is just a zip with a Payload/<App>.app directory inside.
-          APP=$(find "${{ env.BUILDS_PATH }}/doodlebugs.xcarchive/Products" -name "*.app" | head -1)
-          if [ -n "$APP" ]; then
-            mkdir -p Payload
-            cp -r "$APP" Payload/
-            zip -qr doodlebugs-ios.ipa Payload/
-            echo "✓ IPA created from archive"
-          else
-            # Fallback: ship the raw Xcode project so devs can build locally
-            echo "App not found in archive – packaging Xcode project instead"
-            cd "${{ env.BUILDS_PATH }}/iOS"
-            zip -r ../../doodlebugs-ios-xcode.zip .
-          fi
+          cat > ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>teamID</key>
+              <string>${PROFILE_TEAM_ID}</string>
+              <key>compileBitcode</key>
+              <false/>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>${{ env.BUNDLE_ID_IOS }}</key>
+                  <string>${{ env.PROFILE_NAME }}</string>
+              </dict>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "${{ env.BUILDS_PATH }}/doodlebugs.xcarchive" \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath ipa_output
+          cp ipa_output/*.ipa doodlebugs-ios.ipa
+
+      - name: Upload to TestFlight
+        env:
+          APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$APPSTORE_API_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${APPSTORE_API_KEY_ID}.p8
+          xcrun altool --upload-app \
+            --type ios \
+            --file doodlebugs-ios.ipa \
+            --apiKey "$APPSTORE_API_KEY_ID" \
+            --apiIssuer "$APPSTORE_ISSUER_ID"
+          rm -f ~/.appstoreconnect/private_keys/AuthKey_${APPSTORE_API_KEY_ID}.p8
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain build.keychain 2>/dev/null || true
 
       - name: Upload iOS artifact
         uses: actions/upload-artifact@v6
         with:
           name: doodlebugs-ios
-          path: |
-            doodlebugs-ios.ipa
-            doodlebugs-ios-xcode.zip
+          path: doodlebugs-ios.ipa
           if-no-files-found: warn
           retention-days: 7
 
@@ -290,9 +371,8 @@ jobs:
             | Linux (x64) | `doodlebugs-linux-x64.tar.gz` |
             | macOS | `doodlebugs-macos.zip` |
             | Android | `doodlebugs-android.apk` |
-            | iOS (unsigned) | `doodlebugs-ios.ipa` |
+            | iOS | `doodlebugs-ios.ipa` (also uploaded to TestFlight) |
 
-            > **iOS:** The IPA is unsigned. Install via [AltStore](https://altstore.io) or sideloading.
             > **Android:** Enable *Install from unknown sources* before installing the APK.
 
             ---

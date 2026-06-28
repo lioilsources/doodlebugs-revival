@@ -32,7 +32,7 @@ jobs:
         id: alf
         uses: game-ci/unity-request-activation-file@v2
         with:
-          unityVersion: 6000.2.9f1
+          unityVersion: 6000.3.13f1
 
       - name: Upload .alf as artifact
         uses: actions/upload-artifact@v6
