@@ -167,9 +167,9 @@ PlayerSettings:
   androidMaxAspectRatio: 2.1
   androidMinAspectRatio: 1
   applicationIdentifier:
-    Android: com.lioilGamesCompany.DoodlebugsRevival
+    Android: com.ol1n.doodlebugsRevival
     Standalone: com.lioil-Games-Company.Doodlebugs-Revival
-    iPhone: com.lioil-Games-Company.Doodlebugs-Revival
+    iPhone: com.ol1n.doodlebugsRevival
   buildNumber:
     Bratwurst: 0
     Standalone: 0
