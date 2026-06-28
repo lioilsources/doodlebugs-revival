@@ -126,10 +126,6 @@ jobs:
           buildsPath: ${{ env.BUILDS_PATH }}
           versioning: Custom
           version: ${{ steps.version.outputs.version }}
-          androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          androidKeyaliasName: ${{ secrets.ANDROID_KEY_ALIAS }}
-          androidKeyaliasPass: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       # ── Package each platform into a single distributable file ────────────
 
@@ -152,11 +148,24 @@ jobs:
           cd "${{ env.BUILDS_PATH }}/StandaloneOSX"
           zip -r "../../${{ matrix.artifactName }}.zip" .
 
-      - name: Package – Android APK
+      - name: Sign & Package – Android APK
         if: matrix.targetPlatform == 'Android'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           APK=$(find "${{ env.BUILDS_PATH }}/Android" -name "*.apk" | head -1)
-          mv "$APK" "${{ matrix.artifactName }}.apk"
+          echo -n "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode --ignore-garbage > /tmp/release.keystore
+          $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner sign \
+            --ks /tmp/release.keystore \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$KEYSTORE_PASSWORD" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --out "${{ matrix.artifactName }}.apk" \
+            "$APK"
+          rm /tmp/release.keystore
 
       - name: Upload to Firebase App Distribution
         if: matrix.targetPlatform == 'Android'
