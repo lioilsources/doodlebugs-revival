@@ -148,6 +148,13 @@ jobs:
           cd "${{ env.BUILDS_PATH }}/StandaloneOSX"
           zip -r "../../${{ matrix.artifactName }}.zip" .
 
+      - name: Set up JDK 21 for Android signing
+        if: matrix.targetPlatform == 'Android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Sign & Package – Android APK
         if: matrix.targetPlatform == 'Android'
         env:
