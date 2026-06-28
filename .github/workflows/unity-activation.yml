@@ -8,7 +8,7 @@ name: Unity – Request Activation File
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │  1. GitHub → Actions → "Unity – Request Activation File" → Run workflow │
 # │  2. Wait for the job to finish, then download the artifact              │
-# │     "Unity_<version>_<platform>.alf"                                   │
+# │     "Unity_v6000.3.13f1_...alf"                                        │
 # │  3. Open https://license.unity3d.com/manual                            │
 # │     Upload the .alf file → download the returned .ulf file             │
 # │  4. GitHub → Settings → Secrets and variables → Actions                │
@@ -18,9 +18,16 @@ name: Unity – Request Activation File
 # │       UNITY_PASSWORD ← your Unity account password                     │
 # │  5. The release.yml workflow can now build successfully.                │
 # └─────────────────────────────────────────────────────────────────────────┘
+#
+# ALTERNATIVE — create the .alf locally (faster, no Docker pull):
+#   /Applications/Unity/Hub/Editor/6000.3.13f1/Unity.app/Contents/MacOS/Unity \
+#     -quit -nographics -batchmode \
+#     -createManualActivationFile \
+#     -logfile /tmp/unity-activation.log
+#   → .alf file appears in current directory
 
 on:
-  workflow_dispatch:   # manual trigger only — never runs automatically
+  workflow_dispatch:
 
 jobs:
   activation:
@@ -28,15 +35,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Request .alf activation file
-        id: alf
-        uses: game-ci/unity-request-activation-file@v2
-        with:
-          unityVersion: 6000.3.13f1
+      - name: Generate .alf activation file via Unity Docker
+        run: |
+          docker run --rm \
+            -v "$(pwd)":/project \
+            unityci/editor:ubuntu-6000.3.13f1-base-3 \
+            unity-editor \
+              -batchmode -nographics -quit \
+              -createManualActivationFile \
+              -logfile /dev/stdout \
+            || true
+          ALF=$(ls Unity_v*.alf 2>/dev/null | head -1)
+          if [[ -z "$ALF" ]]; then
+            echo "ERROR: No .alf file generated. Check logs above."
+            exit 1
+          fi
+          echo "Generated: $ALF"
 
       - name: Upload .alf as artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.alf.outputs.filePath }}
-          path: ${{ steps.alf.outputs.filePath }}
-          retention-days: 1   # sensitive file — keep for 1 day only
+          name: unity-activation-file
+          path: Unity_v*.alf
+          retention-days: 1
