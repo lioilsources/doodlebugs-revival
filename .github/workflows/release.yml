@@ -148,13 +148,6 @@ jobs:
           cd "${{ env.BUILDS_PATH }}/StandaloneOSX"
           zip -r "../../${{ matrix.artifactName }}.zip" .
 
-      - name: Set up JDK 21 for Android signing
-        if: matrix.targetPlatform == 'Android'
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
       - name: Sign & Package – Android APK
         if: matrix.targetPlatform == 'Android'
         env:
@@ -164,15 +157,26 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           APK=$(find "${{ env.BUILDS_PATH }}/Android" -name "*.apk" | head -1)
-          echo -n "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode --ignore-garbage > /tmp/release.keystore
-          $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner sign \
-            --ks /tmp/release.keystore \
-            --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass "pass:$KEYSTORE_PASSWORD" \
-            --key-pass "pass:$KEY_PASSWORD" \
+          echo -n "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode --ignore-garbage > /tmp/release.p12
+
+          # Java's DerValue can't parse PKCS12 files that use ASN.1 tag numbers > 30
+          # (a known limitation that persists even in JDK 21). OpenSSL 3.x handles any
+          # PKCS12 variant, so we extract key + cert to PEM and pass them to apksigner
+          # directly via --key/--cert, bypassing Java's KeyStore parser entirely.
+          openssl pkcs12 -in /tmp/release.p12 -nocerts -nodes \
+            -passin "pass:$KEYSTORE_PASSWORD" 2>/dev/null | \
+            openssl pkcs8 -topk8 -nocrypt > /tmp/signing_key.pem
+          openssl pkcs12 -in /tmp/release.p12 -nokeys -clcerts \
+            -passin "pass:$KEYSTORE_PASSWORD" -out /tmp/signing_cert.pem 2>/dev/null
+
+          APKSIGNER=$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner
+          "$APKSIGNER" sign \
+            --key /tmp/signing_key.pem \
+            --cert /tmp/signing_cert.pem \
             --out "${{ matrix.artifactName }}.apk" \
             "$APK"
-          rm /tmp/release.keystore
+
+          rm /tmp/release.p12 /tmp/signing_key.pem /tmp/signing_cert.pem
 
       - name: Upload to Firebase App Distribution
         if: matrix.targetPlatform == 'Android'
@@ -200,7 +204,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   build-ios:
     name: Build / iOS
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
