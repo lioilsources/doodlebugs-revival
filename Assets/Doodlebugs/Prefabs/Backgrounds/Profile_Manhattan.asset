@@ -17,5 +17,5 @@ MonoBehaviour:
   foregroundSprite: {fileID: -3059806825578954271, guid: 18018aa65f0b745d5a1ec57ef48c5e5a,
     type: 3}
   foregroundScrollSpeed: -2
-  foregroundYPosition: -8
+  foregroundBottomOffset: 0
   foregroundScale: 1

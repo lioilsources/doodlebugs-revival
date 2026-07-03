@@ -67,7 +67,7 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 | `Scripts/Network/ConnectionManager.cs` | Host/client connect flow |
 | `Scripts/Input/` | Multi-platform input (desktop/gamepad/gyro/touch) |
 | `Scripts/Camera/` | Dynamic screen size, boundaries |
-| `Scripts/ForegroundScroller.cs` | Infinite parallax scroll (two sprite copies, loops left) |
+| `Scripts/ForegroundScroller.cs` | Infinite parallax scroll (N sprite copies, loops left) |
 | `Scripts/ForegroundTile.cs` | Single destructible tile — disappears on bullet hit |
 | `Scripts/ForegroundSpriteGenerator.cs` | Generates placeholder foreground sprite at runtime from alpha |
 
@@ -82,12 +82,44 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 
 ## Foreground / Parallax Destruction Layer
 
-- Foreground scrolls infinitely left via `ForegroundScroller` (two sprite copies swapped)
+- Foreground scrolls infinitely left via `ForegroundScroller` using N sprite copies,
+  N = ceil(cameraWidth / spriteWidth) + 1, so the wrap/heal always happens off-screen
+- Foreground bottom edge is anchored to the bottom of the visible screen via
+  `BackgroundProfile.foregroundBottomOffset` (0 = flush with screen bottom)
 - Each background has its own foreground sprite; tiles are 100×100 px
 - Planes fly **behind** the foreground (render order), bullets collide with it
 - On bullet hit: `ForegroundTile` destroys itself (local, non-networked — visual only)
 - Colliders are `BoxCollider2D` auto-generated per tile from sprite alpha
 - `ForegroundSpriteGenerator` creates a runtime silhouette if no sprite is assigned
+
+**Art asset sizes:**
+- Background: 4096×4096 px; `ScreenSetup` stretches it to exactly fill the camera,
+  so screen bottom == background bottom
+- Foreground: strip 4096 px wide @ PPU 100 = 40.96 world units; height in px = ground
+  height (100 px = 1 world unit). Camera always shows 54 world units of width
+  (`CameraAspectHandler.minVisibleWidth`), so 3 copies exist at runtime
+- Foreground textures **must have Read/Write enabled** (tile splitting reads pixels)
+- If `maxTextureSize` downscales the texture, the code compensates via `ppuScale`,
+  but tiles get coarser in world units
+
+## LAN Discovery / Platform Notes
+
+- Flow: every instance listens for UDP broadcasts on port 47777 (5 s desktop / 10 s
+  mobile) → on timeout it becomes host, broadcasts once per second, game runs on
+  UDP 7777. First device to give up searching hosts; everyone else joins.
+- Broadcast goes to the subnet-directed address computed from the interface netmask
+  (works on non-/24 nets like iPhone hotspot) plus 255.255.255.255 as fallback.
+- Own broadcasts are filtered by a per-process `instanceId` (not by IP), so
+  ParrelSync clones on one machine can discover each other.
+- **iOS:** `iOSLocalNetworkPostProcess` auto-adds `NSLocalNetworkUsageDescription`
+  at build time. UDP broadcast on iOS 14+ additionally needs the Apple-granted
+  `com.apple.developer.networking.multicast` entitlement — flip
+  `AddMulticastEntitlement` in that file to true once Apple grants it
+  (request: https://developer.apple.com/contact/request/networking-multicast).
+  Without it, iOS devices may not pair over broadcast even after the user accepts
+  the local-network prompt.
+- **Android:** `NetworkDiscovery` acquires a `WifiManager.MulticastLock` while
+  listening (many devices drop inbound broadcasts without it) and releases it after.
 
 ## Known Issues
 

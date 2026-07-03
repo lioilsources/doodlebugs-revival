@@ -13,8 +13,8 @@ public class BackgroundProfile : ScriptableObject
     [Tooltip("Scroll speed in world units/sec, negative = scroll left")]
     public float foregroundScrollSpeed = -2f;
 
-    [Tooltip("Y position of foreground in world space")]
-    public float foregroundYPosition = -8f;
+    [Tooltip("Offset of the foreground's bottom edge above the bottom of the visible screen, in world units. 0 = flush with screen bottom.")]
+    public float foregroundBottomOffset = 0f;
 
     [Tooltip("Scale of foreground sprite")]
     public float foregroundScale = 1f;

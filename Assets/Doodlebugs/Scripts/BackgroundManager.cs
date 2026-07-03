@@ -131,7 +131,7 @@ public class BackgroundManager : NetworkBehaviour
             ForegroundScroller.Instance.SetForeground(
                 profile.foregroundSprite,
                 profile.foregroundScrollSpeed,
-                profile.foregroundYPosition,
+                profile.foregroundBottomOffset,
                 profile.foregroundScale
             );
         }
