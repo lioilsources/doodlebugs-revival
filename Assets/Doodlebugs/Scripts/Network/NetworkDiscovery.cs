@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -16,6 +18,7 @@ namespace Doodlebugs.Network
         public int port;
         public int currentPlayers;
         public int maxPlayers;
+        public string instanceId;
     }
 
     public class NetworkDiscovery : MonoBehaviour
@@ -30,14 +33,23 @@ namespace Doodlebugs.Network
         private static bool IsMobile => Application.platform == RuntimePlatform.Android ||
                                         Application.platform == RuntimePlatform.IPhonePlayer;
 
+        // Identifies this process so we can filter our own broadcasts.
+        // IP comparison doesn't work: ParrelSync clones share the machine's IP.
+        private static readonly string InstanceId = Guid.NewGuid().ToString("N");
+
         public event Action<DiscoveryData> OnServerFound;
         public event Action OnDiscoveryTimeout;
 
         private UdpClient _broadcastClient;
         private UdpClient _listenClient;
-        private CancellationTokenSource _cancellationSource;
+        private CancellationTokenSource _broadcastCancellation;
+        private CancellationTokenSource _listenCancellation;
         private bool _isBroadcasting;
         private bool _isListening;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        private AndroidJavaObject _multicastLock;
+#endif
 
         public bool IsBroadcasting => _isBroadcasting;
         public bool IsListening => _isListening;
@@ -65,7 +77,7 @@ namespace Doodlebugs.Network
             if (_isBroadcasting) return;
 
             _isBroadcasting = true;
-            _cancellationSource = new CancellationTokenSource();
+            _broadcastCancellation = new CancellationTokenSource();
 
             string localIP = GetLocalIPAddress();
             Debug.Log($"[NetworkDiscovery] Starting broadcast on {localIP}:{GAME_PORT}");
@@ -76,10 +88,11 @@ namespace Doodlebugs.Network
                 hostAddress = localIP,
                 port = GAME_PORT,
                 currentPlayers = currentPlayers,
-                maxPlayers = maxPlayers
+                maxPlayers = maxPlayers,
+                instanceId = InstanceId
             };
 
-            _ = BroadcastLoopAsync(data, _cancellationSource.Token);
+            _ = BroadcastLoopAsync(data, _broadcastCancellation.Token);
         }
 
         public void StopBroadcast()
@@ -87,7 +100,9 @@ namespace Doodlebugs.Network
             if (!_isBroadcasting) return;
 
             _isBroadcasting = false;
-            _cancellationSource?.Cancel();
+            _broadcastCancellation?.Cancel();
+            _broadcastCancellation?.Dispose();
+            _broadcastCancellation = null;
             _broadcastClient?.Close();
             _broadcastClient = null;
 
@@ -100,31 +115,56 @@ namespace Doodlebugs.Network
             {
                 // Bind to local IP for better iOS compatibility
                 string localIP = GetLocalIPAddress();
-                var localEndpoint = new IPEndPoint(IPAddress.Parse(localIP), 0);
+                IPEndPoint localEndpoint;
+                if (localIP == "127.0.0.1")
+                {
+                    Debug.LogWarning("[NetworkDiscovery] No LAN IP found - binding to ANY; discovery may not work");
+                    localEndpoint = new IPEndPoint(IPAddress.Any, 0);
+                }
+                else
+                {
+                    localEndpoint = new IPEndPoint(IPAddress.Parse(localIP), 0);
+                }
 
                 _broadcastClient = new UdpClient(localEndpoint);
                 _broadcastClient.EnableBroadcast = true;
                 _broadcastClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Broadcast, 1);
 
-                // Use subnet broadcast address instead of 255.255.255.255 (more compatible with iOS)
-                var broadcastAddress = GetBroadcastAddress();
-                var endpoint = new IPEndPoint(broadcastAddress, BROADCAST_PORT);
+                // Send to the subnet-directed broadcast address (more compatible with iOS)
+                // AND to the limited broadcast address as a fallback for odd network setups
+                var endpoints = new List<IPEndPoint>
+                {
+                    new IPEndPoint(GetBroadcastAddress(), BROADCAST_PORT)
+                };
+                if (!endpoints[0].Address.Equals(IPAddress.Broadcast))
+                {
+                    endpoints.Add(new IPEndPoint(IPAddress.Broadcast, BROADCAST_PORT));
+                }
+
                 string json = JsonUtility.ToJson(data);
                 byte[] bytes = Encoding.UTF8.GetBytes(json);
 
-                Debug.Log($"[NetworkDiscovery] Broadcasting from {localIP} to {broadcastAddress}:{BROADCAST_PORT}");
+                Debug.Log($"[NetworkDiscovery] Broadcasting from {localIP} to {string.Join(", ", endpoints)}");
 
                 while (!token.IsCancellationRequested && _isBroadcasting)
                 {
-                    try
+                    bool anySent = false;
+                    foreach (var endpoint in endpoints)
                     {
-                        await _broadcastClient.SendAsync(bytes, bytes.Length, endpoint);
-                        Debug.Log($"[NetworkDiscovery] Broadcast sent: {json}");
+                        try
+                        {
+                            await _broadcastClient.SendAsync(bytes, bytes.Length, endpoint);
+                            anySent = true;
+                        }
+                        catch (Exception e)
+                        {
+                            Debug.LogWarning($"[NetworkDiscovery] Broadcast error to {endpoint}: {e.Message}");
+                        }
                     }
-                    catch (Exception e)
+
+                    if (!anySent)
                     {
-                        Debug.LogWarning($"[NetworkDiscovery] Broadcast error: {e.Message}");
-                        // Try to recreate the client on error
+                        // All sends failed - back off before retrying
                         await Task.Delay(1000, token);
                     }
 
@@ -150,10 +190,14 @@ namespace Doodlebugs.Network
             if (_isListening) return;
 
             _isListening = true;
-            _cancellationSource = new CancellationTokenSource();
+            _listenCancellation = new CancellationTokenSource();
+
+            // JNI must run on the main thread; the dispatcher also keeps
+            // acquire/release ordered when StopListening fires from the async loop
+            MainThreadDispatcher.Enqueue(AcquireMulticastLock);
 
             Debug.Log($"[NetworkDiscovery] Starting to listen for hosts on port {BROADCAST_PORT}, timeout={DiscoveryTimeout}s, isMobile={IsMobile}");
-            _ = ListenLoopAsync(_cancellationSource.Token);
+            _ = ListenLoopAsync(_listenCancellation.Token);
         }
 
         public void StopListening()
@@ -161,9 +205,13 @@ namespace Doodlebugs.Network
             if (!_isListening) return;
 
             _isListening = false;
-            _cancellationSource?.Cancel();
+            _listenCancellation?.Cancel();
+            _listenCancellation?.Dispose();
+            _listenCancellation = null;
             _listenClient?.Close();
             _listenClient = null;
+
+            MainThreadDispatcher.Enqueue(ReleaseMulticastLock);
 
             Debug.Log("[NetworkDiscovery] Stopped listening");
         }
@@ -204,14 +252,15 @@ namespace Doodlebugs.Network
 
                             Debug.Log($"[NetworkDiscovery] Received: {json} from {remoteEndpoint.Address}");
 
-                            // Ignore our own broadcasts
-                            if (remoteEndpoint.Address.ToString() == localIP)
+                            var data = JsonUtility.FromJson<DiscoveryData>(json);
+
+                            // Ignore our own broadcasts (matched by instance ID, not IP -
+                            // IP comparison breaks ParrelSync clones sharing one machine)
+                            if (!string.IsNullOrEmpty(data.instanceId) && data.instanceId == InstanceId)
                             {
                                 Debug.Log("[NetworkDiscovery] Ignoring own broadcast");
                                 continue;
                             }
-
-                            var data = JsonUtility.FromJson<DiscoveryData>(json);
 
                             // Use remote endpoint address if hostAddress is local
                             if (string.IsNullOrEmpty(data.hostAddress) ||
@@ -254,47 +303,163 @@ namespace Doodlebugs.Network
 
         #endregion
 
+        #region Android Multicast Lock
+
+        // Many Android devices drop inbound UDP broadcast/multicast at the WiFi
+        // driver level unless the app holds a WifiManager.MulticastLock.
+        // The CHANGE_WIFI_MULTICAST_STATE permission alone is not enough.
+
+        private void AcquireMulticastLock()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_multicastLock != null) return;
+            try
+            {
+                using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                using var context = activity.Call<AndroidJavaObject>("getApplicationContext");
+                using var wifiManager = context.Call<AndroidJavaObject>("getSystemService", "wifi");
+                _multicastLock = wifiManager.Call<AndroidJavaObject>("createMulticastLock", "DoodlebugsDiscovery");
+                _multicastLock.Call("setReferenceCounted", false);
+                _multicastLock.Call("acquire");
+                Debug.Log("[NetworkDiscovery] Android multicast lock acquired");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[NetworkDiscovery] Failed to acquire multicast lock: {e.Message}");
+            }
+#endif
+        }
+
+        private void ReleaseMulticastLock()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                if (_multicastLock != null && _multicastLock.Call<bool>("isHeld"))
+                {
+                    _multicastLock.Call("release");
+                }
+                _multicastLock?.Dispose();
+                _multicastLock = null;
+                Debug.Log("[NetworkDiscovery] Android multicast lock released");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[NetworkDiscovery] Failed to release multicast lock: {e.Message}");
+            }
+#endif
+        }
+
+        #endregion
+
         #region Utility
 
         private string GetLocalIPAddress()
         {
+            // 1) Route-based trick - works whenever a default route exists
+            //    (no packet is actually sent, so it also works offline)
             try
             {
                 using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
                 {
                     socket.Connect("8.8.8.8", 65530);
-                    IPEndPoint endPoint = socket.LocalEndPoint as IPEndPoint;
-                    return endPoint?.Address.ToString() ?? "127.0.0.1";
+                    if (socket.LocalEndPoint is IPEndPoint endPoint && !IPAddress.IsLoopback(endPoint.Address))
+                    {
+                        return endPoint.Address.ToString();
+                    }
                 }
             }
             catch
             {
-                // Fallback: try to find first valid IP
-                var host = Dns.GetHostEntry(Dns.GetHostName());
-                foreach (var ip in host.AddressList)
+                // No default route (e.g. offline LAN) - fall through to interface enumeration
+            }
+
+            // 2) Enumerate interfaces: prefer WiFi/Ethernet, skip loopback/down/link-local
+            try
+            {
+                string candidate = null;
+                string linkLocal = null;
+                foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
                 {
-                    if (ip.AddressFamily == AddressFamily.InterNetwork)
+                    if (nic.OperationalStatus != OperationalStatus.Up) continue;
+                    if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+
+                    bool preferred = nic.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ||
+                                     nic.NetworkInterfaceType == NetworkInterfaceType.Ethernet;
+
+                    foreach (var address in nic.GetIPProperties().UnicastAddresses)
                     {
-                        return ip.ToString();
+                        if (address.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                        if (IPAddress.IsLoopback(address.Address)) continue;
+
+                        string ip = address.Address.ToString();
+                        if (ip.StartsWith("169.254."))
+                        {
+                            linkLocal ??= ip;
+                            continue;
+                        }
+                        if (preferred) return ip;
+                        candidate ??= ip;
                     }
                 }
-                return "127.0.0.1";
+                if (candidate != null) return candidate;
+                if (linkLocal != null) return linkLocal;
             }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[NetworkDiscovery] Interface enumeration failed: {e.Message}");
+            }
+
+            return "127.0.0.1";
         }
 
-        // Calculate subnet broadcast address (e.g., 192.168.88.255 for 192.168.88.x/24)
+        // Calculate the subnet-directed broadcast address from the interface's
+        // real netmask (e.g. 172.20.10.15 for 172.20.10.x/28 iOS hotspots).
         private IPAddress GetBroadcastAddress()
         {
             try
             {
-                string localIP = GetLocalIPAddress();
-                var ipParts = localIP.Split('.');
-                if (ipParts.Length == 4)
+                string localIPStr = GetLocalIPAddress();
+                if (IPAddress.TryParse(localIPStr, out var localIP) && !IPAddress.IsLoopback(localIP))
                 {
-                    // Assume /24 subnet (most common for home networks)
-                    string broadcastIP = $"{ipParts[0]}.{ipParts[1]}.{ipParts[2]}.255";
-                    Debug.Log($"[NetworkDiscovery] Using broadcast address: {broadcastIP}");
-                    return IPAddress.Parse(broadcastIP);
+                    foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+                    {
+                        if (nic.OperationalStatus != OperationalStatus.Up) continue;
+                        foreach (var address in nic.GetIPProperties().UnicastAddresses)
+                        {
+                            if (address.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                            if (!address.Address.Equals(localIP)) continue;
+                            try
+                            {
+                                var mask = address.IPv4Mask;
+                                if (mask != null && !mask.Equals(IPAddress.Any))
+                                {
+                                    byte[] ipBytes = localIP.GetAddressBytes();
+                                    byte[] maskBytes = mask.GetAddressBytes();
+                                    var broadcastBytes = new byte[4];
+                                    for (int i = 0; i < 4; i++)
+                                    {
+                                        broadcastBytes[i] = (byte)(ipBytes[i] | ~maskBytes[i]);
+                                    }
+                                    var result = new IPAddress(broadcastBytes);
+                                    Debug.Log($"[NetworkDiscovery] Using broadcast address: {result} (ip={localIP}, mask={mask})");
+                                    return result;
+                                }
+                            }
+                            catch (Exception)
+                            {
+                                // IPv4Mask can throw on some platforms - fall through to /24
+                            }
+                        }
+                    }
+
+                    // Fallback: assume /24 subnet (most common for home networks)
+                    byte[] parts = localIP.GetAddressBytes();
+                    parts[3] = 255;
+                    var fallback = new IPAddress(parts);
+                    Debug.Log($"[NetworkDiscovery] Using broadcast address (assumed /24): {fallback}");
+                    return fallback;
                 }
             }
             catch (Exception e)
