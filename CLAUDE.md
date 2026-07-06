@@ -125,6 +125,16 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   shield/health 3+3, speed 12 segments, power-up chips with DMG countdown +
   handling %); remote opponents get compact rows (name + K|D|C + 3+3 pips)
   to save space on mobile.
+- Kill feed (top-left, max 4 fading lines): all death paths send
+  `PlayerController.SyncKillFeedClientRpc` with a `KillCause`; lines like
+  "A > B" (shot), "A >< B" (midair), "B CRASHED" / "B LOST".
+- Damage smoke: `PlaneVisualEffects` drives a runtime-created ParticleSystem
+  from synced `NetHealth` (2 HP light grey, 1 HP heavy dark). On death a local
+  `WreckEffect` (visual only, non-networked) tumbles down with smoke and
+  explodes on the ground. Shared particle texture/material in `EffectAssets`.
+- Mobile gyro: gravity is low-pass filtered, dead-zone remap is continuous,
+  response has an expo curve, and the neutral hold angle auto-calibrates
+  ~0.5 s after start (`MobileInputProvider.Recenter()` re-captures it).
 
 ## LAN Discovery / Platform Notes
 
