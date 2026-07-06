@@ -650,7 +650,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             }
             else
             {
-                visualEffects?.TriggerDamageFlash();
+                visualEffects?.TriggerDamageFlash(planeStats.LastDamageAbsorbedByShield);
             }
         }
         else
@@ -721,6 +721,14 @@ public class PlayerController : NetworkBehaviour, IDamagable
     [ClientRpc]
     private void ShowExplosionClientRpc()
     {
+        SfxManager.PlayExplosion();
+
+        // Vibrate on the device(s) controlling this plane
+        if (IsOwner)
+        {
+            SfxManager.Haptic();
+        }
+
         if (hitEffect != null)
         {
             Vector3 explosionPos = new Vector3(transform.position.x, transform.position.y, 0f);
@@ -962,6 +970,38 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (ScoreManager.Instance != null)
         {
             ScoreManager.Instance.UpdateStatsFromServer(clientId, localPlayerIndex, kills, deaths, planeCollisions);
+        }
+    }
+
+    /// <summary>
+    /// Sync round end (winner) to all clients. Called by MatchManager.
+    /// </summary>
+    [ClientRpc]
+    public void SyncMatchEndClientRpc(ulong winnerClientId, int winnerLocalPlayerIndex, int winnerKills)
+    {
+        if (MatchManager.Instance != null)
+        {
+            MatchManager.Instance.HandleMatchEndFromServer(winnerClientId, winnerLocalPlayerIndex, winnerKills);
+        }
+    }
+
+    /// <summary>
+    /// Round-restart respawn: fresh stats + new position, no death recorded and
+    /// no explosion. Server-only (called by MatchManager).
+    /// </summary>
+    public void ServerRespawn()
+    {
+        if (!IsServer) return;
+
+        planeStats?.ResetStats();
+
+        if (CloudManager.Instance != null)
+        {
+            CloudManager.Instance.RequestRespawn(this);
+        }
+        else
+        {
+            ExecuteRespawnAtPosition(GetFallbackSpawnPosition());
         }
     }
 }

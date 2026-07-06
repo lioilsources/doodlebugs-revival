@@ -76,6 +76,15 @@ public class GameSetup : MonoBehaviour
         _scoreManager = scoreManagerObj.AddComponent<ScoreManager>();
         DontDestroyOnLoad(scoreManagerObj);
         Debug.Log("[GameSetup] ScoreManager created");
+
+        // Create MatchManager (round flow: kill target / time limit / restart)
+        if (FindObjectOfType<MatchManager>() == null)
+        {
+            var matchManagerObj = new GameObject("MatchManager");
+            matchManagerObj.AddComponent<MatchManager>();
+            DontDestroyOnLoad(matchManagerObj);
+            Debug.Log("[GameSetup] MatchManager created");
+        }
     }
 
     private void CreateHUD(Canvas canvas)

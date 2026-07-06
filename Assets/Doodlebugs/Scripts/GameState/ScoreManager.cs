@@ -36,6 +36,24 @@ public class ScoreManager : MonoBehaviour
         return $"{clientId}_{localPlayerIndex}";
     }
 
+    /// <summary>
+    /// Parse a player ID back into clientId and localPlayerIndex.
+    /// </summary>
+    public static void ParsePlayerId(string playerId, out ulong clientId, out int localPlayerIndex)
+    {
+        clientId = 0;
+        localPlayerIndex = 0;
+        int split = playerId.IndexOf('_');
+        if (split <= 0) return;
+        ulong.TryParse(playerId.Substring(0, split), out clientId);
+        int.TryParse(playerId.Substring(split + 1), out localPlayerIndex);
+    }
+
+    /// <summary>
+    /// All tracked player stats, keyed by "clientId_localPlayerIndex" (read-only).
+    /// </summary>
+    public IReadOnlyDictionary<string, PlayerStats> AllStats => _playerStats;
+
     // Match timer
     public float MatchTime { get; private set; }
     public bool MatchStarted { get; private set; }
@@ -306,5 +324,36 @@ public class ScoreManager : MonoBehaviour
         _playerStats.Clear();
         MatchTime = 0f;
         MatchStarted = false;
+    }
+
+    /// <summary>
+    /// Freeze the timer at round end but keep stats for the results screen.
+    /// Called locally on every client by MatchManager.
+    /// </summary>
+    public void FreezeMatch()
+    {
+        MatchStarted = false;
+    }
+
+    /// <summary>
+    /// Start a fresh round: reset stats + timer and sync to clients.
+    /// Server-only (called by MatchManager after the intermission).
+    /// </summary>
+    public void RestartMatch()
+    {
+        if (!NetworkManager.Singleton.IsServer) return;
+        StartMatch();
+    }
+
+    /// <summary>
+    /// Format remaining time until the round time limit as M:SS.
+    /// </summary>
+    public string GetFormattedRemainingTime(float timeLimit)
+    {
+        float remaining = Mathf.Max(0f, timeLimit - MatchTime);
+        int minutes = Mathf.FloorToInt(remaining / 60f);
+        int seconds = Mathf.CeilToInt(remaining % 60f);
+        if (seconds == 60) { minutes++; seconds = 0; }
+        return $"{minutes}:{seconds:D2}";
     }
 }
