@@ -6,7 +6,20 @@ using Unity.Netcode;
 // Bullet Prefab script
 public class Bullet : NetworkBehaviour
 {
+    // The bullet spawns at the fire point, which can still overlap the shooter's
+    // own collider (or be caught by it in a tight turn) on the first physics
+    // steps - ignore the shooter for this long after spawn.
+    private const float SelfHitGracePeriod = 0.25f;
+
     public GameObject hitEffect;
+
+    private float _spawnTime;
+
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+        _spawnTime = Time.time;
+    }
 
     // Track who shot this bullet for scoring
     private NetworkVariable<ulong> _shooterClientId = new NetworkVariable<ulong>(0,
@@ -57,6 +70,13 @@ public class Bullet : NetworkBehaviour
                     int targetLocalIdx = targetPlayer.LocalPlayerIndex >= 0 ? targetPlayer.LocalPlayerIndex : 0;
                     bool isSamePlayer = targetPlayer.OwnerClientId == _shooterClientId.Value &&
                                         targetLocalIdx == _shooterLocalPlayerIndex.Value;
+
+                    if (isSamePlayer && Time.time - _spawnTime < SelfHitGracePeriod)
+                    {
+                        // Fresh bullet still leaving the shooter's own plane -
+                        // pass through without damage or despawn.
+                        return;
+                    }
 
                     if (!isSamePlayer)
                     {
