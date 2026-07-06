@@ -148,9 +148,13 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private PlaneStats planeStats;
 
     // Last attacker tracking (for kill attribution)
+    // Attribution expires so a shield-hit from long ago doesn't credit that
+    // shooter when the victim later dies to something unrelated.
+    private const float KillAttributionWindow = 4f;
     private ulong _lastAttackerClientId;
     private int _lastAttackerLocalPlayerIndex;
     private bool _hasLastAttacker;
+    private float _lastAttackerTime;
 
     // Cached boundary references
     private Collider2D leftBoundary;
@@ -664,6 +668,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         _lastAttackerClientId = clientId;
         _lastAttackerLocalPlayerIndex = localPlayerIndex;
         _hasLastAttacker = true;
+        _lastAttackerTime = Time.time;
     }
 
     /// <summary>
@@ -675,10 +680,13 @@ public class PlayerController : NetworkBehaviour, IDamagable
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
         ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
 
-        // Attribute kill to last attacker (bullet deaths)
+        // Attribute kill to last attacker (only recent hits count)
         if (_hasLastAttacker)
         {
-            ScoreManager.Instance?.AddScore(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
+            if (Time.time - _lastAttackerTime <= KillAttributionWindow)
+            {
+                ScoreManager.Instance?.AddScore(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
+            }
             _hasLastAttacker = false;
         }
 
