@@ -478,6 +478,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         // Player flew out of bounds - record death
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
         ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+        SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.OutOfBounds);
         HandleDeathAndRespawn();
     }
 
@@ -646,7 +647,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             bool dead = planeStats.TakeDamage(damage);
             if (dead)
             {
-                HandleCombatDeath();
+                HandleCombatDeath(KillCause.Shot);
             }
             else
             {
@@ -656,7 +657,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         else
         {
             // Fallback: instant kill if PlaneStats not attached
-            HandleCombatDeath();
+            HandleCombatDeath(KillCause.Shot);
         }
     }
 
@@ -674,21 +675,22 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// <summary>
     /// Handle death from combat (bullet or plane collision). Drops power-up.
     /// </summary>
-    private void HandleCombatDeath()
+    private void HandleCombatDeath(KillCause cause)
     {
         // Record death for this player
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
         ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
 
         // Attribute kill to last attacker (only recent hits count)
-        if (_hasLastAttacker)
+        bool credited = _hasLastAttacker && Time.time - _lastAttackerTime <= KillAttributionWindow;
+        if (credited)
         {
-            if (Time.time - _lastAttackerTime <= KillAttributionWindow)
-            {
-                ScoreManager.Instance?.AddScore(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
-            }
-            _hasLastAttacker = false;
+            ScoreManager.Instance?.AddScore(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
         }
+        _hasLastAttacker = false;
+
+        SyncKillFeedClientRpc(OwnerClientId, localIdx,
+            _lastAttackerClientId, _lastAttackerLocalPlayerIndex, credited, (byte)cause);
 
         // Spawn power-up at death position
         if (PowerUpManager.Instance != null)
@@ -697,6 +699,17 @@ public class PlayerController : NetworkBehaviour, IDamagable
         }
 
         HandleDeathAndRespawn();
+    }
+
+    /// <summary>
+    /// Broadcast a kill-feed line to all clients. Server-only caller.
+    /// </summary>
+    [ClientRpc]
+    private void SyncKillFeedClientRpc(ulong victimClientId, int victimLocalIdx,
+        ulong killerClientId, int killerLocalIdx, bool hasKiller, byte cause)
+    {
+        GameHUD.Instance?.PushKillFeed(victimClientId, victimLocalIdx,
+            killerClientId, killerLocalIdx, hasKiller, (KillCause)cause);
     }
 
     /// <summary>
@@ -727,6 +740,18 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (IsOwner)
         {
             SfxManager.Haptic();
+        }
+
+        // Falling burning wreck (local visual; the live plane teleports away
+        // to its respawn point). Speed is a synced NetworkVariable, so the
+        // wreck inherits roughly the real flight velocity on every client.
+        var planeSprite = plane != null ? plane.GetComponent<SpriteRenderer>() : null;
+        if (planeSprite != null)
+        {
+            Vector2 wreckVelocity = (Vector2)(transform.right * Speed * 0.6f);
+            WreckEffect.Spawn(planeSprite, transform.position,
+                plane != null ? plane.rotation : transform.rotation,
+                wreckVelocity, hitEffect);
         }
 
         if (hitEffect != null)
@@ -860,6 +885,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             // Crashed into ground/obstacle - instant kill, no power-up drop
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
             ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+            SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.Ground);
             HandleDeathAndRespawn();
         }
 
@@ -868,7 +894,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             // Collided with another plane - instant kill, drops power-up
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
             ScoreManager.Instance?.AddPlaneCollision(OwnerClientId, localIdx);
-            HandleCombatDeath();
+            HandleCombatDeath(KillCause.Collision);
         }
 
         if (collider.gameObject.CompareTag("PowerUp"))

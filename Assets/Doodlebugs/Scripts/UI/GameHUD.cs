@@ -18,8 +18,15 @@ using Unity.Netcode;
 /// </summary>
 public class GameHUD : MonoBehaviour
 {
+    public static GameHUD Instance { get; private set; }
+
     [Header("Player Stats Container (Right Side)")]
     [SerializeField] private RectTransform playerStatsContainer;
+
+    [Header("Kill Feed (Top Left)")]
+    [SerializeField] private RectTransform killFeedContainer;
+    private const int KillFeedMaxLines = 4;
+    private const float KillFeedLineSeconds = 4.5f;
 
     [Header("Match Timer")]
     [SerializeField] private Text matchTimeText;
@@ -124,11 +131,31 @@ public class GameHUD : MonoBehaviour
         return GetPlayerUniqueId(player.OwnerClientId, localIdx);
     }
 
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
+
     private void Start()
     {
         if (playerStatsContainer == null)
         {
             CreatePlayerStatsContainer();
+        }
+
+        if (killFeedContainer == null)
+        {
+            CreateKillFeedContainer();
         }
 
         if (matchTimeText != null)
@@ -566,6 +593,124 @@ public class GameHUD : MonoBehaviour
         if (_repairSprite == null)
             _repairSprite = Resources.Load<Sprite>("Sprites/PowerUps/powerup_repair");
         return _repairSprite;
+    }
+
+    // --- kill feed ------------------------------------------------------------
+
+    private void CreateKillFeedContainer()
+    {
+        var feedObj = new GameObject("KillFeed");
+        feedObj.transform.SetParent(transform, false);
+
+        killFeedContainer = feedObj.AddComponent<RectTransform>();
+        // Top-left, offset right to clear phone notches
+        killFeedContainer.anchorMin = new Vector2(0, 1);
+        killFeedContainer.anchorMax = new Vector2(0, 1);
+        killFeedContainer.pivot = new Vector2(0, 1);
+        killFeedContainer.anchoredPosition = new Vector2(60, -20);
+        killFeedContainer.sizeDelta = new Vector2(600, 140);
+
+        var layout = feedObj.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 4;
+        layout.childAlignment = TextAnchor.UpperLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+    }
+
+    /// <summary>
+    /// Add a kill-feed line. Called on every client via PlayerController RPC.
+    /// </summary>
+    public void PushKillFeed(ulong victimClientId, int victimLocalIdx,
+        ulong killerClientId, int killerLocalIdx, bool hasKiller, KillCause cause)
+    {
+        if (killFeedContainer == null) return;
+
+        string victim = ColoredName(victimClientId, victimLocalIdx);
+        string line;
+        switch (cause)
+        {
+            case KillCause.Shot when hasKiller:
+                line = $"{ColoredName(killerClientId, killerLocalIdx)} > {victim}";
+                break;
+            case KillCause.Collision when hasKiller:
+                line = $"{ColoredName(killerClientId, killerLocalIdx)} >< {victim}";
+                break;
+            case KillCause.Collision:
+                line = $"{victim} MIDAIR CRASH";
+                break;
+            case KillCause.Ground:
+                line = $"{victim} CRASHED";
+                break;
+            case KillCause.OutOfBounds:
+                line = $"{victim} LOST";
+                break;
+            default:
+                line = $"{victim} DOWN";
+                break;
+        }
+
+        // Cap the number of visible lines - drop the oldest
+        // (detach first: Destroy is deferred, childCount wouldn't shrink this frame)
+        while (killFeedContainer.childCount >= KillFeedMaxLines)
+        {
+            var oldest = killFeedContainer.GetChild(0);
+            oldest.SetParent(null);
+            Destroy(oldest.gameObject);
+        }
+
+        var lineObj = new GameObject("FeedLine");
+        lineObj.transform.SetParent(killFeedContainer, false);
+        var lineRect = lineObj.AddComponent<RectTransform>();
+        lineRect.sizeDelta = new Vector2(600, 18);
+
+        var text = lineObj.AddComponent<Text>();
+        text.font = PixelFont;
+        text.fontSize = 12;
+        text.alignment = TextAnchor.MiddleLeft;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.color = Color.white;
+        text.text = line;
+
+        StartCoroutine(FadeAndRemoveFeedLine(text));
+    }
+
+    private IEnumerator FadeAndRemoveFeedLine(Text text)
+    {
+        yield return new WaitForSeconds(KillFeedLineSeconds);
+
+        const float fadeTime = 0.6f;
+        float elapsed = 0f;
+        while (elapsed < fadeTime && text != null)
+        {
+            elapsed += Time.deltaTime;
+            var c = text.color;
+            c.a = 1f - elapsed / fadeTime;
+            text.color = c;
+            yield return null;
+        }
+        if (text != null) Destroy(text.gameObject);
+    }
+
+    private string ColoredName(ulong clientId, int localPlayerIndex)
+    {
+        string name = ResolvePlayerName(clientId, localPlayerIndex);
+        Color color = PlayerColorManager.Instance != null
+            ? PlayerColorManager.Instance.GetColor(clientId, localPlayerIndex)
+            : PlayerColorManager.GetColorByIndex((int)clientId + localPlayerIndex);
+        return $"<color=#{ColorUtility.ToHtmlStringRGB(color)}>{name}</color>";
+    }
+
+    private string ResolvePlayerName(ulong clientId, int localPlayerIndex)
+    {
+        string uniqueId = GetPlayerUniqueId(clientId, localPlayerIndex);
+        if (_playerEntriesById.TryGetValue(uniqueId, out var entry) &&
+            !string.IsNullOrEmpty(entry.lastKnownName))
+        {
+            return entry.lastKnownName;
+        }
+        return $"P{(int)clientId + localPlayerIndex + 1}";
     }
 
     // --- per-frame updates ---------------------------------------------------
