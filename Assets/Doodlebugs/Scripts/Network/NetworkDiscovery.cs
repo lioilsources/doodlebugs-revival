@@ -29,13 +29,24 @@ namespace Doodlebugs.Network
         public const float DISCOVERY_TIMEOUT_DESKTOP = 5f;
         public const float DISCOVERY_TIMEOUT_MOBILE = 10f;  // Mobile needs more time to receive broadcasts
 
-        private static float DiscoveryTimeout => IsMobile ? DISCOVERY_TIMEOUT_MOBILE : DISCOVERY_TIMEOUT_DESKTOP;
+        private static float DiscoveryTimeout =>
+            (IsMobile ? DISCOVERY_TIMEOUT_MOBILE : DISCOVERY_TIMEOUT_DESKTOP) + TimeoutJitter;
         private static bool IsMobile => Application.platform == RuntimePlatform.Android ||
                                         Application.platform == RuntimePlatform.IPhonePlayer;
 
         // Identifies this process so we can filter our own broadcasts.
         // IP comparison doesn't work: ParrelSync clones share the machine's IP.
         private static readonly string InstanceId = Guid.NewGuid().ToString("N");
+
+        // Per-instance 0..2s timeout offset. Two instances started at the same
+        // moment would otherwise both time out together and both become hosts
+        // (split-brain); the jitter staggers them so the earlier one is already
+        // broadcasting before the later one gives up searching.
+        private static readonly float TimeoutJitter =
+            (Mathf.Abs(InstanceId.GetHashCode()) % 2000) / 1000f;
+
+        /// <summary>This process's discovery id (used for host-conflict tie-breaks).</summary>
+        public string LocalInstanceId => InstanceId;
 
         public event Action<DiscoveryData> OnServerFound;
         public event Action OnDiscoveryTimeout;
@@ -185,7 +196,12 @@ namespace Doodlebugs.Network
 
         #region Client Listening
 
-        public void StartListening()
+        /// <param name="hostWatch">
+        /// When true the listener never times out and keeps running after a server
+        /// is found. Used while hosting to detect a competing host on the same
+        /// network (split-brain); ConnectionManager decides who yields.
+        /// </param>
+        public void StartListening(bool hostWatch = false)
         {
             if (_isListening) return;
 
@@ -196,8 +212,8 @@ namespace Doodlebugs.Network
             // acquire/release ordered when StopListening fires from the async loop
             MainThreadDispatcher.Enqueue(AcquireMulticastLock);
 
-            Debug.Log($"[NetworkDiscovery] Starting to listen for hosts on port {BROADCAST_PORT}, timeout={DiscoveryTimeout}s, isMobile={IsMobile}");
-            _ = ListenLoopAsync(_listenCancellation.Token);
+            Debug.Log($"[NetworkDiscovery] Starting to listen for hosts on port {BROADCAST_PORT}, timeout={DiscoveryTimeout}s, isMobile={IsMobile}, hostWatch={hostWatch}");
+            _ = ListenLoopAsync(_listenCancellation.Token, hostWatch);
         }
 
         public void StopListening()
@@ -216,7 +232,7 @@ namespace Doodlebugs.Network
             Debug.Log("[NetworkDiscovery] Stopped listening");
         }
 
-        private async Task ListenLoopAsync(CancellationToken token)
+        private async Task ListenLoopAsync(CancellationToken token, bool hostWatch)
         {
             float startTime = Time.realtimeSinceStartup;
 
@@ -233,8 +249,8 @@ namespace Doodlebugs.Network
 
                 while (!token.IsCancellationRequested && _isListening)
                 {
-                    // Check timeout
-                    if (Time.realtimeSinceStartup - startTime > DiscoveryTimeout)
+                    // Check timeout (host-watch mode runs until stopped)
+                    if (!hostWatch && Time.realtimeSinceStartup - startTime > DiscoveryTimeout)
                     {
                         Debug.Log("[NetworkDiscovery] Discovery timeout - no host found");
                         MainThreadDispatcher.Enqueue(() => OnDiscoveryTimeout?.Invoke());
@@ -271,8 +287,13 @@ namespace Doodlebugs.Network
                             }
 
                             MainThreadDispatcher.Enqueue(() => OnServerFound?.Invoke(data));
-                            StopListening();
-                            return;
+                            if (!hostWatch)
+                            {
+                                StopListening();
+                                return;
+                            }
+                            // Host-watch keeps listening; ConnectionManager stops
+                            // discovery itself if it decides to yield the host role.
                         }
                         catch (Exception e)
                         {

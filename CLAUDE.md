@@ -101,12 +101,21 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 - Foreground textures **must have Read/Write enabled** (tile splitting reads pixels)
 - If `maxTextureSize` downscales the texture, the code compensates via `ppuScale`,
   but tiles get coarser in world units
+- Power-up icons: `Sprites/PowerUps/powerup_{health,shield,repair,damage}.png`,
+  96×96 px pixel-art (point filtering), wired into `PowerUp.prefab` via the
+  `typeSprites` array on `PowerUp.cs` (enum order); regenerate with
+  Pillow-based script if the style changes
 
 ## LAN Discovery / Platform Notes
 
 - Flow: every instance listens for UDP broadcasts on port 47777 (5 s desktop / 10 s
-  mobile) → on timeout it becomes host, broadcasts once per second, game runs on
-  UDP 7777. First device to give up searching hosts; everyone else joins.
+  mobile, + per-instance 0–2 s jitter) → on timeout it becomes host, broadcasts once
+  per second, game runs on UDP 7777. First device to give up searching hosts;
+  everyone else joins.
+- Split-brain guard: a host with an empty lobby keeps listening (host-watch mode);
+  when it hears a competing host's broadcast, the one with the larger `instanceId`
+  shuts down and joins the other (deterministic tie-break, mirrors the NativeP2P
+  path).
 - Broadcast goes to the subnet-directed address computed from the interface netmask
   (works on non-/24 nets like iPhone hotspot) plus 255.255.255.255 as fallback.
 - Own broadcasts are filtered by a per-process `instanceId` (not by IP), so

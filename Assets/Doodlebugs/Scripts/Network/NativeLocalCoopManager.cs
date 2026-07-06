@@ -87,6 +87,9 @@ namespace Doodlebugs.Network
 
         public void Stop()
         {
+            CancelInvoke(nameof(DeferredBecomeClient));
+            _pendingHostPeerId = null;
+
             if (_backend != null)
             {
                 _backend.OnPeerFound -= HandlePeerFound;
@@ -121,6 +124,10 @@ namespace Doodlebugs.Network
             // While still deciding, the first discovered lobby wins -> we join it.
             if (!_roleDecided)
             {
+                // A yield handover may already be scheduled (DeferredBecomeClient);
+                // don't start a second client for a different peer meanwhile.
+                if (!string.IsNullOrEmpty(_pendingHostPeerId)) return;
+
                 BecomeClient(peerId);
                 return;
             }
@@ -146,6 +153,14 @@ namespace Doodlebugs.Network
 
         private void DeferredBecomeClient()
         {
+            // Role may have been decided again in the meantime (e.g. Stop()/Begin()
+            // cycled the flow) - never start a second client on top of it.
+            if (_roleDecided)
+            {
+                _pendingHostPeerId = null;
+                return;
+            }
+
             if (!string.IsNullOrEmpty(_pendingHostPeerId))
             {
                 BecomeClient(_pendingHostPeerId);
