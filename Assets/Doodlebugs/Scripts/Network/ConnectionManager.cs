@@ -42,6 +42,11 @@ namespace Doodlebugs.Network
         private LocalCoopMode _mode = LocalCoopMode.Lan;
         private NativeLocalCoopManager _native;
 
+        // Split-brain yield in progress: our empty host is shutting down so we can
+        // join a competing host that won the instance-id tie-break.
+        private bool _yieldingHost;
+        private DiscoveryData _yieldTarget;
+
         private int MaxPlayers => _mode == LocalCoopMode.NativeP2P ? MAX_PLAYERS_NATIVE : MAX_PLAYERS;
 
         private static bool IsMobile => Application.platform == RuntimePlatform.Android ||
@@ -165,6 +170,15 @@ namespace Doodlebugs.Network
         {
             Debug.Log($"[ConnectionManager] Server found at {data.hostAddress}:{data.port}");
 
+            // We are already hosting: this broadcast comes from a competing host
+            // on the same network (both instances timed out together). Decide who
+            // yields instead of leaving players in two separate lobbies.
+            if (NetworkManager.Singleton.IsServer || _yieldingHost)
+            {
+                HandleHostConflict(data);
+                return;
+            }
+
             if (data.currentPlayers >= data.maxPlayers)
             {
                 SetStatus("Game is full, searching again...");
@@ -174,8 +188,12 @@ namespace Doodlebugs.Network
 
             SetState(ConnectionState.Connecting);
             SetStatus("Connecting...");
+            ConnectToHost(data);
+        }
 
-            // Configure transport with discovered address
+        // Configure UnityTransport with the discovered address and start as client.
+        private void ConnectToHost(DiscoveryData data)
+        {
             var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
             if (transport != null)
             {
@@ -192,6 +210,49 @@ namespace Doodlebugs.Network
 
             // Start as client
             NetworkManager.Singleton.StartClient();
+        }
+
+        // Deterministic tie-break against a competing LAN host: the host with the
+        // larger instance id yields, but only while its lobby is still empty.
+        private void HandleHostConflict(DiscoveryData data)
+        {
+            if (_yieldingHost) return;
+            if (_discovery == null || string.IsNullOrEmpty(data.instanceId)) return;
+
+            // Someone already joined us - we keep the lobby, the other host yields.
+            if (NetworkManager.Singleton.ConnectedClientsIds.Count > 1) return;
+
+            if (string.CompareOrdinal(_discovery.LocalInstanceId, data.instanceId) <= 0)
+            {
+                return; // We win the tie-break; the competing host will yield.
+            }
+
+            Debug.Log($"[ConnectionManager] Competing host detected at {data.hostAddress} - yielding (our lobby is empty)");
+
+            _yieldingHost = true;
+            _yieldTarget = data;
+
+            _discovery.StopAllDiscovery();
+            if (NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer)
+            {
+                NetworkManager.Singleton.Shutdown();
+            }
+
+            SetState(ConnectionState.Connecting);
+            SetStatus("Another game found, joining...");
+
+            // NGO completes Shutdown asynchronously - defer the client start.
+            Invoke(nameof(FinishHostYield), 0.7f);
+        }
+
+        private void FinishHostYield()
+        {
+            _yieldingHost = false;
+            if (_yieldTarget == null) return;
+
+            var target = _yieldTarget;
+            _yieldTarget = null;
+            ConnectToHost(target);
         }
 
         private void OnDiscoveryTimeout()
@@ -227,6 +288,10 @@ namespace Doodlebugs.Network
 
             // Start broadcasting
             _discovery?.StartBroadcast(1, MAX_PLAYERS);
+
+            // Keep listening while hosting to catch a competing host that timed
+            // out at the same moment (split-brain on shared WiFi).
+            _discovery?.StartListening(hostWatch: true);
         }
 
         #endregion
@@ -372,6 +437,10 @@ namespace Doodlebugs.Network
         private void OnClientDisconnected(ulong clientId)
         {
             Debug.Log($"[ConnectionManager] Client disconnected: {clientId}, LocalClientId={NetworkManager.Singleton.LocalClientId}, IsHost={NetworkManager.Singleton.IsHost}, IsClient={NetworkManager.Singleton.IsClient}");
+
+            // Ignore callbacks caused by our own shutdown while yielding the host
+            // role - FinishHostYield is about to reconnect us as a client.
+            if (_yieldingHost) return;
 
             // Additional diagnostics for debugging disconnect issues
             var transport = NetworkManager.Singleton.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
