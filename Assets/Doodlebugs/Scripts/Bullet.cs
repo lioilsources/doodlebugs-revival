@@ -19,6 +19,9 @@ public class Bullet : NetworkBehaviour
     {
         base.OnNetworkSpawn();
         _spawnTime = Time.time;
+
+        // Bullet replicates to every client - this doubles as the shot sound
+        SfxManager.PlayShoot();
     }
 
     // Track who shot this bullet for scoring

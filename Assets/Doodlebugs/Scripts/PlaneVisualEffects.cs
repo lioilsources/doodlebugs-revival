@@ -251,15 +251,19 @@ public class PlaneVisualEffects : NetworkBehaviour
     /// Triggers the damage flash effect. Call this from PlayerController when hit.
     /// Only server should call this method.
     /// </summary>
-    public void TriggerDamageFlash()
+    /// <param name="shieldHit">True when the shield absorbed the whole hit (different sound).</param>
+    public void TriggerDamageFlash(bool shieldHit = false)
     {
         if (!IsServer) return;
-        TriggerDamageFlashClientRpc();
+        TriggerDamageFlashClientRpc(shieldHit);
     }
 
     [ClientRpc]
-    private void TriggerDamageFlashClientRpc()
+    private void TriggerDamageFlashClientRpc(bool shieldHit)
     {
+        if (shieldHit) SfxManager.PlayShieldHit();
+        else SfxManager.PlayHullHit();
+
         // Stop any existing flash
         if (flashCoroutine != null)
         {

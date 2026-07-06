@@ -32,6 +32,11 @@ public class PlaneStats : NetworkBehaviour
     public NetworkVariable<float> NetDamageMultiplier = new NetworkVariable<float>(1.0f,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    // Remaining damage-boost seconds, quantized to 0.5s so it syncs at most
+    // twice a second (for the HUD countdown on clients).
+    public NetworkVariable<float> NetDamageBoostRemaining = new NetworkVariable<float>(0f,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     // --- Public accessors ---
     public int Shield => NetShield.Value;
     public int Health => NetHealth.Value;
@@ -85,6 +90,13 @@ public class PlaneStats : NetworkBehaviour
             }
         }
 
+        // Sync quantized boost time for HUD (only writes on 0.5s steps)
+        float quantized = Mathf.Ceil(Mathf.Max(0f, _damageBoostTimer) * 2f) / 2f;
+        if (!Mathf.Approximately(NetDamageBoostRemaining.Value, quantized))
+        {
+            NetDamageBoostRemaining.Value = quantized;
+        }
+
         // Invulnerability countdown
         if (_invulnerabilityTimer > 0f)
         {
@@ -96,6 +108,9 @@ public class PlaneStats : NetworkBehaviour
             }
         }
     }
+
+    /// <summary>True when the most recent TakeDamage was fully absorbed by shield (server-only).</summary>
+    public bool LastDamageAbsorbedByShield { get; private set; }
 
     /// <summary>
     /// Apply damage to this plane. Returns true if the plane is dead.
@@ -112,6 +127,7 @@ public class PlaneStats : NetworkBehaviour
         int shieldAbsorbed = Mathf.Min(remaining, NetShield.Value);
         NetShield.Value -= shieldAbsorbed;
         remaining -= shieldAbsorbed;
+        LastDamageAbsorbedByShield = remaining <= 0;
 
         // Health takes the rest
         NetHealth.Value = Mathf.Max(0, NetHealth.Value - remaining);
@@ -179,7 +195,7 @@ public class PlaneStats : NetworkBehaviour
     }
 
     /// <summary>
-    /// Get remaining damage boost time (for HUD). Approximate on clients.
+    /// Get remaining damage boost time (for HUD). Quantized to 0.5s on clients.
     /// </summary>
-    public float DamageBoostTimeRemaining => _damageBoostTimer;
+    public float DamageBoostTimeRemaining => IsServer ? _damageBoostTimer : NetDamageBoostRemaining.Value;
 }

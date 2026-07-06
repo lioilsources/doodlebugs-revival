@@ -136,8 +136,7 @@ public class PowerUp : NetworkBehaviour
     [ClientRpc]
     private void PlayPickupFxClientRpc(Vector3 position, int type)
     {
-        // Simple scale-up + fade effect (no extra prefab needed)
-        // The object is being despawned, so this runs on existing instances
+        SfxManager.PlayPowerUp();
     }
 
     private void DespawnSelf()
