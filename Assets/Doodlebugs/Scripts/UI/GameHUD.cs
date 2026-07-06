@@ -5,19 +5,25 @@ using UnityEngine.UI;
 using Unity.Netcode;
 
 /// <summary>
-/// Game HUD displaying scores and speed bars for all players.
-/// Supports dynamic player count (up to 20 players).
-/// Players sorted by performance: kills (desc) → deaths (asc) → collisions (asc).
-/// Format: "deviceName#N#L K|D|C" for local players, "deviceName#L K|D|C" for remote.
-/// L = maturity level: N=Novice (0-9 kills), A=Advanced (10-19), E=Expert (20+)
+/// Game HUD: per-player panels (top-right), round timer (top-center) and the
+/// round-over results overlay.
+///
+/// The local device's own planes get a DETAILED panel (segmented shield /
+/// health / speed bars + active power-up chips). Remote opponents get a
+/// COMPACT panel (name + score + tiny shield/health pips) to save screen
+/// space on mobile.
+///
+/// Everything is built programmatically - no prefabs or scene wiring.
+/// Uses the Press Start 2P pixel font from Resources/Fonts (OFL licensed).
 /// </summary>
 public class GameHUD : MonoBehaviour
 {
-    [Header("Player Stats Container (Left Side)")]
+    [Header("Player Stats Container (Right Side)")]
     [SerializeField] private RectTransform playerStatsContainer;
 
     [Header("Match Timer")]
     [SerializeField] private Text matchTimeText;
+    [SerializeField] private Text matchGoalText;
 
     [Header("Score Effect")]
     [SerializeField] private float pulseDuration = 0.2f;
@@ -27,40 +33,85 @@ public class GameHUD : MonoBehaviour
     [Header("Speed Bar Settings")]
     [SerializeField] private float minSpeed = 2f;
     [SerializeField] private float maxSpeed = 20f;
-    [SerializeField] private Color engineOnColor = new Color(0.2f, 0.8f, 0.2f); // Green
-    [SerializeField] private Color engineOffColor = new Color(0.5f, 0.5f, 0.5f); // Gray
-
-    // Player colors now managed by PlayerColorManager
+    [SerializeField] private Color engineOnColor = new Color(0.35f, 0.95f, 0.35f);
+    [SerializeField] private Color engineOffColor = new Color(0.55f, 0.55f, 0.55f);
 
     [Header("Stat Bar Colors")]
-    [SerializeField] private Color shieldBarColor = new Color(0.3f, 0.5f, 1.0f); // Blue
-    [SerializeField] private Color healthBarColor = new Color(0.9f, 0.2f, 0.2f); // Red
-    [SerializeField] private Color damageBoostColor = new Color(1.0f, 0.4f, 0.1f); // Orange
+    [SerializeField] private Color shieldBarColor = new Color(0.30f, 0.50f, 1.00f);
+    [SerializeField] private Color healthBarColor = new Color(0.95f, 0.25f, 0.25f);
 
-    // Player UI elements - dynamically created
+    private static readonly Color SegmentOffColor = new Color(0.10f, 0.10f, 0.10f, 0.85f);
+    private static readonly Color RowBgColor = new Color(0.04f, 0.04f, 0.04f, 0.55f);
+    private static readonly Color TimerWarnColor = new Color(1f, 0.35f, 0.25f);
+
+    private const int DetailedNameFontSize = 16;
+    private const int CompactNameFontSize = 12;
+    private const int ChipFontSize = 12;
+    private const int SpeedSegments = 12;
+
+    // --- pixel font -------------------------------------------------------
+
+    private static Font _pixelFont;
+    private static Font PixelFont
+    {
+        get
+        {
+            if (_pixelFont == null)
+            {
+                _pixelFont = Resources.Load<Font>("Fonts/PressStart2P");
+                if (_pixelFont == null)
+                {
+                    _pixelFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                }
+            }
+            return _pixelFont;
+        }
+    }
+
+    private static Sprite _dmgSprite;
+    private static Sprite _repairSprite;
+
+    // --- per-player entry ---------------------------------------------------
+
     private class PlayerHUDEntry
     {
         public ulong clientId;
         public int localPlayerIndex;
-        public string uniqueId; // "clientId_localPlayerIndex"
+        public string uniqueId;
         public PlayerController player;
         public GameObject container;
         public Text scoreText;
-        public Image speedBarFill;
-        public Image speedBarBg;
-        public Image shieldBarFill;
-        public Image shieldBarBg;
-        public Image healthBarFill;
-        public Image healthBarBg;
-        public Text statusText; // handling + damage boost indicator
+        public bool detailed;            // full panel (this device's plane)
+        public bool isLocalPlayer;       // couch co-op pilot on this machine
+
+        // Detailed panel parts (null on compact entries)
+        public Image[] shieldSegments;
+        public Image[] healthSegments;
+        public Image[] speedSegments;
+        public GameObject dmgChip;
+        public Text dmgChipText;
+        public GameObject repairChip;
+        public Text repairChipText;
+
+        // Compact panel parts (null on detailed entries)
+        public Image[] shieldPips;
+        public Image[] healthPips;
+
         public Vector3 originalScoreScale;
         public Coroutine pulseCoroutine;
-        public string lastKnownName; // Track name changes from NetworkVariable sync
-        public bool isLocalPlayer;   // True for local co-op players on this machine
+        public string lastKnownName;
     }
 
-    private List<PlayerHUDEntry> _playerEntries = new List<PlayerHUDEntry>();
-    private Dictionary<string, PlayerHUDEntry> _playerEntriesById = new Dictionary<string, PlayerHUDEntry>();
+    private readonly List<PlayerHUDEntry> _playerEntries = new List<PlayerHUDEntry>();
+    private readonly Dictionary<string, PlayerHUDEntry> _playerEntriesById =
+        new Dictionary<string, PlayerHUDEntry>();
+
+    // --- results overlay ----------------------------------------------------
+
+    private GameObject _resultsOverlay;
+    private Text _resultsWinnerText;
+    private Text _resultsStandingsText;
+    private Text _resultsCountdownText;
 
     private string GetPlayerUniqueId(ulong clientId, int localPlayerIndex)
     {
@@ -73,41 +124,30 @@ public class GameHUD : MonoBehaviour
         return GetPlayerUniqueId(player.OwnerClientId, localIdx);
     }
 
-    // Legacy references for backward compatibility
-    [HideInInspector] public Text p1ScoreText;
-    [HideInInspector] public Image p1SpeedBarFill;
-    [HideInInspector] public Image p1SpeedBarBg;
-    [HideInInspector] public Text p2ScoreText;
-    [HideInInspector] public Image p2SpeedBarFill;
-    [HideInInspector] public Image p2SpeedBarBg;
-
     private void Start()
     {
-        // Create player stats container if not assigned
         if (playerStatsContainer == null)
         {
             CreatePlayerStatsContainer();
         }
 
-        // Initialize timer display
         if (matchTimeText != null)
-            matchTimeText.text = "0:00.0";
+            matchTimeText.text = "-:--";
     }
 
     private void OnEnable()
     {
-        // Subscribe to score and stats changes
         if (ScoreManager.Instance != null)
         {
             ScoreManager.Instance.OnScoreChanged += OnScoreChanged;
             ScoreManager.Instance.OnStatsChanged += OnStatsChanged;
+            ScoreManager.Instance.OnMatchStarted += OnMatchStarted;
         }
         else
         {
             StartCoroutine(WaitForScoreManager());
         }
 
-        // Subscribe to local player toggle events
         if (LocalPlayerManager.Instance != null)
         {
             LocalPlayerManager.Instance.OnPlayerToggled += OnLocalPlayerToggled;
@@ -116,6 +156,8 @@ public class GameHUD : MonoBehaviour
         {
             StartCoroutine(WaitForLocalPlayerManager());
         }
+
+        StartCoroutine(WaitForMatchManager());
     }
 
     private void OnDisable()
@@ -124,11 +166,18 @@ public class GameHUD : MonoBehaviour
         {
             ScoreManager.Instance.OnScoreChanged -= OnScoreChanged;
             ScoreManager.Instance.OnStatsChanged -= OnStatsChanged;
+            ScoreManager.Instance.OnMatchStarted -= OnMatchStarted;
         }
 
         if (LocalPlayerManager.Instance != null)
         {
             LocalPlayerManager.Instance.OnPlayerToggled -= OnLocalPlayerToggled;
+        }
+
+        if (MatchManager.Instance != null)
+        {
+            MatchManager.Instance.OnMatchEnded -= OnMatchEnded;
+            MatchManager.Instance.OnIntermissionTick -= OnIntermissionTick;
         }
     }
 
@@ -140,6 +189,7 @@ public class GameHUD : MonoBehaviour
         }
         ScoreManager.Instance.OnScoreChanged += OnScoreChanged;
         ScoreManager.Instance.OnStatsChanged += OnStatsChanged;
+        ScoreManager.Instance.OnMatchStarted += OnMatchStarted;
     }
 
     private IEnumerator WaitForLocalPlayerManager()
@@ -151,44 +201,42 @@ public class GameHUD : MonoBehaviour
         LocalPlayerManager.Instance.OnPlayerToggled += OnLocalPlayerToggled;
     }
 
+    private IEnumerator WaitForMatchManager()
+    {
+        while (MatchManager.Instance == null)
+        {
+            yield return new WaitForSeconds(0.1f);
+        }
+        MatchManager.Instance.OnMatchEnded += OnMatchEnded;
+        MatchManager.Instance.OnIntermissionTick += OnIntermissionTick;
+    }
+
     private void OnLocalPlayerToggled(int localPlayerIndex, bool enabled)
     {
-        // Local players are owned by the local client (host)
         if (NetworkManager.Singleton == null) return;
 
         ulong localClientId = NetworkManager.Singleton.LocalClientId;
         string uniqueId = GetPlayerUniqueId(localClientId, localPlayerIndex);
 
-        if (!enabled)
+        if (!enabled && _playerEntriesById.TryGetValue(uniqueId, out var entry))
         {
-            // Player disabled - remove HUD entry immediately
-            if (_playerEntriesById.TryGetValue(uniqueId, out var entry))
+            if (entry.container != null)
             {
-                Debug.Log($"[GameHUD] Local player {localPlayerIndex + 1} disabled - removing HUD entry");
-
-                if (entry.container != null)
-                {
-                    Destroy(entry.container);
-                }
-
-                _playerEntriesById.Remove(uniqueId);
-                _playerEntries.Remove(entry);
+                Destroy(entry.container);
             }
+            _playerEntriesById.Remove(uniqueId);
+            _playerEntries.Remove(entry);
         }
-        // If enabled, UpdatePlayerEntries() will create the entry when PlayerController spawns
     }
 
     private void Update()
     {
-        // Find and register new players
         UpdatePlayerEntries();
-
-        // Update all player speed bars
-        UpdateAllSpeedBars();
-
-        // Update timer
+        UpdateAllBars();
         UpdateTimer();
     }
+
+    // --- layout construction ------------------------------------------------
 
     private void CreatePlayerStatsContainer()
     {
@@ -200,12 +248,11 @@ public class GameHUD : MonoBehaviour
         playerStatsContainer.anchorMin = new Vector2(1, 1);
         playerStatsContainer.anchorMax = new Vector2(1, 1);
         playerStatsContainer.pivot = new Vector2(1, 1);
-        playerStatsContainer.anchoredPosition = new Vector2(-60, -20); // Extra right padding for rounded screen corners
+        playerStatsContainer.anchoredPosition = new Vector2(-60, -20);
         playerStatsContainer.sizeDelta = new Vector2(420, 700);
 
-        // Add vertical layout group
         var layout = containerObj.AddComponent<VerticalLayoutGroup>();
-        layout.spacing = 10;
+        layout.spacing = 8;
         layout.childAlignment = TextAnchor.UpperRight;
         layout.childControlWidth = true;
         layout.childControlHeight = false;
@@ -217,7 +264,6 @@ public class GameHUD : MonoBehaviour
     {
         var players = FindObjectsOfType<PlayerController>();
 
-        // Build set of active player IDs
         var activePlayerIds = new HashSet<string>();
         foreach (var player in players)
         {
@@ -230,14 +276,10 @@ public class GameHUD : MonoBehaviour
             var entry = _playerEntries[i];
             if (!activePlayerIds.Contains(entry.uniqueId))
             {
-                // Player disconnected - remove HUD entry
-                Debug.Log($"[GameHUD] Removing HUD entry for disconnected player {entry.uniqueId}");
-
                 if (entry.container != null)
                 {
                     Destroy(entry.container);
                 }
-
                 _playerEntriesById.Remove(entry.uniqueId);
                 _playerEntries.RemoveAt(i);
             }
@@ -250,18 +292,26 @@ public class GameHUD : MonoBehaviour
 
             if (!_playerEntriesById.ContainsKey(uniqueId))
             {
-                // New player - create HUD entry
                 CreatePlayerHUDEntry(player);
             }
             else
             {
-                // Update player reference (in case of respawn)
                 var entry = _playerEntriesById[uniqueId];
                 entry.player = player;
 
-                // Check if player name was updated (NetworkVariable sync may arrive after HUD creation)
+                // Ownership may resolve after spawn - rebuild with the right style
+                bool mine = IsMine(player);
+                if (mine != entry.detailed)
+                {
+                    if (entry.container != null) Destroy(entry.container);
+                    _playerEntriesById.Remove(uniqueId);
+                    _playerEntries.Remove(entry);
+                    CreatePlayerHUDEntry(player);
+                    continue;
+                }
+
+                // Name may sync late via NetworkVariable
                 string currentName = player.PlayerName;
-                // For local players, strip existing " #N" or "#N" suffix
                 if (entry.isLocalPlayer && !string.IsNullOrEmpty(currentName))
                 {
                     currentName = System.Text.RegularExpressions.Regex.Replace(currentName, @"\s*#\d+$", "");
@@ -269,41 +319,45 @@ public class GameHUD : MonoBehaviour
                 if (!string.IsNullOrEmpty(currentName) && currentName != entry.lastKnownName)
                 {
                     entry.lastKnownName = currentName;
-                    // Refresh display with new name
                     UpdatePlayerDisplay(entry.clientId, entry.localPlayerIndex);
                 }
             }
         }
 
-        // Sort entries by performance: kills (desc) → deaths (asc) → collisions (asc)
+        // Own planes first, then rank by kills desc / deaths asc / collisions asc
         _playerEntries.Sort((a, b) =>
         {
+            if (a.detailed != b.detailed) return a.detailed ? -1 : 1;
+
             var statsA = ScoreManager.Instance?.GetStats(a.clientId, a.localPlayerIndex);
             var statsB = ScoreManager.Instance?.GetStats(b.clientId, b.localPlayerIndex);
 
-            // 1. Kills descending (more kills = higher rank)
             int cmp = (statsB?.Kills ?? 0).CompareTo(statsA?.Kills ?? 0);
             if (cmp != 0) return cmp;
 
-            // 2. Deaths ascending (fewer deaths = higher rank)
             cmp = (statsA?.Deaths ?? 0).CompareTo(statsB?.Deaths ?? 0);
             if (cmp != 0) return cmp;
 
-            // 3. PlaneCollisions ascending (fewer collisions = higher rank)
             return (statsA?.PlaneCollisions ?? 0).CompareTo(statsB?.PlaneCollisions ?? 0);
         });
 
-        // Reorder UI elements
         for (int i = 0; i < _playerEntries.Count; i++)
         {
             _playerEntries[i].container.transform.SetSiblingIndex(i);
         }
     }
 
+    /// <summary>Planes controlled from this device get the detailed panel.</summary>
+    private static bool IsMine(PlayerController player)
+    {
+        return player.IsOwner;
+    }
+
     private void CreatePlayerHUDEntry(PlayerController player)
     {
         int localIdx = player.LocalPlayerIndex >= 0 ? player.LocalPlayerIndex : 0;
         string uniqueId = GetPlayerUniqueId(player.OwnerClientId, localIdx);
+        bool detailed = IsMine(player);
 
         var entry = new PlayerHUDEntry
         {
@@ -311,10 +365,10 @@ public class GameHUD : MonoBehaviour
             localPlayerIndex = localIdx,
             uniqueId = uniqueId,
             player = player,
+            detailed = detailed,
             isLocalPlayer = player.IsLocalPlayer
         };
 
-        // Get color from PlayerColorManager using clientId + localPlayerIndex
         Color playerColor;
         int colorIndex;
         if (PlayerColorManager.Instance != null)
@@ -328,274 +382,353 @@ public class GameHUD : MonoBehaviour
             playerColor = PlayerColorManager.GetColorByIndex(colorIndex);
         }
 
-        // Create container for this player's stats
         var container = new GameObject($"Player_{uniqueId}_Stats");
         container.transform.SetParent(playerStatsContainer, false);
         entry.container = container;
 
         var containerRect = container.AddComponent<RectTransform>();
-        containerRect.sizeDelta = new Vector2(400, 110); // Room for score + shield + health + speed + status
+        containerRect.sizeDelta = new Vector2(400, detailed ? 96 : 34);
 
         var containerLayout = container.AddComponent<VerticalLayoutGroup>();
-        containerLayout.spacing = 2;
+        containerLayout.spacing = 3;
         containerLayout.childAlignment = TextAnchor.UpperRight;
         containerLayout.childControlWidth = true;
         containerLayout.childControlHeight = false;
 
-        // Create score text (with player indicator and all stats on one line)
-        var scoreObj = new GameObject("Score");
-        scoreObj.transform.SetParent(container.transform, false);
-
-        var scoreRect = scoreObj.AddComponent<RectTransform>();
-        scoreRect.sizeDelta = new Vector2(400, 36);
-
-        entry.scoreText = scoreObj.AddComponent<Text>();
-        // Use device name if available, fallback to P# format
+        // --- name + score line ---
         string baseName = !string.IsNullOrEmpty(player.PlayerName) ? player.PlayerName : $"P{colorIndex + 1}";
-        // For local players, strip existing " #N" or "#N" suffix before adding our own
         if (player.IsLocalPlayer)
         {
             baseName = System.Text.RegularExpressions.Regex.Replace(baseName, @"\s*#\d+$", "");
         }
         entry.lastKnownName = baseName;
-        // Format: "deviceName#N#L K|D|C" for local players, "deviceName#L K|D|C" for remote
-        // L = maturity level (N=Novice, A=Advanced, E=Expert)
-        string displayName = player.IsLocalPlayer
-            ? $"{baseName}#{localIdx + 1}#N"
-            : $"{baseName}#N";
-        entry.scoreText.text = $"{displayName} 0|0|0";
-        entry.scoreText.fontSize = 32; // Smaller font for compact display
+
+        var scoreObj = new GameObject("Score");
+        scoreObj.transform.SetParent(container.transform, false);
+        var scoreRect = scoreObj.AddComponent<RectTransform>();
+        scoreRect.sizeDelta = new Vector2(400, detailed ? 22 : 16);
+
+        entry.scoreText = scoreObj.AddComponent<Text>();
+        entry.scoreText.font = PixelFont;
+        entry.scoreText.fontSize = detailed ? DetailedNameFontSize : CompactNameFontSize;
         entry.scoreText.alignment = TextAnchor.MiddleRight;
         entry.scoreText.horizontalOverflow = HorizontalWrapMode.Overflow;
         entry.scoreText.verticalOverflow = VerticalWrapMode.Overflow;
         entry.scoreText.color = playerColor;
-        entry.scoreText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         entry.originalScoreScale = entry.scoreText.transform.localScale;
 
-        // Create shield bar
-        CreateStatBar(container.transform, "ShieldBar", shieldBarColor, out entry.shieldBarBg, out entry.shieldBarFill);
+        if (detailed)
+        {
+            // --- segmented bars: shield 3 / health 3 / speed 12 ---
+            entry.shieldSegments = CreateSegmentRow(container.transform, "ShieldBar", 3, 12f);
+            entry.healthSegments = CreateSegmentRow(container.transform, "HealthBar", 3, 12f);
+            entry.speedSegments = CreateSegmentRow(container.transform, "SpeedBar", SpeedSegments, 8f);
 
-        // Create health bar
-        CreateStatBar(container.transform, "HealthBar", healthBarColor, out entry.healthBarBg, out entry.healthBarFill);
+            // --- active power-up chips row ---
+            var chipsRow = new GameObject("PowerUpChips");
+            chipsRow.transform.SetParent(container.transform, false);
+            var chipsRect = chipsRow.AddComponent<RectTransform>();
+            chipsRect.sizeDelta = new Vector2(400, 22);
 
-        // Create speed bar background
-        var speedBarBgObj = new GameObject("SpeedBarBg");
-        speedBarBgObj.transform.SetParent(container.transform, false);
+            var chipsLayout = chipsRow.AddComponent<HorizontalLayoutGroup>();
+            chipsLayout.spacing = 10;
+            chipsLayout.childAlignment = TextAnchor.MiddleRight;
+            chipsLayout.childControlWidth = false;
+            chipsLayout.childControlHeight = false;
+            chipsLayout.childForceExpandWidth = false;
 
-        var speedBarBgRect = speedBarBgObj.AddComponent<RectTransform>();
-        speedBarBgRect.sizeDelta = new Vector2(400, 10);
+            entry.repairChip = CreateChip(chipsRow.transform, "RepairChip", GetRepairSprite(),
+                new Color(1f, 0.85f, 0.2f), out entry.repairChipText);
+            entry.dmgChip = CreateChip(chipsRow.transform, "DmgChip", GetDmgSprite(),
+                new Color(1f, 0.45f, 0.2f), out entry.dmgChipText);
+        }
+        else
+        {
+            // --- compact: one thin row with 3 shield + 3 health pips ---
+            var pipsRow = new GameObject("Pips");
+            pipsRow.transform.SetParent(container.transform, false);
+            var pipsRect = pipsRow.AddComponent<RectTransform>();
+            pipsRect.sizeDelta = new Vector2(400, 8);
 
-        entry.speedBarBg = speedBarBgObj.AddComponent<Image>();
-        entry.speedBarBg.color = new Color(0.2f, 0.2f, 0.2f, 0.8f);
+            // right-aligned block, 6 pips of 24px + gaps
+            entry.shieldPips = CreatePipGroup(pipsRow.transform, "ShieldPips", 3, 244f);
+            entry.healthPips = CreatePipGroup(pipsRow.transform, "HealthPips", 3, 322f);
+        }
 
-        // Create speed bar fill
-        var speedBarFillObj = new GameObject("SpeedBarFill");
-        speedBarFillObj.transform.SetParent(speedBarBgObj.transform, false);
+        UpdateScoreLine(entry, ScoreManager.Instance?.GetStats(entry.clientId, entry.localPlayerIndex));
 
-        var speedBarFillRect = speedBarFillObj.AddComponent<RectTransform>();
-        speedBarFillRect.anchorMin = Vector2.zero;
-        speedBarFillRect.anchorMax = Vector2.one;
-        speedBarFillRect.offsetMin = new Vector2(2, 2);
-        speedBarFillRect.offsetMax = new Vector2(-2, -2);
-
-        entry.speedBarFill = speedBarFillObj.AddComponent<Image>();
-        entry.speedBarFill.color = engineOnColor;
-
-        // Create status text (handling + damage boost)
-        var statusObj = new GameObject("StatusText");
-        statusObj.transform.SetParent(container.transform, false);
-        var statusRect = statusObj.AddComponent<RectTransform>();
-        statusRect.sizeDelta = new Vector2(400, 20);
-        entry.statusText = statusObj.AddComponent<Text>();
-        entry.statusText.fontSize = 18;
-        entry.statusText.alignment = TextAnchor.MiddleRight;
-        entry.statusText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        entry.statusText.color = Color.white;
-        entry.statusText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        entry.statusText.text = "";
-
-        // Store entry
         _playerEntries.Add(entry);
         _playerEntriesById[uniqueId] = entry;
-
-        // Update legacy references for backward compatibility
-        if (colorIndex == 0)
-        {
-            p1ScoreText = entry.scoreText;
-            p1SpeedBarFill = entry.speedBarFill;
-            p1SpeedBarBg = entry.speedBarBg;
-        }
-        else if (colorIndex == 1)
-        {
-            p2ScoreText = entry.scoreText;
-            p2SpeedBarFill = entry.speedBarFill;
-            p2SpeedBarBg = entry.speedBarBg;
-        }
-
-        Debug.Log($"[GameHUD] Created HUD entry for P{colorIndex + 1} (ClientId: {player.OwnerClientId}, LocalIdx: {localIdx})");
     }
 
-    private void CreateStatBar(Transform parent, string name, Color fillColor,
-        out Image bgImage, out Image fillImage)
+    /// <summary>A full-width row of evenly spaced segments (Quake-style blocks).</summary>
+    private Image[] CreateSegmentRow(Transform parent, string name, int count, float height)
     {
-        var bgObj = new GameObject(name + "Bg");
-        bgObj.transform.SetParent(parent, false);
-        var bgRect = bgObj.AddComponent<RectTransform>();
-        bgRect.sizeDelta = new Vector2(400, 10);
-        bgImage = bgObj.AddComponent<Image>();
-        bgImage.color = new Color(0.2f, 0.2f, 0.2f, 0.8f);
+        var rowObj = new GameObject(name);
+        rowObj.transform.SetParent(parent, false);
+        var rowRect = rowObj.AddComponent<RectTransform>();
+        rowRect.sizeDelta = new Vector2(400, height);
 
-        var fillObj = new GameObject(name + "Fill");
-        fillObj.transform.SetParent(bgObj.transform, false);
-        var fillRect = fillObj.AddComponent<RectTransform>();
-        fillRect.anchorMin = Vector2.zero;
-        fillRect.anchorMax = Vector2.one;
-        fillRect.offsetMin = new Vector2(2, 2);
-        fillRect.offsetMax = new Vector2(-2, -2);
-        fillImage = fillObj.AddComponent<Image>();
-        fillImage.color = fillColor;
+        var bg = rowObj.AddComponent<Image>();
+        bg.color = RowBgColor;
+
+        var segments = new Image[count];
+        const float gap = 0.008f; // relative gap between segments
+        for (int i = 0; i < count; i++)
+        {
+            var segObj = new GameObject($"Seg{i}");
+            segObj.transform.SetParent(rowObj.transform, false);
+            var segRect = segObj.AddComponent<RectTransform>();
+            segRect.anchorMin = new Vector2((float)i / count + gap, 0.15f);
+            segRect.anchorMax = new Vector2((float)(i + 1) / count - gap, 0.85f);
+            segRect.offsetMin = Vector2.zero;
+            segRect.offsetMax = Vector2.zero;
+
+            segments[i] = segObj.AddComponent<Image>();
+            segments[i].color = SegmentOffColor;
+        }
+        return segments;
     }
 
-    private void UpdateAllSpeedBars()
+    /// <summary>Small pip group for compact opponent rows, at a fixed x offset.</summary>
+    private Image[] CreatePipGroup(Transform parent, string name, int count, float xOffset)
+    {
+        const float pipWidth = 22f;
+        const float pipGap = 4f;
+
+        var pips = new Image[count];
+        for (int i = 0; i < count; i++)
+        {
+            var pipObj = new GameObject($"{name}{i}");
+            pipObj.transform.SetParent(parent, false);
+            var rect = pipObj.AddComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0, 0);
+            rect.anchorMax = new Vector2(0, 1);
+            rect.pivot = new Vector2(0, 0.5f);
+            rect.sizeDelta = new Vector2(pipWidth, 0);
+            rect.anchoredPosition = new Vector2(xOffset + i * (pipWidth + pipGap), 0);
+
+            pips[i] = pipObj.AddComponent<Image>();
+            pips[i].color = SegmentOffColor;
+        }
+        return pips;
+    }
+
+    /// <summary>Icon + short text chip for an active power-up effect.</summary>
+    private GameObject CreateChip(Transform parent, string name, Sprite icon, Color textColor, out Text chipText)
+    {
+        var chipObj = new GameObject(name);
+        chipObj.transform.SetParent(parent, false);
+        var chipRect = chipObj.AddComponent<RectTransform>();
+        chipRect.sizeDelta = new Vector2(120, 22);
+
+        var iconObj = new GameObject("Icon");
+        iconObj.transform.SetParent(chipObj.transform, false);
+        var iconRect = iconObj.AddComponent<RectTransform>();
+        iconRect.anchorMin = new Vector2(0, 0.5f);
+        iconRect.anchorMax = new Vector2(0, 0.5f);
+        iconRect.pivot = new Vector2(0, 0.5f);
+        iconRect.sizeDelta = new Vector2(20, 20);
+        iconRect.anchoredPosition = Vector2.zero;
+
+        var iconImage = iconObj.AddComponent<Image>();
+        if (icon != null) iconImage.sprite = icon;
+        iconImage.preserveAspect = true;
+
+        var textObj = new GameObject("Text");
+        textObj.transform.SetParent(chipObj.transform, false);
+        var textRect = textObj.AddComponent<RectTransform>();
+        textRect.anchorMin = new Vector2(0, 0);
+        textRect.anchorMax = new Vector2(1, 1);
+        textRect.offsetMin = new Vector2(24, 0);
+        textRect.offsetMax = Vector2.zero;
+
+        chipText = textObj.AddComponent<Text>();
+        chipText.font = PixelFont;
+        chipText.fontSize = ChipFontSize;
+        chipText.alignment = TextAnchor.MiddleLeft;
+        chipText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        chipText.color = textColor;
+
+        chipObj.SetActive(false);
+        return chipObj;
+    }
+
+    private static Sprite GetDmgSprite()
+    {
+        if (_dmgSprite == null)
+            _dmgSprite = Resources.Load<Sprite>("Sprites/PowerUps/powerup_damage");
+        return _dmgSprite;
+    }
+
+    private static Sprite GetRepairSprite()
+    {
+        if (_repairSprite == null)
+            _repairSprite = Resources.Load<Sprite>("Sprites/PowerUps/powerup_repair");
+        return _repairSprite;
+    }
+
+    // --- per-frame updates ---------------------------------------------------
+
+    private void UpdateAllBars()
     {
         foreach (var entry in _playerEntries)
         {
-            if (entry.player != null && entry.speedBarFill != null)
-            {
-                float speed = entry.player.Speed;
-                float normalizedSpeed = Mathf.InverseLerp(minSpeed, maxSpeed, speed);
-                UpdateSpeedBarFill(entry.speedBarFill, normalizedSpeed);
-                entry.speedBarFill.color = entry.player.IsEngineOff ? engineOffColor : engineOnColor;
-            }
-            else if (entry.speedBarFill != null)
-            {
-                UpdateSpeedBarFill(entry.speedBarFill, 0f);
-            }
+            var stats = entry.player != null ? entry.player.PlaneStats : null;
 
-            // Update stat bars from PlaneStats
-            UpdateStatBars(entry);
+            if (entry.detailed)
+            {
+                UpdateSegments(entry.shieldSegments, stats?.Shield ?? 0, shieldBarColor);
+                UpdateSegments(entry.healthSegments, stats?.Health ?? 0, healthBarColor);
+                UpdateSpeedSegments(entry);
+                UpdateChips(entry, stats);
+            }
+            else
+            {
+                UpdateSegments(entry.shieldPips, stats?.Shield ?? 0, shieldBarColor);
+                UpdateSegments(entry.healthPips, stats?.Health ?? 0, healthBarColor);
+            }
         }
     }
 
-    private void UpdateStatBars(PlayerHUDEntry entry)
+    private static void UpdateSegments(Image[] segments, int value, Color onColor)
     {
-        if (entry.player == null) return;
-
-        var stats = entry.player.PlaneStats;
-        if (stats == null) return;
-
-        // Shield bar (0-3)
-        if (entry.shieldBarFill != null)
+        if (segments == null) return;
+        for (int i = 0; i < segments.Length; i++)
         {
-            float shieldNorm = stats.Shield / 3f;
-            UpdateSpeedBarFill(entry.shieldBarFill, shieldNorm);
-        }
-
-        // Health bar (0-3)
-        if (entry.healthBarFill != null)
-        {
-            float healthNorm = stats.Health / 3f;
-            UpdateSpeedBarFill(entry.healthBarFill, healthNorm);
-        }
-
-        // Status text: handling indicator + damage boost
-        if (entry.statusText != null)
-        {
-            string status = "";
-
-            // Handling indicator (wrench icon when degraded)
-            if (stats.Handling < 0.95f)
-            {
-                int handlingPct = Mathf.RoundToInt(stats.Handling * 100f);
-                status += $"<color=#FFD700>Ctrl:{handlingPct}%</color> ";
-            }
-
-            // Damage boost indicator
-            if (stats.DamageMultiplier > 1.05f)
-            {
-                status += $"<color=#FF6600>DMG x{stats.DamageMultiplier:F1}</color>";
-            }
-
-            entry.statusText.text = status;
+            if (segments[i] == null) continue;
+            segments[i].color = i < value ? onColor : SegmentOffColor;
         }
     }
 
-    private void UpdateSpeedBarFill(Image fillImage, float normalizedValue)
+    private void UpdateSpeedSegments(Image[] segments, float normalized, Color onColor)
     {
-        var rect = fillImage.rectTransform;
-        // Left-to-right fill for all players
-        rect.anchorMin = new Vector2(0, 0);
-        rect.anchorMax = new Vector2(normalizedValue, 1);
+        if (segments == null) return;
+        float scaled = normalized * segments.Length;
+        for (int i = 0; i < segments.Length; i++)
+        {
+            if (segments[i] == null) continue;
+            float fill = Mathf.Clamp01(scaled - i);
+            if (fill >= 1f) segments[i].color = onColor;
+            else if (fill > 0f)
+            {
+                // partial segment - dimmed
+                var c = Color.Lerp(SegmentOffColor, onColor, fill);
+                segments[i].color = c;
+            }
+            else segments[i].color = SegmentOffColor;
+        }
+    }
+
+    private void UpdateSpeedSegments(PlayerHUDEntry entry)
+    {
+        if (entry.speedSegments == null) return;
+
+        float normalized = 0f;
+        Color color = engineOffColor;
+        if (entry.player != null)
+        {
+            normalized = Mathf.InverseLerp(minSpeed, maxSpeed, entry.player.Speed);
+            color = entry.player.IsEngineOff ? engineOffColor : engineOnColor;
+        }
+        UpdateSpeedSegments(entry.speedSegments, normalized, color);
+    }
+
+    private void UpdateChips(PlayerHUDEntry entry, PlaneStats stats)
+    {
+        if (stats == null)
+        {
+            entry.dmgChip?.SetActive(false);
+            entry.repairChip?.SetActive(false);
+            return;
+        }
+
+        // Damage boost: icon + multiplier + remaining seconds
+        bool dmgActive = stats.DamageMultiplier > 1.05f;
+        if (entry.dmgChip != null && entry.dmgChip.activeSelf != dmgActive)
+            entry.dmgChip.SetActive(dmgActive);
+        if (dmgActive && entry.dmgChipText != null)
+        {
+            int secs = Mathf.CeilToInt(stats.DamageBoostTimeRemaining);
+            entry.dmgChipText.text = secs > 0
+                ? $"x{stats.DamageMultiplier:F1} {secs}s"
+                : $"x{stats.DamageMultiplier:F1}";
+        }
+
+        // Degraded handling: wrench + percentage
+        bool repairNeeded = stats.Handling < 0.95f;
+        if (entry.repairChip != null && entry.repairChip.activeSelf != repairNeeded)
+            entry.repairChip.SetActive(repairNeeded);
+        if (repairNeeded && entry.repairChipText != null)
+        {
+            entry.repairChipText.text = $"{Mathf.RoundToInt(stats.Handling * 100f)}%";
+        }
     }
 
     private void UpdateTimer()
     {
-        if (matchTimeText != null && ScoreManager.Instance != null)
+        if (matchTimeText == null || ScoreManager.Instance == null) return;
+
+        if (MatchManager.Instance != null && MatchManager.Instance.IsIntermission)
         {
-            if (ScoreManager.Instance.MatchStarted)
-            {
-                matchTimeText.text = ScoreManager.Instance.GetFormattedTime();
-            }
-            else
-            {
-                matchTimeText.text = "0:00.0";
-            }
+            matchTimeText.text = "0:00";
+            matchTimeText.color = TimerWarnColor;
+            return;
+        }
+
+        if (ScoreManager.Instance.MatchStarted)
+        {
+            float remaining = MatchManager.TimeLimitSeconds - ScoreManager.Instance.MatchTime;
+            matchTimeText.text = ScoreManager.Instance.GetFormattedRemainingTime(MatchManager.TimeLimitSeconds);
+            matchTimeText.color = remaining <= 30f ? TimerWarnColor : Color.white;
+        }
+        else
+        {
+            matchTimeText.text = "-:--";
+            matchTimeText.color = Color.white;
         }
     }
 
+    // --- score events ---------------------------------------------------------
+
     private void OnScoreChanged(ulong scorerClientId, int localPlayerIndex, int newScore)
     {
-        UpdateScoreDisplay(scorerClientId, localPlayerIndex, newScore);
+        UpdatePlayerDisplay(scorerClientId, localPlayerIndex);
         PlayScoreEffect(scorerClientId, localPlayerIndex);
     }
 
     private void OnStatsChanged(ulong clientId, int localPlayerIndex, ScoreManager.PlayerStats stats)
     {
-        UpdateStatsDisplay(clientId, localPlayerIndex, stats);
-    }
-
-    private void UpdateScoreDisplay(ulong clientId, int localPlayerIndex, int score)
-    {
-        // Update uses combined format - delegate to UpdatePlayerDisplay
-        UpdatePlayerDisplay(clientId, localPlayerIndex);
-    }
-
-    private void UpdateStatsDisplay(ulong clientId, int localPlayerIndex, ScoreManager.PlayerStats stats)
-    {
-        // Update uses combined format - delegate to UpdatePlayerDisplay
         UpdatePlayerDisplay(clientId, localPlayerIndex);
     }
 
     private void UpdatePlayerDisplay(ulong clientId, int localPlayerIndex)
     {
-        // Find the specific entry for this player
         string uniqueId = GetPlayerUniqueId(clientId, localPlayerIndex);
         if (_playerEntriesById.TryGetValue(uniqueId, out var entry) && entry.scoreText != null)
         {
-            // Use stored base name (already stripped of #N suffix for local players)
-            string baseName = entry.lastKnownName ?? $"P{localPlayerIndex + 1}";
-
-            // Get full stats
-            var stats = ScoreManager.Instance?.GetStats(clientId, localPlayerIndex);
-            int kills = stats?.Kills ?? 0;
-            int deaths = stats?.Deaths ?? 0;
-            int collisions = stats?.PlaneCollisions ?? 0;
-
-            // Get maturity level abbreviation based on kills
-            string levelAbbr = GetMaturityAbbreviation(kills);
-
-            // Format: "deviceName#N#L K|D|C" for local players, "deviceName#L K|D|C" for remote
-            string displayName = entry.isLocalPlayer
-                ? $"{baseName}#{localPlayerIndex + 1}#{levelAbbr}"
-                : $"{baseName}#{levelAbbr}";
-
-            entry.scoreText.text = $"{displayName} {kills}|{deaths}|{collisions}";
+            UpdateScoreLine(entry, ScoreManager.Instance?.GetStats(clientId, localPlayerIndex));
         }
     }
 
+    private void UpdateScoreLine(PlayerHUDEntry entry, ScoreManager.PlayerStats stats)
+    {
+        string baseName = entry.lastKnownName ?? $"P{entry.localPlayerIndex + 1}";
+        int kills = stats?.Kills ?? 0;
+        int deaths = stats?.Deaths ?? 0;
+        int collisions = stats?.PlaneCollisions ?? 0;
+        string levelAbbr = GetMaturityAbbreviation(kills);
+
+        // "deviceName#N#L K|D|C" for local co-op pilots, "deviceName#L K|D|C" for remote
+        string displayName = entry.isLocalPlayer
+            ? $"{baseName}#{entry.localPlayerIndex + 1}#{levelAbbr}"
+            : $"{baseName}#{levelAbbr}";
+
+        entry.scoreText.text = $"{displayName} {kills}|{deaths}|{collisions}";
+    }
+
     /// <summary>
-    /// Get maturity level abbreviation based on kills count.
-    /// N = Novice (0-9), A = Advanced (10-19), E = Expert (20+)
+    /// Maturity level abbreviation: N = Novice (0-9), A = Advanced (10-19), E = Expert (20+)
     /// </summary>
     private string GetMaturityAbbreviation(int kills)
     {
@@ -606,19 +739,15 @@ public class GameHUD : MonoBehaviour
 
     private void PlayScoreEffect(ulong clientId, int localPlayerIndex)
     {
-        // Find the specific entry for this player
         string uniqueId = GetPlayerUniqueId(clientId, localPlayerIndex);
         if (!_playerEntriesById.TryGetValue(uniqueId, out var entry)) return;
         if (entry.scoreText == null) return;
 
-        // Stop any running pulse
         if (entry.pulseCoroutine != null)
             StopCoroutine(entry.pulseCoroutine);
 
-        // Start pulse animation
         entry.pulseCoroutine = StartCoroutine(PulseAnimation(entry.scoreText.transform, entry.originalScoreScale));
 
-        // Spawn floating +1 text with correct color
         SpawnFloatingText(entry.scoreText.transform.position, clientId, localPlayerIndex);
     }
 
@@ -627,7 +756,6 @@ public class GameHUD : MonoBehaviour
         float elapsed = 0f;
         float halfDuration = pulseDuration / 2f;
 
-        // Scale up
         while (elapsed < halfDuration)
         {
             elapsed += Time.deltaTime;
@@ -636,7 +764,6 @@ public class GameHUD : MonoBehaviour
             yield return null;
         }
 
-        // Scale down
         elapsed = 0f;
         while (elapsed < halfDuration)
         {
@@ -653,11 +780,9 @@ public class GameHUD : MonoBehaviour
     {
         if (floatingTextPrefab == null) return;
 
-        // Spawn slightly above the score
         Vector3 spawnPos = position + Vector3.up * 30f;
         var floatingText = Instantiate(floatingTextPrefab, spawnPos, Quaternion.identity, transform);
 
-        // Set color based on player using PlayerColorManager
         var text = floatingText.GetComponent<Text>();
         if (text != null)
         {
@@ -673,7 +798,6 @@ public class GameHUD : MonoBehaviour
             }
         }
 
-        // Animate and destroy
         StartCoroutine(FloatingTextAnimation(floatingText));
     }
 
@@ -694,10 +818,8 @@ public class GameHUD : MonoBehaviour
             elapsed += Time.deltaTime;
             float t = elapsed / duration;
 
-            // Move up
             rectTransform.anchoredPosition = startPos + Vector3.up * (50f * t);
 
-            // Fade out
             if (text != null)
             {
                 Color c = startColor;
@@ -711,12 +833,124 @@ public class GameHUD : MonoBehaviour
         Destroy(floatingText);
     }
 
+    // --- round results overlay -------------------------------------------------
+
+    private void OnMatchEnded(MatchManager.MatchResult result)
+    {
+        EnsureResultsOverlay();
+
+        // Winner name + color
+        string winnerName = "P?";
+        string winnerId = GetPlayerUniqueId(result.WinnerClientId, result.WinnerLocalPlayerIndex);
+        if (_playerEntriesById.TryGetValue(winnerId, out var winnerEntry) && winnerEntry.lastKnownName != null)
+        {
+            winnerName = winnerEntry.lastKnownName;
+        }
+
+        Color winnerColor = PlayerColorManager.Instance != null
+            ? PlayerColorManager.Instance.GetColor(result.WinnerClientId, result.WinnerLocalPlayerIndex)
+            : PlayerColorManager.GetColorByIndex((int)result.WinnerClientId + result.WinnerLocalPlayerIndex);
+
+        _resultsWinnerText.text = $"WINNER: {winnerName} ({result.WinnerKills})";
+        _resultsWinnerText.color = winnerColor;
+
+        // Standings from current HUD ranking (already sorted by performance)
+        var lines = new List<string>();
+        var ranked = new List<PlayerHUDEntry>(_playerEntries);
+        ranked.Sort((a, b) =>
+        {
+            var sa = ScoreManager.Instance?.GetStats(a.clientId, a.localPlayerIndex);
+            var sb = ScoreManager.Instance?.GetStats(b.clientId, b.localPlayerIndex);
+            int cmp = (sb?.Kills ?? 0).CompareTo(sa?.Kills ?? 0);
+            if (cmp != 0) return cmp;
+            cmp = (sa?.Deaths ?? 0).CompareTo(sb?.Deaths ?? 0);
+            if (cmp != 0) return cmp;
+            return (sa?.PlaneCollisions ?? 0).CompareTo(sb?.PlaneCollisions ?? 0);
+        });
+        for (int i = 0; i < ranked.Count && i < 8; i++)
+        {
+            var stats = ScoreManager.Instance?.GetStats(ranked[i].clientId, ranked[i].localPlayerIndex);
+            lines.Add($"{i + 1}. {ranked[i].lastKnownName}  {stats?.Kills ?? 0}|{stats?.Deaths ?? 0}|{stats?.PlaneCollisions ?? 0}");
+        }
+        _resultsStandingsText.text = string.Join("\n", lines);
+
+        _resultsCountdownText.text = $"NEXT ROUND IN {MatchManager.IntermissionSeconds}";
+        _resultsOverlay.SetActive(true);
+    }
+
+    private void OnIntermissionTick(int secondsLeft)
+    {
+        if (_resultsCountdownText != null)
+        {
+            _resultsCountdownText.text = $"NEXT ROUND IN {secondsLeft}";
+        }
+    }
+
+    private void OnMatchStarted()
+    {
+        if (_resultsOverlay != null)
+        {
+            _resultsOverlay.SetActive(false);
+        }
+    }
+
+    private void EnsureResultsOverlay()
+    {
+        if (_resultsOverlay != null) return;
+
+        _resultsOverlay = new GameObject("ResultsOverlay");
+        _resultsOverlay.transform.SetParent(transform, false);
+
+        var overlayRect = _resultsOverlay.AddComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.offsetMin = Vector2.zero;
+        overlayRect.offsetMax = Vector2.zero;
+
+        var bg = _resultsOverlay.AddComponent<Image>();
+        bg.color = new Color(0f, 0f, 0f, 0.75f);
+
+        CreateOverlayText("Title", "ROUND OVER", 32, new Vector2(0, 140), Color.white);
+        _resultsWinnerText = CreateOverlayText("Winner", "", 22, new Vector2(0, 80), Color.white);
+        _resultsStandingsText = CreateOverlayText("Standings", "", 14, new Vector2(0, -20), Color.white);
+        _resultsStandingsText.alignment = TextAnchor.UpperCenter;
+        var standingsRect = _resultsStandingsText.GetComponent<RectTransform>();
+        standingsRect.sizeDelta = new Vector2(900, 220);
+        _resultsCountdownText = CreateOverlayText("Countdown", "", 18, new Vector2(0, -160), new Color(1f, 0.85f, 0.3f));
+
+        _resultsOverlay.SetActive(false);
+    }
+
+    private Text CreateOverlayText(string name, string content, int fontSize, Vector2 anchoredPos, Color color)
+    {
+        var obj = new GameObject(name);
+        obj.transform.SetParent(_resultsOverlay.transform, false);
+
+        var rect = obj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = anchoredPos;
+        rect.sizeDelta = new Vector2(900, 60);
+
+        var text = obj.AddComponent<Text>();
+        text.text = content;
+        text.font = PixelFont;
+        text.fontSize = fontSize;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.color = color;
+
+        return text;
+    }
+
+    // --- static factory ----------------------------------------------------------
+
     /// <summary>
-    /// Create HUD UI programmatically. Call this from a setup script if prefab not available.
+    /// Create HUD UI programmatically. Called by GameSetup after scene load.
     /// </summary>
     public static GameHUD CreateHUD(Canvas canvas)
     {
-        // Create HUD container
         var hudObj = new GameObject("GameHUD");
         hudObj.transform.SetParent(canvas.transform, false);
         var hudRect = hudObj.AddComponent<RectTransform>();
@@ -727,38 +961,37 @@ public class GameHUD : MonoBehaviour
 
         var hud = hudObj.AddComponent<GameHUD>();
 
-        // Create Match Time (top-center)
-        hud.matchTimeText = CreateText(hudObj.transform, "MatchTime", "0:00.0",
-            new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -40),
-            36, TextAnchor.MiddleCenter, Color.white);
+        // Match timer (top-center) + round goal below it
+        hud.matchTimeText = CreateStaticText(hudObj.transform, "MatchTime", "-:--",
+            new Vector2(0.5f, 1), new Vector2(0, -40), 28, Color.white);
+        hud.matchGoalText = CreateStaticText(hudObj.transform, "MatchGoal", $"FIRST TO {MatchManager.KillTarget}",
+            new Vector2(0.5f, 1), new Vector2(0, -72), 12, new Color(1f, 1f, 1f, 0.6f));
 
-        // Create floating text prefab
         hud.floatingTextPrefab = CreateFloatingTextPrefab();
-
-        // Player stats container will be created automatically in Start()
 
         return hud;
     }
 
-    private static Text CreateText(Transform parent, string name, string text,
-        Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPos,
-        int fontSize, TextAnchor alignment, Color color)
+    private static Text CreateStaticText(Transform parent, string name, string content,
+        Vector2 anchor, Vector2 anchoredPos, int fontSize, Color color)
     {
         var obj = new GameObject(name);
         obj.transform.SetParent(parent, false);
 
         var rect = obj.AddComponent<RectTransform>();
-        rect.anchorMin = anchorMin;
-        rect.anchorMax = anchorMax;
+        rect.anchorMin = anchor;
+        rect.anchorMax = anchor;
         rect.anchoredPosition = anchoredPos;
-        rect.sizeDelta = new Vector2(150, 60);
+        rect.sizeDelta = new Vector2(400, 40);
 
         var textComp = obj.AddComponent<Text>();
-        textComp.text = text;
+        textComp.text = content;
+        textComp.font = PixelFont;
         textComp.fontSize = fontSize;
-        textComp.alignment = alignment;
+        textComp.alignment = TextAnchor.MiddleCenter;
+        textComp.horizontalOverflow = HorizontalWrapMode.Overflow;
+        textComp.verticalOverflow = VerticalWrapMode.Overflow;
         textComp.color = color;
-        textComp.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
         return textComp;
     }
@@ -773,9 +1006,9 @@ public class GameHUD : MonoBehaviour
 
         var text = obj.AddComponent<Text>();
         text.text = "+1";
-        text.fontSize = 32;
+        text.fontSize = 24;
         text.alignment = TextAnchor.MiddleCenter;
-        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        text.font = PixelFont;
 
         obj.SetActive(true);
         return obj;
