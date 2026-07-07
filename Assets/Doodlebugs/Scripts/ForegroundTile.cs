@@ -10,6 +10,10 @@ public class ForegroundTile : MonoBehaviour
     {
         if (!other.gameObject.CompareTag("Bullet")) return;
 
+        // Arming mines pass through terrain without carving it
+        var bullet = other.GetComponent<Bullet>();
+        if (bullet != null && !bullet.IsArmed) return;
+
         // Destroy 2x2 square: hit tile + right + below + below-right
         int[,] offsets = { { 0, 0 }, { 1, 0 }, { 0, -1 }, { 1, -1 } };
         for (int i = 0; i < 4; i++)
