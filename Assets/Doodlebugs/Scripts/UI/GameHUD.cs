@@ -119,8 +119,13 @@ public class GameHUD : MonoBehaviour
 
     private GameObject _resultsOverlay;
     private Text _resultsWinnerText;
+    private Text _resultsWinsText;
     private Text _resultsStandingsText;
     private Text _resultsCountdownText;
+
+    // Run-over podium
+    private GameObject _podiumOverlay;
+    private Text _podiumCountdownText;
 
     private string GetPlayerUniqueId(ulong clientId, int localPlayerIndex)
     {
@@ -209,6 +214,8 @@ public class GameHUD : MonoBehaviour
             MatchManager.Instance.OnHangarOpened -= OnHangarOpened;
             MatchManager.Instance.OnHangarTick -= OnHangarTick;
             MatchManager.Instance.OnClientReadyChanged -= OnClientReadyChanged;
+            MatchManager.Instance.OnRunStateChanged -= OnRunStateChanged;
+            MatchManager.Instance.OnRunEnded -= OnRunEnded;
         }
     }
 
@@ -242,6 +249,8 @@ public class GameHUD : MonoBehaviour
         MatchManager.Instance.OnHangarOpened += OnHangarOpened;
         MatchManager.Instance.OnHangarTick += OnHangarTick;
         MatchManager.Instance.OnClientReadyChanged += OnClientReadyChanged;
+        MatchManager.Instance.OnRunStateChanged += OnRunStateChanged;
+        MatchManager.Instance.OnRunEnded += OnRunEnded;
     }
 
     private void OnLocalPlayerToggled(int localPlayerIndex, bool enabled)
@@ -452,9 +461,11 @@ public class GameHUD : MonoBehaviour
 
         if (detailed)
         {
-            // --- segmented bars: shield 3 / health 3 / speed 12 ---
-            entry.shieldSegments = CreateSegmentRow(container.transform, "ShieldBar", 3, 12f);
-            entry.healthSegments = CreateSegmentRow(container.transform, "HealthBar", 3, 12f);
+            // --- segmented bars: shield / health grow with run upgrades (3..5) ---
+            entry.shieldSegments = CreateSegmentRow(container.transform, "ShieldBar",
+                PlaneStats.AbsoluteMaxSegments, 12f);
+            entry.healthSegments = CreateSegmentRow(container.transform, "HealthBar",
+                PlaneStats.AbsoluteMaxSegments, 12f);
             entry.speedSegments = CreateSegmentRow(container.transform, "SpeedBar", SpeedSegments, 8f);
 
             // --- active power-up chips row ---
@@ -743,8 +754,10 @@ public class GameHUD : MonoBehaviour
 
             if (entry.detailed)
             {
-                UpdateSegments(entry.shieldSegments, stats?.Shield ?? 0, shieldBarColor);
-                UpdateSegments(entry.healthSegments, stats?.Health ?? 0, healthBarColor);
+                UpdateSegments(entry.shieldSegments, stats?.Shield ?? 0, shieldBarColor,
+                    stats?.MaxShieldValue ?? 3);
+                UpdateSegments(entry.healthSegments, stats?.Health ?? 0, healthBarColor,
+                    stats?.MaxHealthValue ?? 3);
                 UpdateSpeedSegments(entry);
                 UpdateChips(entry, stats);
             }
@@ -756,13 +769,22 @@ public class GameHUD : MonoBehaviour
         }
     }
 
-    private static void UpdateSegments(Image[] segments, int value, Color onColor)
+    private static void UpdateSegments(Image[] segments, int value, Color onColor, int maxVisible = -1)
     {
         if (segments == null) return;
+        if (maxVisible < 0) maxVisible = segments.Length;
         for (int i = 0; i < segments.Length; i++)
         {
             if (segments[i] == null) continue;
-            segments[i].color = i < value ? onColor : SegmentOffColor;
+            if (i >= maxVisible)
+            {
+                // Slot not unlocked by run upgrades yet - invisible
+                segments[i].color = Color.clear;
+            }
+            else
+            {
+                segments[i].color = i < value ? onColor : SegmentOffColor;
+            }
         }
     }
 
@@ -1051,7 +1073,13 @@ public class GameHUD : MonoBehaviour
         }
         _resultsStandingsText.text = string.Join("\n", lines);
 
-        _resultsCountdownText.text = "HANGAR OPENING...";
+        if (_resultsWinsText != null)
+        {
+            _resultsWinsText.text = BuildRoundWinsLine();
+        }
+
+        bool runOver = MatchManager.Instance != null && MatchManager.Instance.IsRunOver;
+        _resultsCountdownText.text = runOver ? "RUN OVER!" : "HANGAR OPENING...";
         _resultsOverlay.SetActive(true);
     }
 
@@ -1061,7 +1089,82 @@ public class GameHUD : MonoBehaviour
         {
             _resultsOverlay.SetActive(false);
         }
+        if (_podiumOverlay != null)
+        {
+            Destroy(_podiumOverlay);
+            _podiumOverlay = null;
+            _podiumCountdownText = null;
+        }
         CloseHangar();
+    }
+
+    // --- run-over podium --------------------------------------------------------
+
+    private void OnRunEnded(ulong winnerClientId)
+    {
+        if (_resultsOverlay != null) _resultsOverlay.SetActive(false);
+
+        _podiumOverlay = new GameObject("PodiumOverlay");
+        _podiumOverlay.transform.SetParent(transform, false);
+        var rect = _podiumOverlay.AddComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+
+        var bg = _podiumOverlay.AddComponent<Image>();
+        bg.color = new Color(0f, 0f, 0f, 0.88f);
+
+        CreatePodiumText("Title", "RUN OVER", 34, new Vector2(0, 130), new Color(1f, 0.85f, 0.3f));
+
+        Color winnerColor = PlayerColorManager.Instance != null
+            ? PlayerColorManager.Instance.GetColor(winnerClientId, 0)
+            : PlayerColorManager.GetColorByIndex((int)winnerClientId);
+        CreatePodiumText("Champion",
+            $"CHAMPION: {ResolvePlayerName(winnerClientId, 0)}", 22, new Vector2(0, 70), winnerColor);
+
+        // Standings by round wins
+        var mm = MatchManager.Instance;
+        var lines = new List<string>();
+        if (mm != null)
+        {
+            var entries = new List<KeyValuePair<ulong, int>>();
+            foreach (var pair in mm.RoundWins) entries.Add(pair);
+            entries.Sort((a, b) => b.Value.CompareTo(a.Value));
+            for (int i = 0; i < entries.Count; i++)
+            {
+                lines.Add($"{i + 1}. {ResolvePlayerName(entries[i].Key, 0)}  {entries[i].Value} WINS");
+            }
+        }
+        var standings = CreatePodiumText("Standings", string.Join("\n", lines), 14,
+            new Vector2(0, -40), Color.white);
+        standings.alignment = TextAnchor.UpperCenter;
+        standings.GetComponent<RectTransform>().sizeDelta = new Vector2(900, 140);
+
+        _podiumCountdownText = CreatePodiumText("Countdown",
+            $"NEW RUN IN {MatchManager.PodiumSeconds}", 16, new Vector2(0, -150),
+            new Color(1f, 0.85f, 0.3f));
+    }
+
+    private Text CreatePodiumText(string name, string content, int fontSize, Vector2 pos, Color color)
+    {
+        var obj = new GameObject(name);
+        obj.transform.SetParent(_podiumOverlay.transform, false);
+        var rect = obj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = pos;
+        rect.sizeDelta = new Vector2(900, 60);
+
+        var text = obj.AddComponent<Text>();
+        text.text = content;
+        text.font = PixelFont;
+        text.fontSize = fontSize;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.color = color;
+        return text;
     }
 
     private void EnsureResultsOverlay()
@@ -1081,14 +1184,34 @@ public class GameHUD : MonoBehaviour
         bg.color = new Color(0f, 0f, 0f, 0.75f);
 
         CreateOverlayText("Title", "ROUND OVER", 32, new Vector2(0, 140), Color.white);
-        _resultsWinnerText = CreateOverlayText("Winner", "", 22, new Vector2(0, 80), Color.white);
-        _resultsStandingsText = CreateOverlayText("Standings", "", 14, new Vector2(0, -20), Color.white);
+        _resultsWinnerText = CreateOverlayText("Winner", "", 22, new Vector2(0, 85), Color.white);
+        _resultsWinsText = CreateOverlayText("Wins", "", 12, new Vector2(0, 52),
+            new Color(1f, 1f, 1f, 0.7f));
+        _resultsStandingsText = CreateOverlayText("Standings", "", 14, new Vector2(0, -75), Color.white);
         _resultsStandingsText.alignment = TextAnchor.UpperCenter;
         var standingsRect = _resultsStandingsText.GetComponent<RectTransform>();
-        standingsRect.sizeDelta = new Vector2(900, 220);
+        standingsRect.sizeDelta = new Vector2(900, 190);
         _resultsCountdownText = CreateOverlayText("Countdown", "", 18, new Vector2(0, -160), new Color(1f, 0.85f, 0.3f));
 
         _resultsOverlay.SetActive(false);
+    }
+
+    /// <summary>"WINS: A 2 · B 1" line built from the synced round-wins map.</summary>
+    private string BuildRoundWinsLine()
+    {
+        var mm = MatchManager.Instance;
+        if (mm == null || mm.RoundWins.Count == 0) return "";
+
+        var entries = new List<KeyValuePair<ulong, int>>();
+        foreach (var pair in mm.RoundWins) entries.Add(pair);
+        entries.Sort((a, b) => b.Value.CompareTo(a.Value));
+
+        var parts = new List<string>();
+        foreach (var pair in entries)
+        {
+            parts.Add($"{ColoredName(pair.Key, 0)} {pair.Value}");
+        }
+        return $"WINS (TO {MatchManager.RoundWinsTarget}): " + string.Join(" · ", parts);
     }
 
     private Text CreateOverlayText(string name, string content, int fontSize, Vector2 anchoredPos, Color color)
@@ -1142,6 +1265,12 @@ public class GameHUD : MonoBehaviour
 
     private void OnHangarTick(int secondsLeft)
     {
+        // Shared tick: podium countdown when the run is over, hangar otherwise
+        if (_podiumCountdownText != null && _podiumOverlay != null)
+        {
+            _podiumCountdownText.text = $"NEW RUN IN {secondsLeft}";
+            return;
+        }
         if (_hangarCountdownText != null)
         {
             _hangarCountdownText.text = $"AUTO-START {secondsLeft}";
@@ -1170,6 +1299,8 @@ public class GameHUD : MonoBehaviour
         _hangarReadyRows.Clear();
         _readyClients.Clear();
         _weaponCards.Clear();
+        _upgradeCards.Clear();
+        _runPointsText = null;
         _localReady = false;
     }
 
@@ -1198,18 +1329,20 @@ public class GameHUD : MonoBehaviour
         var bg = _hangarOverlay.AddComponent<Image>();
         bg.color = new Color(0f, 0f, 0f, 0.82f);
 
-        CreateHangarText("Title", "HANGAR", 30, new Vector2(0, 170), new Color(1f, 0.85f, 0.3f));
+        CreateHangarText("Title", "HANGAR", 28, new Vector2(0, 195), new Color(1f, 0.85f, 0.3f));
         _hangarCountdownText = CreateHangarText("Countdown", $"AUTO-START {MatchManager.HangarSeconds}",
-            12, new Vector2(0, 132), Color.white);
-        _hangarReadyCountText = CreateHangarText("ReadyCount", "", 12, new Vector2(0, 110),
+            12, new Vector2(-160, 160), Color.white);
+        _hangarReadyCountText = CreateHangarText("ReadyCount", "", 12, new Vector2(160, 160),
             new Color(1f, 1f, 1f, 0.6f));
-        CreateHangarText("DraftLabel", "WEAPON FOR NEXT ROUND", 12, new Vector2(0, 78),
+        CreateHangarText("DraftLabel", "WEAPON FOR NEXT ROUND", 11, new Vector2(0, 128),
             new Color(1f, 1f, 1f, 0.6f));
 
         BuildWeaponCards();
+        BuildUpgradeShop();
         BuildReadyList();
         BuildReadyButton();
         UpdateReadyCount();
+        RefreshUpgradeShop();
     }
 
     private void BuildWeaponCards()
@@ -1235,7 +1368,7 @@ public class GameHUD : MonoBehaviour
         }
 
         const float cardWidth = 240f;
-        const float cardHeight = 150f;
+        const float cardHeight = 120f;
         const float gap = 20f;
         float totalWidth = offers.Count * cardWidth + (offers.Count - 1) * gap;
         float startX = -totalWidth / 2f + cardWidth / 2f;
@@ -1250,7 +1383,7 @@ public class GameHUD : MonoBehaviour
             var cardRect = cardObj.AddComponent<RectTransform>();
             cardRect.anchorMin = new Vector2(0.5f, 0.5f);
             cardRect.anchorMax = new Vector2(0.5f, 0.5f);
-            cardRect.anchoredPosition = new Vector2(startX + i * (cardWidth + gap), -20f);
+            cardRect.anchoredPosition = new Vector2(startX + i * (cardWidth + gap), 62f);
             cardRect.sizeDelta = new Vector2(cardWidth, cardHeight);
 
             var cardBg = cardObj.AddComponent<Image>();
@@ -1262,15 +1395,15 @@ public class GameHUD : MonoBehaviour
             button.onClick.AddListener(() => SelectWeapon(captured));
 
             string title = weaponId == currentId ? $"KEEP: {profile.DisplayName}" : profile.DisplayName;
-            CreateTextIn(cardObj.transform, "Name", title, 13, new Vector2(0, 40), Color.white);
+            CreateTextIn(cardObj.transform, "Name", title, 13, new Vector2(0, 34), Color.white);
             CreateTextIn(cardObj.transform, "Desc", profile.Description, 9, new Vector2(0, 8),
                 new Color(1f, 1f, 1f, 0.65f));
             string stats = $"DMG {profile.Damage} · ROF {1f / profile.Cooldown:F1}/s" +
                            (profile.PelletCount > 1 ? $" · x{profile.PelletCount}" : "");
-            CreateTextIn(cardObj.transform, "Stats", stats, 9, new Vector2(0, -20),
+            CreateTextIn(cardObj.transform, "Stats", stats, 9, new Vector2(0, -16),
                 new Color(1f, 0.75f, 0.4f));
             CreateTextIn(cardObj.transform, "Sel", weaponId == currentId ? "SELECTED" : "", 9,
-                new Vector2(0, -50), ReadyGreen);
+                new Vector2(0, -42), ReadyGreen);
 
             _weaponCards.Add((cardObj, cardBg, weaponId));
         }
@@ -1304,11 +1437,108 @@ public class GameHUD : MonoBehaviour
         SfxManager.PlayTick();
     }
 
+    // --- run upgrade shop -----------------------------------------------------
+
+    private Text _runPointsText;
+    private readonly List<(GameObject card, Image bg, Text levelText, RunUpgradeType type)>
+        _upgradeCards = new List<(GameObject, Image, Text, RunUpgradeType)>();
+
+    private void BuildUpgradeShop()
+    {
+        _upgradeCards.Clear();
+
+        _runPointsText = CreateHangarText("RunPoints", "", 11, new Vector2(0, -18),
+            new Color(1f, 0.85f, 0.3f));
+
+        const float cardWidth = 185f;
+        const float cardHeight = 95f;
+        const float gap = 14f;
+        float totalWidth = RunUpgrades.TypeCount * cardWidth + (RunUpgrades.TypeCount - 1) * gap;
+        float startX = -totalWidth / 2f + cardWidth / 2f;
+
+        for (int i = 0; i < RunUpgrades.TypeCount; i++)
+        {
+            var type = (RunUpgradeType)i;
+
+            var cardObj = new GameObject($"UpgradeCard_{type}");
+            cardObj.transform.SetParent(_hangarOverlay.transform, false);
+            var rect = cardObj.AddComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = new Vector2(startX + i * (cardWidth + gap), -85f);
+            rect.sizeDelta = new Vector2(cardWidth, cardHeight);
+
+            var cardBg = cardObj.AddComponent<Image>();
+            cardBg.color = CardIdle;
+
+            var button = cardObj.AddComponent<Button>();
+            button.targetGraphic = cardBg;
+            var captured = type;
+            button.onClick.AddListener(() => BuyUpgrade(captured));
+
+            CreateTextIn(cardObj.transform, "Name", RunUpgrades.DisplayName(type), 11,
+                new Vector2(0, 26), Color.white);
+            CreateTextIn(cardObj.transform, "Desc", RunUpgrades.Description(type), 9,
+                new Vector2(0, 2), new Color(1f, 1f, 1f, 0.65f));
+            var levelText = CreateTextIn(cardObj.transform, "Level", "", 9,
+                new Vector2(0, -24), new Color(1f, 0.75f, 0.4f));
+
+            _upgradeCards.Add((cardObj, cardBg, levelText, type));
+        }
+    }
+
+    private void BuyUpgrade(RunUpgradeType type)
+    {
+        var mm = MatchManager.Instance;
+        if (mm == null) return;
+        if (mm.LocalRunPoints < RunUpgrades.CostPoints) return;
+        if (mm.GetLocalUpgradeLevel(type) >= RunUpgrades.MaxLevel) return;
+
+        FindOwnedPlayer()?.RequestBuyUpgradeServerRpc((int)type);
+        SfxManager.PlayTick();
+        // UI refreshes when the server confirms via OnRunStateChanged
+    }
+
+    private void OnRunStateChanged()
+    {
+        RefreshUpgradeShop();
+    }
+
+    private void RefreshUpgradeShop()
+    {
+        var mm = MatchManager.Instance;
+        if (mm == null || _hangarOverlay == null) return;
+
+        if (_runPointsText != null)
+        {
+            _runPointsText.text = $"UPGRADES · RUN POINTS: {mm.LocalRunPoints}";
+        }
+
+        foreach (var (card, cardBg, levelText, type) in _upgradeCards)
+        {
+            int level = mm.GetLocalUpgradeLevel(type);
+            bool maxed = level >= RunUpgrades.MaxLevel;
+            bool affordable = mm.LocalRunPoints >= RunUpgrades.CostPoints;
+
+            levelText.text = maxed ? $"LV {level}/{RunUpgrades.MaxLevel} MAX"
+                                   : $"LV {level}/{RunUpgrades.MaxLevel} · COST {RunUpgrades.CostPoints}";
+            cardBg.color = maxed ? CardSelected
+                : affordable ? CardIdle
+                : new Color(0.07f, 0.07f, 0.09f, 0.95f);
+
+            var btn = card.GetComponent<Button>();
+            if (btn != null) btn.interactable = !maxed && affordable;
+        }
+    }
+
+    // --- ready list + button ----------------------------------------------------
+
     private void BuildReadyList()
     {
-        // One row per device (clientId); couch co-op pilots share one READY
+        // One row per device (clientId); couch co-op pilots share one READY.
+        // Anchored bottom-left so it never collides with the cards.
         var seen = new HashSet<ulong>();
-        float y = -120f;
+        float y = 46f;
         foreach (var entry in _playerEntries)
         {
             if (!seen.Add(entry.clientId)) continue;
@@ -1318,14 +1548,37 @@ public class GameHUD : MonoBehaviour
                 ? PlayerColorManager.Instance.GetColor(entry.clientId, 0)
                 : PlayerColorManager.GetColorByIndex((int)entry.clientId);
 
-            CreateHangarText($"Name_{entry.clientId}", name, 11, new Vector2(-120, y), color,
-                TextAnchor.MiddleLeft, 300);
-            var status = CreateHangarText($"Status_{entry.clientId}", "PICKING...", 11,
-                new Vector2(120, y), new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleLeft, 200);
+            CreateCornerText($"Name_{entry.clientId}", name, 10, new Vector2(0, 0),
+                new Vector2(60, y), color);
+            var status = CreateCornerText($"Status_{entry.clientId}", "PICKING...", 10,
+                new Vector2(0, 0), new Vector2(300, y), new Color(1f, 1f, 1f, 0.5f));
 
             _hangarReadyRows[entry.clientId] = status;
-            y -= 26f;
+            y += 24f;
         }
+    }
+
+    private Text CreateCornerText(string name, string content, int fontSize,
+        Vector2 anchor, Vector2 pos, Color color)
+    {
+        var obj = new GameObject(name);
+        obj.transform.SetParent(_hangarOverlay.transform, false);
+        var rect = obj.AddComponent<RectTransform>();
+        rect.anchorMin = anchor;
+        rect.anchorMax = anchor;
+        rect.pivot = new Vector2(0, 0);
+        rect.anchoredPosition = pos;
+        rect.sizeDelta = new Vector2(360, 20);
+
+        var text = obj.AddComponent<Text>();
+        text.text = content;
+        text.font = PixelFont;
+        text.fontSize = fontSize;
+        text.alignment = TextAnchor.MiddleLeft;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.color = color;
+        return text;
     }
 
     private void BuildReadyButton()
@@ -1333,10 +1586,11 @@ public class GameHUD : MonoBehaviour
         var buttonObj = new GameObject("ReadyButton");
         buttonObj.transform.SetParent(_hangarOverlay.transform, false);
         var rect = buttonObj.AddComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0.5f, 0f);
-        rect.anchorMax = new Vector2(0.5f, 0f);
-        rect.anchoredPosition = new Vector2(0, 70);
-        rect.sizeDelta = new Vector2(320, 72);
+        rect.anchorMin = new Vector2(1f, 0f);
+        rect.anchorMax = new Vector2(1f, 0f);
+        rect.pivot = new Vector2(1f, 0f);
+        rect.anchoredPosition = new Vector2(-60, 40);
+        rect.sizeDelta = new Vector2(300, 68);
 
         var bgImage = buttonObj.AddComponent<Image>();
         bgImage.color = new Color(0.12f, 0.4f, 0.16f, 1f);
