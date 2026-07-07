@@ -490,8 +490,10 @@ public class PlayerController : NetworkBehaviour, IDamagable
         visualEffects?.TriggerDamageFlash();
         ShowExplosionClientRpc();
 
-        // Reset plane stats on respawn (server-side)
+        // Reset plane stats on respawn (server-side); crate-boosted weapon
+        // tiers are lost on death - back to the hangar selection
         planeStats?.ResetStats();
+        GetComponent<Shooting>()?.ResetWeaponToSelected();
 
         if (CloudManager.Instance != null)
         {
@@ -1020,6 +1022,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (!IsServer) return;
 
         planeStats?.ResetStats();
+        // New round starts clean: crate-boosted tiers drop back to the hangar pick
+        GetComponent<Shooting>()?.ResetWeaponToSelected();
 
         if (CloudManager.Instance != null)
         {
@@ -1029,5 +1033,19 @@ public class PlayerController : NetworkBehaviour, IDamagable
         {
             ExecuteRespawnAtPosition(GetFallbackSpawnPosition());
         }
+    }
+
+    /// <summary>Owner pressed READY in the hangar - forward to the server.</summary>
+    [ServerRpc]
+    public void SetHangarReadyServerRpc(ServerRpcParams rpcParams = default)
+    {
+        MatchManager.Instance?.ServerSetClientReady(rpcParams.Receive.SenderClientId);
+    }
+
+    /// <summary>Broadcast a client's READY state to everyone. Called by MatchManager.</summary>
+    [ClientRpc]
+    public void SyncHangarReadyClientRpc(ulong readyClientId)
+    {
+        MatchManager.Instance?.HandleClientReadyFromServer(readyClientId);
     }
 }
