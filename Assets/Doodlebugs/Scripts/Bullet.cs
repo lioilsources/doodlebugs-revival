@@ -15,6 +15,9 @@ public class Bullet : NetworkBehaviour
 
     private float _spawnTime;
 
+    // Optional lifetime for short-range weapons (0 = unlimited). Server-only.
+    private float _lifetime;
+
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
@@ -22,6 +25,25 @@ public class Bullet : NetworkBehaviour
 
         // Bullet replicates to every client - this doubles as the shot sound
         SfxManager.PlayShoot();
+    }
+
+    /// <summary>Despawn the bullet after this many seconds (short-range weapons). Server-only.</summary>
+    public void SetLifetime(float seconds)
+    {
+        if (IsServer)
+        {
+            _lifetime = seconds;
+        }
+    }
+
+    private void Update()
+    {
+        if (!IsServer || _lifetime <= 0f) return;
+
+        if (Time.time - _spawnTime >= _lifetime && NetworkObject != null && NetworkObject.IsSpawned)
+        {
+            NetworkObject.Despawn();
+        }
     }
 
     // Track who shot this bullet for scoring
