@@ -179,6 +179,34 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   response has an expo curve, and the neutral hold angle auto-calibrates
   ~0.5 s after start (`MobileInputProvider.Recenter()` re-captures it).
 
+## Backgrounds / Parallax Profiles
+
+- A map = `BackgroundProfile` ScriptableObject (`Prefabs/Backgrounds/Profile_*.asset`):
+  background sprite + optional foreground sprite + scroll speed (-2) / bottom
+  offset (0) / scale (1). Registered in the `profiles` array on the
+  `BackgroundManager` object in Scene01; selection is a server-write
+  `NetworkVariable<int>` so clients and late joiners always match.
+- The arena ROTATES every round: `MatchManager` calls
+  `BackgroundManager.SelectRandomBackground()` at battle start and at the top
+  of every intermission (terrain rebuild pops behind the hangar overlay).
+  `SelectRandomBackground` never repeats the current index.
+- **Asset sizes:** background 4096×2732 px landscape PNG (Sprite, PPU 100,
+  pivot Center, Read/Write OFF — it is only stretched by `ScreenSetup`).
+  Foreground strip: 4096 px wide, height = terrain height in px
+  (100 px = 1 world unit, existing strips ~1250-1300 px), transparent
+  silhouette PNG (Sprite, PPU 100, pivot **Bottom-Left**, **Read/Write ON** —
+  tile splitting reads pixels). No foreground = runtime placeholder.
+- **Pipeline for new maps:** drop `Sprites/Background/<Name>.png` and
+  optionally `Sprites/Foreground/<Name>_fg.png`, then run
+  **Doodlebugs → Sync Background Profiles** (menu,
+  `Editor/BackgroundProfileSync.cs`) — it fixes import settings, creates
+  `Profile_<Name>.asset` and re-registers all profiles on the scene's
+  BackgroundManager. Textures already referenced by a hand-made profile
+  (Manhattan/central_park, Teheran/Gunned_poltics, SierraNevada/Nebula Red +
+  siera_nevada — they predate the convention) are skipped. Profiles can also
+  be authored by hand: Create → Doodlebugs → Background Profile, then add to
+  the scene array.
+
 ## LAN Discovery / Platform Notes
 
 - Flow: every instance listens for UDP broadcasts on port 47777 (5 s desktop / 10 s
