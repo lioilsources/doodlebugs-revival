@@ -3,14 +3,25 @@ using Unity.Netcode;
 
 /// <summary>
 /// Collectible power-up that drops from destroyed planes.
-/// Falls with light gravity, picked up on collision with Player.
-/// Self-destructs after 15s (blinks from 10s).
+/// Hovers like a balloon at the crash site (gentle bob) for HoverSeconds,
+/// then slowly floats up and away like a hot-air balloon. Blinks while
+/// ascending, despawns after Lifetime. Picked up on collision with Player.
+/// Server moves it (velocity only), NetworkTransform syncs to clients.
 /// </summary>
 public class PowerUp : NetworkBehaviour
 {
-    private const float Lifetime = 15f;
-    private const float BlinkStartTime = 10f;
+    private const float HoverSeconds = 10f;   // balloon waits at the crash site
+    private const float Lifetime = 20f;       // hover + ascent, then gone
+    private const float BlinkStartTime = HoverSeconds; // blinks = leaving soon
     private const float BlinkRate = 8f; // blinks per second
+
+    // Gentle bob while hovering (velocity wave integrates to ~±0.15 units)
+    private const float BobSpeed = 0.3f;
+    private const float BobAngularFreq = 2.1f;
+
+    // Hot-air-balloon ascent: eases from 0 up to max climb speed
+    private const float AscendMaxSpeed = 2.5f;
+    private const float AscendRampSeconds = 4f;
 
     // The power-up spawns exactly where the victim died, while the victim's
     // collider is still there (respawn teleport lands a frame+ later on the
@@ -24,6 +35,7 @@ public class PowerUp : NetworkBehaviour
     [SerializeField] private Sprite[] typeSprites;
 
     private SpriteRenderer _spriteRenderer;
+    private Rigidbody2D _rb;
     private float _spawnTime;
     private bool _collected;
 
@@ -41,6 +53,7 @@ public class PowerUp : NetworkBehaviour
         base.OnNetworkSpawn();
 
         _spriteRenderer = GetComponent<SpriteRenderer>();
+        _rb = GetComponent<Rigidbody2D>();
         _spawnTime = Time.time;
 
         // Apply visual based on type
@@ -79,6 +92,25 @@ public class PowerUp : NetworkBehaviour
 
         // Set sorting order high so power-ups render above background
         _spriteRenderer.sortingOrder = 50;
+    }
+
+    private void FixedUpdate()
+    {
+        // Balloon movement is server-authoritative (NetworkTransform syncs)
+        if (!IsServer || _rb == null || _collected) return;
+
+        float elapsed = Time.time - _spawnTime;
+        if (elapsed < HoverSeconds)
+        {
+            // Bob in place at the crash site
+            _rb.linearVelocity = new Vector2(0f, BobSpeed * Mathf.Sin(elapsed * BobAngularFreq));
+        }
+        else
+        {
+            // Ease into a slow climb - off to space
+            float t = (elapsed - HoverSeconds) / AscendRampSeconds;
+            _rb.linearVelocity = new Vector2(0f, Mathf.Min(1f, t) * AscendMaxSpeed);
+        }
     }
 
     private void Update()
