@@ -73,33 +73,9 @@ public class ScoreManager : MonoBehaviour
         Instance = this;
     }
 
-    private void Start()
-    {
-        // Subscribe to network events
-        if (NetworkManager.Singleton != null)
-        {
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-        }
-    }
-
-    private void OnDestroy()
-    {
-        if (NetworkManager.Singleton != null)
-        {
-            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-        }
-    }
-
-    private void OnClientConnected(ulong clientId)
-    {
-        // Reset and start new match when second player connects (server only)
-        if (NetworkManager.Singleton.IsServer &&
-            NetworkManager.Singleton.ConnectedClients.Count >= 2)
-        {
-            // Always reset and start fresh match when 2 players are connected
-            StartMatch();
-        }
-    }
+    // NOTE: matches are no longer auto-started on client connect - MatchManager
+    // owns the game phase and calls RestartMatch() when a battle actually begins.
+    // A client joining a running battle must NOT reset anyone's score.
 
     private void StartMatch()
     {
@@ -343,6 +319,41 @@ public class ScoreManager : MonoBehaviour
     {
         if (!NetworkManager.Singleton.IsServer) return;
         StartMatch();
+    }
+
+    /// <summary>
+    /// Adopt the running match state WITHOUT clearing stats. Used by a late
+    /// joiner receiving the server snapshot, and by the freeze-to-waiting
+    /// transition when a battle loses its opponents.
+    /// </summary>
+    public void SetMatchStateFromServer(bool started, float matchTime)
+    {
+        MatchStarted = started;
+        MatchTime = matchTime;
+    }
+
+    /// <summary>
+    /// Server-only: push the complete score table + match state to one client
+    /// (late-join snapshot). Routed through the given server-side player, same
+    /// pattern as the broadcast sync methods, but targeted.
+    /// </summary>
+    public void SyncFullStateTo(PlayerController via, ulong targetClientId)
+    {
+        if (!NetworkManager.Singleton.IsServer || via == null) return;
+
+        var target = new ClientRpcParams
+        {
+            Send = new ClientRpcSendParams { TargetClientIds = new[] { targetClientId } }
+        };
+
+        foreach (var entry in _playerStats)
+        {
+            ParsePlayerId(entry.Key, out ulong clientId, out int localPlayerIndex);
+            via.SyncStatsClientRpc(clientId, localPlayerIndex,
+                entry.Value.Kills, entry.Value.Deaths, entry.Value.PlaneCollisions, target);
+        }
+
+        via.SyncMatchStateClientRpc(MatchStarted, MatchTime, target);
     }
 
     /// <summary>

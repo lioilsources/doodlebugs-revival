@@ -29,6 +29,28 @@ public class MatchManager : MonoBehaviour
     public const int RoundWinsTarget = 3;
     public const int PodiumSeconds = 10;
 
+    // Hangar-as-lobby: the first player waits (and may warm-up fly) in
+    // WaitingForPlayers; the 2nd connect starts a short pre-battle countdown
+    // (READY skips it early); a client joining a running battle gets a
+    // personal hangar and deploys after LateJoinSeconds at the latest.
+    public const int PreBattleSeconds = 10;
+    public const int LateJoinSeconds = 10;
+
+    /// <summary>Server-authoritative game phase, mirrored to clients.</summary>
+    public enum GamePhase : byte
+    {
+        WaitingForPlayers = 0,
+        PreBattleCountdown = 1,
+        Battle = 2,
+        Intermission = 3,
+        Podium = 4
+    }
+
+    /// <summary>Which flavor of the hangar overlay to show.</summary>
+    public enum HangarMode { Waiting, PreBattle, LateJoin, Intermission }
+
+    public GamePhase Phase { get; private set; } = GamePhase.WaitingForPlayers;
+
     public static MatchManager Instance { get; private set; }
 
     public struct MatchResult
@@ -46,8 +68,11 @@ public class MatchManager : MonoBehaviour
     /// <summary>Fired on every client when the round ends.</summary>
     public event Action<MatchResult> OnMatchEnded;
 
-    /// <summary>Fired on every client when the hangar opens (after the results).</summary>
-    public event Action OnHangarOpened;
+    /// <summary>Fired when a hangar overlay should open (mode + countdown seconds, 0 = none).</summary>
+    public event Action<HangarMode, int> OnHangarOpened;
+
+    /// <summary>Fired locally when the network session ends (host quit) - close all overlays.</summary>
+    public event Action OnSessionReset;
 
     /// <summary>Fired once per second while the hangar is open, with seconds to auto-start.</summary>
     public event Action<int> OnHangarTick;
@@ -62,6 +87,9 @@ public class MatchManager : MonoBehaviour
     public event Action<ulong> OnRunEnded;
 
     private Coroutine _intermissionCoroutine;
+    private Coroutine _localCountdownCoroutine;   // cosmetic pre-battle/late-join ticks
+    private Coroutine _serverRoundFlowCoroutine;  // stored so freeze can cancel it
+    private Coroutine _preBattleCoroutine;
 
     // Server-side guard: kill-target and time-limit checks can both fire in the
     // same frame - end the round only once.
@@ -69,6 +97,11 @@ public class MatchManager : MonoBehaviour
 
     // Server-side hangar ready set (client ids that pressed READY)
     private readonly System.Collections.Generic.HashSet<ulong> _readyClients = new();
+
+    // Server-side: clients sitting in the late-join hangar -> auto-deploy time
+    private readonly System.Collections.Generic.Dictionary<ulong, float> _lateJoinDeadlines = new();
+    private readonly System.Collections.Generic.List<ulong> _deadlineScratch = new();
+    private float _preBattleDeadline;
 
     // --- Run state ---
     // Server-authoritative wallets/levels/wins per client id.
@@ -111,6 +144,14 @@ public class MatchManager : MonoBehaviour
         }
         ScoreManager.Instance.OnScoreChanged += OnScoreChanged;
         ScoreManager.Instance.OnMatchStarted += OnMatchStarted;
+
+        while (NetworkManager.Singleton == null)
+        {
+            yield return new WaitForSeconds(0.1f);
+        }
+        NetworkManager.Singleton.OnServerStarted += OnServerStarted;
+        NetworkManager.Singleton.OnClientConnectedCallback += OnNetClientConnected;
+        NetworkManager.Singleton.OnClientDisconnectCallback += OnNetClientDisconnected;
     }
 
     private void OnDestroy()
@@ -120,12 +161,223 @@ public class MatchManager : MonoBehaviour
             ScoreManager.Instance.OnScoreChanged -= OnScoreChanged;
             ScoreManager.Instance.OnMatchStarted -= OnMatchStarted;
         }
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnServerStarted -= OnServerStarted;
+            NetworkManager.Singleton.OnClientConnectedCallback -= OnNetClientConnected;
+            NetworkManager.Singleton.OnClientDisconnectCallback -= OnNetClientDisconnected;
+        }
+    }
+
+    // --- game phase (hangar-as-lobby) ---------------------------------------
+
+    /// <summary>
+    /// Server-side rule for PlayerController.OnNetworkSpawn: remote clients'
+    /// auto-spawned planes start parked in the hangar and are deployed by this
+    /// manager (battle start, round restart or late-join deploy). Host planes
+    /// (incl. couch co-op) never park - the host warm-up flies while waiting.
+    /// </summary>
+    public bool ShouldSpawnHiddenInHangar(ulong ownerClientId)
+    {
+        var nm = NetworkManager.Singleton;
+        if (nm == null || !nm.IsServer) return false;
+        return ownerClientId != NetworkManager.ServerClientId;
+    }
+
+    private void OnServerStarted()
+    {
+        if (!IsServer()) return;
+        Phase = GamePhase.WaitingForPlayers;
+        Debug.Log("[MatchManager] Phase -> WaitingForPlayers (host started)");
+        StartCoroutine(OpenWaitingHangarDelayed());
+    }
+
+    // Small delay so the host's P1 plane exists before the weapon cards read it
+    private IEnumerator OpenWaitingHangarDelayed()
+    {
+        yield return new WaitForSeconds(0.5f);
+        if (Phase == GamePhase.WaitingForPlayers)
+        {
+            OnHangarOpened?.Invoke(HangarMode.Waiting, 0);
+        }
+    }
+
+    private void OnNetClientConnected(ulong clientId)
+    {
+        if (!IsServer()) return;
+
+        switch (Phase)
+        {
+            case GamePhase.WaitingForPlayers:
+                if (NetworkManager.Singleton.ConnectedClientsIds.Count >= 2)
+                {
+                    StartPreBattleCountdown();
+                }
+                break;
+
+            case GamePhase.Battle:
+                // Late joiner: personal hangar with a deploy deadline. The
+                // hangar-open RPC is sent with the snapshot reply so it always
+                // arrives after the client is ready to receive it.
+                if (clientId != NetworkManager.ServerClientId)
+                {
+                    _lateJoinDeadlines[clientId] = Time.time + LateJoinSeconds;
+                    Debug.Log($"[MatchManager] Client {clientId} joined mid-battle - late-join hangar");
+                }
+                break;
+
+            // PreBattleCountdown: plane spawns parked and deploys with everyone;
+            // the countdown does not restart.
+            // Intermission/Podium: parked plane deploys with the round restart.
+        }
+    }
+
+    private void OnNetClientDisconnected(ulong clientId)
+    {
+        var nm = NetworkManager.Singleton;
+
+        // A client losing its host: reset local mirrors, close overlays.
+        if (nm != null && !nm.IsServer)
+        {
+            HandleLocalSessionEnded();
+            return;
+        }
+
+        if (!IsServer()) return;
+
+        _lateJoinDeadlines.Remove(clientId);
+        _readyClients.Remove(clientId);
+
+        // The leaver may still be counted at callback time - exclude it.
+        int remaining = 0;
+        foreach (ulong id in nm.ConnectedClientsIds)
+        {
+            if (id != clientId) remaining++;
+        }
+
+        if (remaining < 2 && Phase != GamePhase.WaitingForPlayers)
+        {
+            ServerFreezeToWaiting();
+        }
+    }
+
+    /// <summary>Server: 2nd player arrived - everyone picks a weapon, then battle.</summary>
+    private void StartPreBattleCountdown()
+    {
+        Phase = GamePhase.PreBattleCountdown;
+        _readyClients.Clear();
+        _preBattleDeadline = Time.time + PreBattleSeconds;
+        Debug.Log("[MatchManager] Phase -> PreBattleCountdown");
+
+        BroadcastThroughServerPlayer(p =>
+            p.SyncGamePhaseClientRpc((byte)GamePhase.PreBattleCountdown, PreBattleSeconds));
+
+        _preBattleCoroutine = StartCoroutine(ServerPreBattleFlow());
+    }
+
+    private IEnumerator ServerPreBattleFlow()
+    {
+        while (Time.time < _preBattleDeadline)
+        {
+            if (AllClientsReady())
+            {
+                Debug.Log("[MatchManager] All clients ready - starting battle early");
+                break;
+            }
+            yield return new WaitForSeconds(0.25f);
+        }
+        _preBattleCoroutine = null;
+        if (!IsServer()) yield break;
+        ServerStartBattle();
+    }
+
+    /// <summary>Server: deploy everyone and start the first round.</summary>
+    private void ServerStartBattle()
+    {
+        Phase = GamePhase.Battle;
+        _lateJoinDeadlines.Clear();
+        Debug.Log("[MatchManager] Phase -> Battle");
+
+        foreach (var player in FindObjectsOfType<PlayerController>())
+        {
+            player.NetInHangar.Value = false;
+            player.ServerRespawn();
+        }
+        ScoreManager.Instance?.RestartMatch();
+    }
+
+    /// <summary>
+    /// Server: too few players to fight - freeze the battle back to the
+    /// waiting hangar. Scores stop (timer frozen), run state is KEPT.
+    /// </summary>
+    private void ServerFreezeToWaiting()
+    {
+        Debug.Log("[MatchManager] Not enough players - Phase -> WaitingForPlayers");
+
+        if (_serverRoundFlowCoroutine != null)
+        {
+            StopCoroutine(_serverRoundFlowCoroutine);
+            _serverRoundFlowCoroutine = null;
+        }
+        if (_preBattleCoroutine != null)
+        {
+            StopCoroutine(_preBattleCoroutine);
+            _preBattleCoroutine = null;
+        }
+
+        _readyClients.Clear();
+        _lateJoinDeadlines.Clear();
+        _roundEnding = false;
+        IsIntermission = false;
+        Phase = GamePhase.WaitingForPlayers;
+
+        float frozenTime = ScoreManager.Instance != null ? ScoreManager.Instance.MatchTime : 0f;
+        BroadcastThroughServerPlayer(p =>
+        {
+            p.SyncMatchStateClientRpc(false, frozenTime);
+            p.SyncGamePhaseClientRpc((byte)GamePhase.WaitingForPlayers, 0f);
+        });
+    }
+
+    /// <summary>Local session ended (host quit) - reset client-side mirrors.</summary>
+    private void HandleLocalSessionEnded()
+    {
+        Phase = GamePhase.WaitingForPlayers;
+        IsIntermission = false;
+        IsRunOver = false;
+        _clientRoundWins.Clear();
+        if (_intermissionCoroutine != null)
+        {
+            StopCoroutine(_intermissionCoroutine);
+            _intermissionCoroutine = null;
+        }
+        if (_localCountdownCoroutine != null)
+        {
+            StopCoroutine(_localCountdownCoroutine);
+            _localCountdownCoroutine = null;
+        }
+        OnSessionReset?.Invoke();
     }
 
     private void Update()
     {
-        // Time-limit check (server decides)
         if (!IsServer()) return;
+
+        // Auto-deploy late joiners whose hangar time ran out
+        if (_lateJoinDeadlines.Count > 0)
+        {
+            _deadlineScratch.Clear();
+            foreach (var entry in _lateJoinDeadlines)
+            {
+                if (Time.time >= entry.Value) _deadlineScratch.Add(entry.Key);
+            }
+            foreach (ulong clientId in _deadlineScratch)
+            {
+                ServerDeploy(clientId);
+            }
+        }
+
+        // Time-limit check (server decides)
         if (IsIntermission) return;
 
         var score = ScoreManager.Instance;
@@ -135,6 +387,73 @@ public class MatchManager : MonoBehaviour
         {
             EndRound();
         }
+    }
+
+    // --- late-join deploy (server) -------------------------------------------
+
+    /// <summary>Server-side: a late joiner pressed JOIN in their hangar.</summary>
+    public void ServerRequestDeploy(ulong clientId)
+    {
+        if (!IsServer()) return;
+        if (!_lateJoinDeadlines.ContainsKey(clientId)) return;
+        ServerDeploy(clientId);
+    }
+
+    private void ServerDeploy(ulong clientId)
+    {
+        _lateJoinDeadlines.Remove(clientId);
+
+        // Round ended meanwhile - the parked plane deploys with everyone at restart
+        if (Phase != GamePhase.Battle) return;
+
+        foreach (var player in FindObjectsOfType<PlayerController>())
+        {
+            if (player.OwnerClientId != clientId) continue;
+            if (!player.NetInHangar.Value) continue; // already deployed
+
+            // NetworkVariable write first, then the respawn teleport (risk:
+            // the owner must re-enable physics before the position lands)
+            player.NetInHangar.Value = false;
+            player.ServerRespawn();
+        }
+        Debug.Log($"[MatchManager] Client {clientId} deployed into the running battle");
+    }
+
+    /// <summary>
+    /// Server-side: full game-state snapshot for a (re)connecting client,
+    /// requested by its own PlayerController once it is provably spawned.
+    /// Replies are targeted RPCs routed through that same player object.
+    /// </summary>
+    public void ServerSendSnapshotTo(ulong clientId, PlayerController via)
+    {
+        if (!IsServer() || via == null) return;
+
+        var target = new ClientRpcParams
+        {
+            Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } }
+        };
+
+        float remaining = Phase == GamePhase.PreBattleCountdown
+            ? Mathf.Max(0f, _preBattleDeadline - Time.time)
+            : 0f;
+        via.SyncGamePhaseClientRpc((byte)Phase, remaining, target);
+
+        ScoreManager.Instance?.SyncFullStateTo(via, clientId);
+
+        foreach (var entry in _roundWins)
+        {
+            via.SyncRoundWinsClientRpc(entry.Key, entry.Value, target);
+        }
+
+        SyncRunStateTo(clientId);
+
+        if (_lateJoinDeadlines.TryGetValue(clientId, out float deadline))
+        {
+            int seconds = Mathf.Max(1, Mathf.CeilToInt(deadline - Time.time));
+            via.SyncLateJoinHangarClientRpc(seconds, target);
+        }
+
+        Debug.Log($"[MatchManager] Sent state snapshot to client {clientId} (phase {Phase})");
     }
 
     private static bool IsServer() =>
@@ -152,10 +471,11 @@ public class MatchManager : MonoBehaviour
         }
     }
 
-    // A new round started (server restart or a new player joining resets the
-    // match) - leave intermission and cancel any pending local countdown.
+    // A new round started (server-driven restart) - leave intermission and
+    // cancel any pending local countdowns.
     private void OnMatchStarted()
     {
+        Phase = GamePhase.Battle;
         IsIntermission = false;
         _roundEnding = false;
         _readyClients.Clear();
@@ -164,6 +484,11 @@ public class MatchManager : MonoBehaviour
             StopCoroutine(_intermissionCoroutine);
             _intermissionCoroutine = null;
         }
+        if (_localCountdownCoroutine != null)
+        {
+            StopCoroutine(_localCountdownCoroutine);
+            _localCountdownCoroutine = null;
+        }
     }
 
     /// <summary>Server-only: end the round now and broadcast the result.</summary>
@@ -171,6 +496,10 @@ public class MatchManager : MonoBehaviour
     {
         if (_roundEnding) return;
         _roundEnding = true;
+
+        // Anyone still picking in the late-join hangar merges into the
+        // intermission and deploys with everyone at the round restart.
+        _lateJoinDeadlines.Clear();
 
         var score = ScoreManager.Instance;
         if (score == null) return;
@@ -211,8 +540,10 @@ public class MatchManager : MonoBehaviour
         BroadcastThroughServerPlayer(p =>
             p.SyncMatchEndClientRpc(winnerClient, winnerLocalIdx, winnerKills, wins, runOver));
 
+        Phase = runOver ? GamePhase.Podium : GamePhase.Intermission;
+
         // Server drives the actual restart (results -> hangar/podium -> next round)
-        StartCoroutine(ServerEndRoundFlow(runOver));
+        _serverRoundFlowCoroutine = StartCoroutine(ServerEndRoundFlow(runOver));
     }
 
     // Rank every player, take each device's best placement, hand out points.
@@ -304,6 +635,7 @@ public class MatchManager : MonoBehaviour
         _clientRoundWins[winnerClientId] = winnerRoundWins;
         IsRunOver = runOver;
 
+        Phase = runOver ? GamePhase.Podium : GamePhase.Intermission;
         IsIntermission = true;
         ScoreManager.Instance?.FreezeMatch();
         SfxManager.PlayMatchEnd();
@@ -332,7 +664,7 @@ public class MatchManager : MonoBehaviour
         }
         else
         {
-            OnHangarOpened?.Invoke();
+            OnHangarOpened?.Invoke(HangarMode.Intermission, HangarSeconds);
             for (int s = HangarSeconds; s > 0; s--)
             {
                 OnHangarTick?.Invoke(s);
@@ -343,12 +675,88 @@ public class MatchManager : MonoBehaviour
         _intermissionCoroutine = null;
     }
 
+    // --- client-side phase handlers (called via PlayerController ClientRpcs) ---
+
+    /// <summary>Adopt the server's game phase; open the matching hangar UI.</summary>
+    public void HandlePhaseFromServer(GamePhase phase, float secondsRemaining)
+    {
+        Phase = phase;
+
+        switch (phase)
+        {
+            case GamePhase.WaitingForPlayers:
+                // Freeze-to-waiting: leave any intermission cosmetics behind
+                IsIntermission = false;
+                _roundEnding = false;
+                if (_intermissionCoroutine != null)
+                {
+                    StopCoroutine(_intermissionCoroutine);
+                    _intermissionCoroutine = null;
+                }
+                StopLocalCountdown();
+                OnHangarOpened?.Invoke(HangarMode.Waiting, 0);
+                break;
+
+            case GamePhase.PreBattleCountdown:
+                int seconds = Mathf.Max(1, Mathf.CeilToInt(secondsRemaining));
+                OnHangarOpened?.Invoke(HangarMode.PreBattle, seconds);
+                StartLocalCountdown(seconds);
+                break;
+
+            // Battle arrives via SyncMatchStartClientRpc (OnMatchStarted),
+            // Intermission/Podium via SyncMatchEndClientRpc - phase mirror only.
+        }
+    }
+
+    /// <summary>Open the personal late-join hangar (this client only).</summary>
+    public void HandleLateJoinHangarFromServer(int seconds)
+    {
+        OnHangarOpened?.Invoke(HangarMode.LateJoin, seconds);
+        StartLocalCountdown(seconds);
+    }
+
+    /// <summary>Round-wins snapshot entry for a late joiner.</summary>
+    public void HandleRoundWinsFromServer(ulong clientId, int wins)
+    {
+        _clientRoundWins[clientId] = wins;
+    }
+
+    private void StartLocalCountdown(int seconds)
+    {
+        StopLocalCountdown();
+        _localCountdownCoroutine = StartCoroutine(LocalCountdownFlow(seconds));
+    }
+
+    private void StopLocalCountdown()
+    {
+        if (_localCountdownCoroutine != null)
+        {
+            StopCoroutine(_localCountdownCoroutine);
+            _localCountdownCoroutine = null;
+        }
+    }
+
+    // Cosmetic countdown for the pre-battle / late-join hangars; the real
+    // deadline lives on the server.
+    private IEnumerator LocalCountdownFlow(int seconds)
+    {
+        for (int s = seconds; s > 0; s--)
+        {
+            OnHangarTick?.Invoke(s);
+            if (s <= 3) SfxManager.PlayTick();
+            yield return new WaitForSeconds(1f);
+        }
+        _localCountdownCoroutine = null;
+    }
+
     // --- hangar ready check (server) ---
 
     /// <summary>Server-side: a client pressed READY in the hangar.</summary>
     public void ServerSetClientReady(ulong clientId)
     {
-        if (!IsServer() || !IsIntermission) return;
+        if (!IsServer()) return;
+        // READY works in the intermission hangar and the pre-battle lobby
+        if (!IsIntermission && Phase != GamePhase.PreBattleCountdown) return;
         if (!_readyClients.Add(clientId)) return;
 
         Debug.Log($"[MatchManager] Client {clientId} is ready ({_readyClients.Count} total)");
@@ -402,12 +810,17 @@ public class MatchManager : MonoBehaviour
             if (!IsServer()) yield break;
         }
 
-        // Fresh planes for everyone, then reset stats + timer (syncs to clients)
+        // Fresh planes for everyone - including anyone still parked in the
+        // hangar (late joiners whose round ended while picking) - then reset
+        // stats + timer (syncs to clients)
+        Phase = GamePhase.Battle;
         foreach (var player in FindObjectsOfType<PlayerController>())
         {
+            player.NetInHangar.Value = false;
             player.ServerRespawn();
         }
         ScoreManager.Instance?.RestartMatch();
+        _serverRoundFlowCoroutine = null;
         Debug.Log("[MatchManager] New round started");
     }
 

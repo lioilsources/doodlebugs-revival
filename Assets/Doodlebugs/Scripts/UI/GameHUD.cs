@@ -6,7 +6,10 @@ using Unity.Netcode;
 
 /// <summary>
 /// Game HUD: per-player panels (bottom-right, where the parallax foreground
-/// is calmest), round timer (top-center) and the round-over results overlay.
+/// is calmest), round timer (top-center), the round-over results overlay and
+/// the hangar overlay in four modes: Waiting (lobby, FLY warm-up), PreBattle
+/// (countdown + READY), LateJoin (personal DEPLOY countdown + JOIN) and
+/// Intermission (weapon draft + upgrade shop + READY, between rounds).
 ///
 /// The local device's own planes get a DETAILED panel (segmented shield /
 /// health / speed bars + active power-up chips). Remote opponents get a
@@ -216,6 +219,7 @@ public class GameHUD : MonoBehaviour
             MatchManager.Instance.OnClientReadyChanged -= OnClientReadyChanged;
             MatchManager.Instance.OnRunStateChanged -= OnRunStateChanged;
             MatchManager.Instance.OnRunEnded -= OnRunEnded;
+            MatchManager.Instance.OnSessionReset -= OnSessionReset;
         }
     }
 
@@ -251,6 +255,7 @@ public class GameHUD : MonoBehaviour
         MatchManager.Instance.OnClientReadyChanged += OnClientReadyChanged;
         MatchManager.Instance.OnRunStateChanged += OnRunStateChanged;
         MatchManager.Instance.OnRunEnded += OnRunEnded;
+        MatchManager.Instance.OnSessionReset += OnSessionReset;
     }
 
     private void OnLocalPlayerToggled(int localPlayerIndex, bool enabled)
@@ -1037,6 +1042,9 @@ public class GameHUD : MonoBehaviour
 
     private void OnMatchEnded(MatchManager.MatchResult result)
     {
+        // A pending waiting/late-join hangar yields to the results screen
+        CloseHangar();
+
         EnsureResultsOverlay();
 
         // Winner name + color
@@ -1256,11 +1264,15 @@ public class GameHUD : MonoBehaviour
     private static readonly Color CardSelected = new Color(0.35f, 0.22f, 0.08f, 0.95f);
     private static readonly Color ReadyGreen = new Color(0.35f, 0.85f, 0.35f);
 
-    private void OnHangarOpened()
+    private MatchManager.HangarMode _hangarMode = MatchManager.HangarMode.Intermission;
+    private GameObject _hangarCornerButton;
+
+    private void OnHangarOpened(MatchManager.HangarMode mode, int seconds)
     {
         if (_resultsOverlay != null) _resultsOverlay.SetActive(false);
 
-        BuildHangarOverlay();
+        _hangarMode = mode;
+        BuildHangarOverlay(mode, seconds);
         _hangarOverlay.SetActive(true);
     }
 
@@ -1274,7 +1286,30 @@ public class GameHUD : MonoBehaviour
         }
         if (_hangarCountdownText != null)
         {
-            _hangarCountdownText.text = $"AUTO-START {secondsLeft}";
+            switch (_hangarMode)
+            {
+                case MatchManager.HangarMode.PreBattle:
+                    _hangarCountdownText.text = $"BATTLE IN {secondsLeft}";
+                    break;
+                case MatchManager.HangarMode.LateJoin:
+                    _hangarCountdownText.text = $"DEPLOY IN {secondsLeft}";
+                    break;
+                default:
+                    _hangarCountdownText.text = $"AUTO-START {secondsLeft}";
+                    break;
+            }
+        }
+    }
+
+    private void OnSessionReset()
+    {
+        CloseHangar();
+        if (_resultsOverlay != null) _resultsOverlay.SetActive(false);
+        if (_podiumOverlay != null)
+        {
+            Destroy(_podiumOverlay);
+            _podiumOverlay = null;
+            _podiumCountdownText = null;
         }
     }
 
@@ -1297,6 +1332,11 @@ public class GameHUD : MonoBehaviour
             Destroy(_hangarOverlay); // rebuilt fresh each round (offers change)
             _hangarOverlay = null;
         }
+        if (_hangarCornerButton != null)
+        {
+            Destroy(_hangarCornerButton);
+            _hangarCornerButton = null;
+        }
         _hangarReadyRows.Clear();
         _readyClients.Clear();
         _weaponCards.Clear();
@@ -1315,7 +1355,7 @@ public class GameHUD : MonoBehaviour
         return null;
     }
 
-    private void BuildHangarOverlay()
+    private void BuildHangarOverlay(MatchManager.HangarMode mode, int seconds)
     {
         CloseHangar();
 
@@ -1330,20 +1370,150 @@ public class GameHUD : MonoBehaviour
         var bg = _hangarOverlay.AddComponent<Image>();
         bg.color = new Color(0f, 0f, 0f, 0.82f);
 
-        CreateHangarText("Title", "HANGAR", 28, new Vector2(0, 195), new Color(1f, 0.85f, 0.3f));
-        _hangarCountdownText = CreateHangarText("Countdown", $"AUTO-START {MatchManager.HangarSeconds}",
-            12, new Vector2(-160, 160), Color.white);
-        _hangarReadyCountText = CreateHangarText("ReadyCount", "", 12, new Vector2(160, 160),
-            new Color(1f, 1f, 1f, 0.6f));
-        CreateHangarText("DraftLabel", "WEAPON FOR NEXT ROUND", 11, new Vector2(0, 128),
+        bool waiting = mode == MatchManager.HangarMode.Waiting;
+        bool preBattle = mode == MatchManager.HangarMode.PreBattle;
+        bool lateJoin = mode == MatchManager.HangarMode.LateJoin;
+        bool intermission = mode == MatchManager.HangarMode.Intermission;
+
+        string title = lateJoin ? "BATTLE IN PROGRESS" : "HANGAR";
+        CreateHangarText("Title", title, 28, new Vector2(0, 195), new Color(1f, 0.85f, 0.3f));
+
+        // Status line: centered when there is no ready counter next to it
+        string statusInit =
+            waiting ? "WAITING FOR PLAYERS..." :
+            preBattle ? $"BATTLE IN {seconds}" :
+            lateJoin ? $"DEPLOY IN {seconds}" :
+            $"AUTO-START {MatchManager.HangarSeconds}";
+        bool hasReadyCheck = preBattle || intermission;
+        _hangarCountdownText = CreateHangarText("Countdown", statusInit,
+            12, new Vector2(hasReadyCheck ? -160 : 0, 160), Color.white);
+        if (hasReadyCheck)
+        {
+            _hangarReadyCountText = CreateHangarText("ReadyCount", "", 12, new Vector2(160, 160),
+                new Color(1f, 1f, 1f, 0.6f));
+        }
+
+        string draftLabel = intermission ? "WEAPON FOR NEXT ROUND" : "PICK YOUR WEAPON";
+        CreateHangarText("DraftLabel", draftLabel, 11, new Vector2(0, 128),
             new Color(1f, 1f, 1f, 0.6f));
 
         BuildWeaponCards();
-        BuildUpgradeShop();
-        BuildReadyList();
-        BuildReadyButton();
-        UpdateReadyCount();
-        RefreshUpgradeShop();
+        if (intermission)
+        {
+            BuildUpgradeShop();
+            RefreshUpgradeShop();
+        }
+        if (hasReadyCheck)
+        {
+            BuildReadyList();
+            BuildReadyButton();
+            UpdateReadyCount();
+        }
+        if (waiting)
+        {
+            BuildFlyButton();
+        }
+        if (lateJoin)
+        {
+            BuildJoinButton();
+        }
+    }
+
+    // --- waiting-lobby warm-up (FLY out, corner button back) --------------------
+
+    private void BuildFlyButton()
+    {
+        var (button, _) = BuildHangarActionButton("FlyButton", "FLY",
+            new Color(0.12f, 0.3f, 0.45f, 1f));
+        button.onClick.AddListener(HideHangarForWarmup);
+    }
+
+    private void HideHangarForWarmup()
+    {
+        if (_hangarOverlay != null) _hangarOverlay.SetActive(false);
+        ShowHangarCornerButton();
+        SfxManager.PlayTick();
+    }
+
+    // Small top-right button to get back into the hangar while warm-up flying
+    private void ShowHangarCornerButton()
+    {
+        if (_hangarCornerButton != null) return;
+
+        _hangarCornerButton = new GameObject("HangarCornerButton");
+        _hangarCornerButton.transform.SetParent(transform, false);
+        var rect = _hangarCornerButton.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(1f, 1f);
+        rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(1f, 1f);
+        rect.anchoredPosition = new Vector2(-60, -20);
+        rect.sizeDelta = new Vector2(180, 44);
+
+        var bgImage = _hangarCornerButton.AddComponent<Image>();
+        bgImage.color = new Color(0.12f, 0.3f, 0.45f, 0.9f);
+
+        var button = _hangarCornerButton.AddComponent<Button>();
+        button.targetGraphic = bgImage;
+        button.onClick.AddListener(() =>
+        {
+            if (_hangarOverlay != null) _hangarOverlay.SetActive(true);
+            if (_hangarCornerButton != null)
+            {
+                Destroy(_hangarCornerButton);
+                _hangarCornerButton = null;
+            }
+        });
+
+        CreateTextIn(_hangarCornerButton.transform, "Label", "HANGAR", 13, Vector2.zero, Color.white);
+    }
+
+    // --- late-join deploy --------------------------------------------------------
+
+    private void BuildJoinButton()
+    {
+        var (button, label) = BuildHangarActionButton("JoinButton", "JOIN",
+            new Color(0.12f, 0.4f, 0.16f, 1f));
+        _readyButton = button;
+        _readyButtonText = label;
+        button.onClick.AddListener(PressJoin);
+    }
+
+    private void PressJoin()
+    {
+        if (_localReady) return;
+        _localReady = true;
+
+        if (_readyButtonText != null) _readyButtonText.text = "DEPLOYING...";
+        if (_readyButton != null)
+        {
+            _readyButton.interactable = false;
+            var img = _readyButton.targetGraphic as Image;
+            if (img != null) img.color = new Color(0.2f, 0.2f, 0.2f, 1f);
+        }
+
+        FindOwnedPlayer()?.RequestDeployServerRpc();
+    }
+
+    // Shared bottom-right hangar action button (READY / FLY / JOIN)
+    private (Button, Text) BuildHangarActionButton(string name, string label, Color color)
+    {
+        var buttonObj = new GameObject(name);
+        buttonObj.transform.SetParent(_hangarOverlay.transform, false);
+        var rect = buttonObj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(1f, 0f);
+        rect.anchorMax = new Vector2(1f, 0f);
+        rect.pivot = new Vector2(1f, 0f);
+        rect.anchoredPosition = new Vector2(-60, 40);
+        rect.sizeDelta = new Vector2(300, 68);
+
+        var bgImage = buttonObj.AddComponent<Image>();
+        bgImage.color = color;
+
+        var button = buttonObj.AddComponent<Button>();
+        button.targetGraphic = bgImage;
+
+        var text = CreateTextIn(buttonObj.transform, "Label", label, 20, Vector2.zero, Color.white);
+        return (button, text);
     }
 
     private void BuildWeaponCards()

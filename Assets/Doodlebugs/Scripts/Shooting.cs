@@ -65,6 +65,9 @@ public class Shooting : NetworkBehaviour
         bool canProcessInput = IsOwner || (isLocalPlayer && NetworkManager.Singleton.IsHost);
         if (!canProcessInput) return;
 
+        // No shooting from inside the hangar
+        if (playerController != null && playerController.InHangar) return;
+
         bool shootPressed = GetShootInput();
 
         if (shootPressed && Time.time >= _lastFireTime + fireRateCooldown)
@@ -110,6 +113,9 @@ public class Shooting : NetworkBehaviour
     {
         // Get shooter's client ID from RPC sender
         ulong shooterClientId = rpcParams.Receive.SenderClientId;
+
+        // Server-side guard: parked planes don't shoot, whatever the client says
+        if (playerController != null && playerController.InHangar) return;
 
         var weapon = CurrentWeapon;
 
