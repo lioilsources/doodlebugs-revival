@@ -46,8 +46,10 @@ public class MatchManager : MonoBehaviour
         Podium = 4
     }
 
-    /// <summary>Which flavor of the hangar overlay to show.</summary>
-    public enum HangarMode { Waiting, PreBattle, LateJoin, Intermission }
+    /// <summary>Which flavor of the hangar overlay to show. Searching is a
+    /// purely client-side boot mode (discovery running) - never sent by the
+    /// server.</summary>
+    public enum HangarMode { Waiting, PreBattle, LateJoin, Intermission, Searching }
 
     public GamePhase Phase { get; private set; } = GamePhase.WaitingForPlayers;
 

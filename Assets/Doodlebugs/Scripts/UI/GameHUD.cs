@@ -170,6 +170,36 @@ public class GameHUD : MonoBehaviour
 
         if (matchTimeText != null)
             matchTimeText.text = "-:--";
+
+        // The arena stays hidden until the battle starts: boot straight into
+        // the opaque Searching hangar, before any networking even begins.
+        // MatchManager/ConnectionManager events replace it later (Waiting on
+        // host start, PreBattle/LateJoin from the server, closed on battle).
+        OnHangarOpened(MatchManager.HangarMode.Searching, 0);
+        StartCoroutine(WaitForConnectionManager());
+    }
+
+    private Doodlebugs.Network.ConnectionManager _connectionManager;
+
+    private IEnumerator WaitForConnectionManager()
+    {
+        while (Doodlebugs.Network.ConnectionManager.Instance == null)
+        {
+            yield return new WaitForSeconds(0.1f);
+        }
+        _connectionManager = Doodlebugs.Network.ConnectionManager.Instance;
+        _connectionManager.OnStatusMessage += OnConnectionStatus;
+    }
+
+    // Discovery status ("Searching for game...", "Connecting...") shown in
+    // the Searching hangar instead of the little corner panel
+    private void OnConnectionStatus(string message)
+    {
+        if (_hangarMode != MatchManager.HangarMode.Searching) return;
+        if (_hangarCountdownText != null)
+        {
+            _hangarCountdownText.text = message.ToUpperInvariant();
+        }
     }
 
     private void OnEnable()
@@ -220,6 +250,12 @@ public class GameHUD : MonoBehaviour
             MatchManager.Instance.OnRunStateChanged -= OnRunStateChanged;
             MatchManager.Instance.OnRunEnded -= OnRunEnded;
             MatchManager.Instance.OnSessionReset -= OnSessionReset;
+        }
+
+        if (_connectionManager != null)
+        {
+            _connectionManager.OnStatusMessage -= OnConnectionStatus;
+            _connectionManager = null;
         }
     }
 
@@ -1311,7 +1347,15 @@ public class GameHUD : MonoBehaviour
             _podiumOverlay = null;
             _podiumCountdownText = null;
         }
+
+        // The host is gone and discovery restarts automatically - back to the
+        // boot screen instead of staring at a dead arena
+        OnHangarOpened(MatchManager.HangarMode.Searching, 0);
     }
+
+    /// <summary>True while any hangar overlay covers the screen (ConnectionUI
+    /// hides its corner status panel then - the overlay shows the status).</summary>
+    public bool IsHangarOpen => _hangarOverlay != null && _hangarOverlay.activeSelf;
 
     private void OnClientReadyChanged(ulong clientId)
     {
@@ -1367,19 +1411,23 @@ public class GameHUD : MonoBehaviour
         overlayRect.offsetMin = Vector2.zero;
         overlayRect.offsetMax = Vector2.zero;
 
-        var bg = _hangarOverlay.AddComponent<Image>();
-        bg.color = new Color(0f, 0f, 0f, 0.82f);
-
+        bool searching = mode == MatchManager.HangarMode.Searching;
         bool waiting = mode == MatchManager.HangarMode.Waiting;
         bool preBattle = mode == MatchManager.HangarMode.PreBattle;
         bool lateJoin = mode == MatchManager.HangarMode.LateJoin;
         bool intermission = mode == MatchManager.HangarMode.Intermission;
 
-        string title = lateJoin ? "BATTLE IN PROGRESS" : "HANGAR";
+        var bg = _hangarOverlay.AddComponent<Image>();
+        // Searching/Waiting hide the arena completely (nothing to see there
+        // yet); the battle/results context stays dimly visible otherwise
+        bg.color = new Color(0f, 0f, 0f, searching || waiting ? 1f : 0.82f);
+
+        string title = searching ? "DOODLEBUGS" : lateJoin ? "BATTLE IN PROGRESS" : "HANGAR";
         CreateHangarText("Title", title, 28, new Vector2(0, 195), new Color(1f, 0.85f, 0.3f));
 
         // Status line: centered when there is no ready counter next to it
         string statusInit =
+            searching ? "SEARCHING FOR GAME..." :
             waiting ? "WAITING FOR PLAYERS..." :
             preBattle ? $"BATTLE IN {seconds}" :
             lateJoin ? $"DEPLOY IN {seconds}" :
@@ -1391,6 +1439,14 @@ public class GameHUD : MonoBehaviour
         {
             _hangarReadyCountText = CreateHangarText("ReadyCount", "", 12, new Vector2(160, 160),
                 new Color(1f, 1f, 1f, 0.6f));
+        }
+
+        if (searching)
+        {
+            // No plane, no weapons yet - just the boot screen with the version
+            CreateHangarText("Version", Doodlebugs.UI.ConnectionUI.GameVersion, 10,
+                new Vector2(0, -200), new Color(1f, 1f, 1f, 0.35f));
+            return;
         }
 
         string draftLabel = intermission ? "WEAPON FOR NEXT ROUND" : "PICK YOUR WEAPON";
