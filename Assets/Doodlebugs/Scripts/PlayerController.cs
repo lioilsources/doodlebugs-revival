@@ -30,7 +30,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
     // Profile-aware properties (uses player's own maturity level, not global)
     private PilotMaturityProfile Profile => PilotMaturityManager.Instance?.GetProfile(_maturityLevel);
     private float rotateSpeed => Profile?.rotateSpeed ?? baseRotateSpeed;
-    private float maxSpeed => Profile?.maxSpeed ?? baseMaxSpeed;
+    // Run-upgrade ENGINE levels raise the speed cap (synced, works for owner input)
+    private float maxSpeed => (Profile?.maxSpeed ?? baseMaxSpeed) * (planeStats?.SpeedMultiplier ?? 1f);
     private float maxGravity => Profile?.maxGravity ?? baseMaxGravity;
     private float gravityIncreaseRate => Profile?.gravityIncreaseRate ?? baseGravityIncreaseRate;
     private float engineOffRotateMultiplier => Profile?.engineOffRotateMultiplier ?? baseEngineOffRotateMultiplier;
@@ -478,6 +479,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         // Player flew out of bounds - record death
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
         ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+        SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.OutOfBounds);
         HandleDeathAndRespawn();
     }
 
@@ -489,8 +491,10 @@ public class PlayerController : NetworkBehaviour, IDamagable
         visualEffects?.TriggerDamageFlash();
         ShowExplosionClientRpc();
 
-        // Reset plane stats on respawn (server-side)
+        // Reset plane stats on respawn (server-side); crate-boosted weapon
+        // tiers are lost on death - back to the hangar selection
         planeStats?.ResetStats();
+        GetComponent<Shooting>()?.ResetWeaponToSelected();
 
         if (CloudManager.Instance != null)
         {
@@ -646,17 +650,17 @@ public class PlayerController : NetworkBehaviour, IDamagable
             bool dead = planeStats.TakeDamage(damage);
             if (dead)
             {
-                HandleCombatDeath();
+                HandleCombatDeath(KillCause.Shot);
             }
             else
             {
-                visualEffects?.TriggerDamageFlash();
+                visualEffects?.TriggerDamageFlash(planeStats.LastDamageAbsorbedByShield);
             }
         }
         else
         {
             // Fallback: instant kill if PlaneStats not attached
-            HandleCombatDeath();
+            HandleCombatDeath(KillCause.Shot);
         }
     }
 
@@ -674,21 +678,22 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// <summary>
     /// Handle death from combat (bullet or plane collision). Drops power-up.
     /// </summary>
-    private void HandleCombatDeath()
+    private void HandleCombatDeath(KillCause cause)
     {
         // Record death for this player
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
         ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
 
         // Attribute kill to last attacker (only recent hits count)
-        if (_hasLastAttacker)
+        bool credited = _hasLastAttacker && Time.time - _lastAttackerTime <= KillAttributionWindow;
+        if (credited)
         {
-            if (Time.time - _lastAttackerTime <= KillAttributionWindow)
-            {
-                ScoreManager.Instance?.AddScore(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
-            }
-            _hasLastAttacker = false;
+            ScoreManager.Instance?.AddScore(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
         }
+        _hasLastAttacker = false;
+
+        SyncKillFeedClientRpc(OwnerClientId, localIdx,
+            _lastAttackerClientId, _lastAttackerLocalPlayerIndex, credited, (byte)cause);
 
         // Spawn power-up at death position
         if (PowerUpManager.Instance != null)
@@ -697,6 +702,17 @@ public class PlayerController : NetworkBehaviour, IDamagable
         }
 
         HandleDeathAndRespawn();
+    }
+
+    /// <summary>
+    /// Broadcast a kill-feed line to all clients. Server-only caller.
+    /// </summary>
+    [ClientRpc]
+    private void SyncKillFeedClientRpc(ulong victimClientId, int victimLocalIdx,
+        ulong killerClientId, int killerLocalIdx, bool hasKiller, byte cause)
+    {
+        GameHUD.Instance?.PushKillFeed(victimClientId, victimLocalIdx,
+            killerClientId, killerLocalIdx, hasKiller, (KillCause)cause);
     }
 
     /// <summary>
@@ -721,6 +737,26 @@ public class PlayerController : NetworkBehaviour, IDamagable
     [ClientRpc]
     private void ShowExplosionClientRpc()
     {
+        SfxManager.PlayExplosion();
+
+        // Vibrate on the device(s) controlling this plane
+        if (IsOwner)
+        {
+            SfxManager.Haptic();
+        }
+
+        // Falling burning wreck (local visual; the live plane teleports away
+        // to its respawn point). Speed is a synced NetworkVariable, so the
+        // wreck inherits roughly the real flight velocity on every client.
+        var planeSprite = plane != null ? plane.GetComponent<SpriteRenderer>() : null;
+        if (planeSprite != null)
+        {
+            Vector2 wreckVelocity = (Vector2)(transform.right * Speed * 0.6f);
+            WreckEffect.Spawn(planeSprite, transform.position,
+                plane != null ? plane.rotation : transform.rotation,
+                wreckVelocity, hitEffect);
+        }
+
         if (hitEffect != null)
         {
             Vector3 explosionPos = new Vector3(transform.position.x, transform.position.y, 0f);
@@ -852,6 +888,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             // Crashed into ground/obstacle - instant kill, no power-up drop
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
             ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+            SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.Ground);
             HandleDeathAndRespawn();
         }
 
@@ -860,7 +897,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             // Collided with another plane - instant kill, drops power-up
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
             ScoreManager.Instance?.AddPlaneCollision(OwnerClientId, localIdx);
-            HandleCombatDeath();
+            HandleCombatDeath(KillCause.Collision);
         }
 
         if (collider.gameObject.CompareTag("PowerUp"))
@@ -963,5 +1000,78 @@ public class PlayerController : NetworkBehaviour, IDamagable
         {
             ScoreManager.Instance.UpdateStatsFromServer(clientId, localPlayerIndex, kills, deaths, planeCollisions);
         }
+    }
+
+    /// <summary>
+    /// Sync round end (winner + run progress) to all clients. Called by MatchManager.
+    /// </summary>
+    [ClientRpc]
+    public void SyncMatchEndClientRpc(ulong winnerClientId, int winnerLocalPlayerIndex,
+        int winnerKills, int winnerRoundWins, bool runOver)
+    {
+        if (MatchManager.Instance != null)
+        {
+            MatchManager.Instance.HandleMatchEndFromServer(winnerClientId, winnerLocalPlayerIndex,
+                winnerKills, winnerRoundWins, runOver);
+        }
+    }
+
+    /// <summary>Owner buys a run upgrade in the hangar - forward to the server.</summary>
+    [ServerRpc]
+    public void RequestBuyUpgradeServerRpc(int upgradeType, ServerRpcParams rpcParams = default)
+    {
+        MatchManager.Instance?.ServerBuyUpgrade(rpcParams.Receive.SenderClientId, upgradeType);
+    }
+
+    /// <summary>Sync a client's run points + upgrade levels. Called by MatchManager.</summary>
+    [ClientRpc]
+    public void SyncRunStateClientRpc(ulong clientId, int points,
+        int shieldLevel, int hullLevel, int fireRateLevel, int engineLevel)
+    {
+        MatchManager.Instance?.HandleRunStateFromServer(clientId, points,
+            shieldLevel, hullLevel, fireRateLevel, engineLevel);
+    }
+
+    /// <summary>Run over - clear run state everywhere. Called by MatchManager.</summary>
+    [ClientRpc]
+    public void SyncRunResetClientRpc()
+    {
+        MatchManager.Instance?.HandleRunResetFromServer();
+    }
+
+    /// <summary>
+    /// Round-restart respawn: fresh stats + new position, no death recorded and
+    /// no explosion. Server-only (called by MatchManager).
+    /// </summary>
+    public void ServerRespawn()
+    {
+        if (!IsServer) return;
+
+        planeStats?.ResetStats();
+        // New round starts clean: crate-boosted tiers drop back to the hangar pick
+        GetComponent<Shooting>()?.ResetWeaponToSelected();
+
+        if (CloudManager.Instance != null)
+        {
+            CloudManager.Instance.RequestRespawn(this);
+        }
+        else
+        {
+            ExecuteRespawnAtPosition(GetFallbackSpawnPosition());
+        }
+    }
+
+    /// <summary>Owner pressed READY in the hangar - forward to the server.</summary>
+    [ServerRpc]
+    public void SetHangarReadyServerRpc(ServerRpcParams rpcParams = default)
+    {
+        MatchManager.Instance?.ServerSetClientReady(rpcParams.Receive.SenderClientId);
+    }
+
+    /// <summary>Broadcast a client's READY state to everyone. Called by MatchManager.</summary>
+    [ClientRpc]
+    public void SyncHangarReadyClientRpc(ulong readyClientId)
+    {
+        MatchManager.Instance?.HandleClientReadyFromServer(readyClientId);
     }
 }

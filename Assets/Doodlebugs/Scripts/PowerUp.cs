@@ -33,6 +33,7 @@ public class PowerUp : NetworkBehaviour
         new Color(0.3f, 0.5f, 1.0f), // Shield - blue
         new Color(1.0f, 0.8f, 0.0f), // Repair - yellow
         new Color(1.0f, 0.2f, 0.2f), // Damage - red
+        new Color(0.9f, 0.55f, 0.15f), // Weapon crate - orange
     };
 
     public override void OnNetworkSpawn()
@@ -127,7 +128,18 @@ public class PowerUp : NetworkBehaviour
             if (planeStats.IsInvulnerable) return;
 
             _collected = true;
-            planeStats.ApplyPowerUp((PowerUpType)NetPowerUpType.Value);
+
+            var type = (PowerUpType)NetPowerUpType.Value;
+            if (type == PowerUpType.Weapon)
+            {
+                // Weapon crate: climb one tier of the current weapon (until death)
+                other.gameObject.GetComponent<Shooting>()?.UpgradeWeaponTier();
+            }
+            else
+            {
+                planeStats.ApplyPowerUp(type);
+            }
+
             PlayPickupFxClientRpc(transform.position, NetPowerUpType.Value);
             DespawnSelf();
         }
@@ -136,8 +148,7 @@ public class PowerUp : NetworkBehaviour
     [ClientRpc]
     private void PlayPickupFxClientRpc(Vector3 position, int type)
     {
-        // Simple scale-up + fade effect (no extra prefab needed)
-        // The object is being despawned, so this runs on existing instances
+        SfxManager.PlayPowerUp();
     }
 
     private void DespawnSelf()
