@@ -1253,6 +1253,8 @@ MonoBehaviour:
   backgroundRenderer: {fileID: 112089966}
   profiles:
   - {fileID: 11400000, guid: 026482804247f4389beeaf23432fd354, type: 2}
+  - {fileID: 11400000, guid: 2f0a184fe84d540ef800665eb040e4b8, type: 2}
+  - {fileID: 11400000, guid: 68566ec1da764db9bb140b9c56634dbb, type: 2}
 --- !u!4 &1705687248
 Transform:
   m_ObjectHideFlags: 0

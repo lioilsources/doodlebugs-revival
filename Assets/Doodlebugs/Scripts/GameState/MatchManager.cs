@@ -298,6 +298,9 @@ public class MatchManager : MonoBehaviour
         _lateJoinDeadlines.Clear();
         Debug.Log("[MatchManager] Phase -> Battle");
 
+        // Fresh arena for the first battle (synced NetworkVariable)
+        BackgroundManager.Instance?.SelectRandomBackground();
+
         foreach (var player in FindObjectsOfType<PlayerController>())
         {
             player.NetInHangar.Value = false;
@@ -786,6 +789,10 @@ public class MatchManager : MonoBehaviour
 
         // Results screen first
         yield return new WaitForSeconds(ResultsSeconds);
+
+        // Rotate the arena for the next round now - the terrain rebuild pops
+        // behind the hangar/podium overlay instead of mid-battle
+        BackgroundManager.Instance?.SelectRandomBackground();
 
         if (runOver)
         {
