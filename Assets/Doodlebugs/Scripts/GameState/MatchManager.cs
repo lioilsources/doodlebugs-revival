@@ -15,7 +15,7 @@ using Unity.Netcode;
 /// </summary>
 public class MatchManager : MonoBehaviour
 {
-    public const int KillTarget = 10;
+    public const int KillTarget = 3;
     public const float TimeLimitSeconds = 180f;
 
     // Round end = results screen, then the hangar (weapon draft + ready check).

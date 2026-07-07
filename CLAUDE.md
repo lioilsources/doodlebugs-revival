@@ -111,7 +111,7 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 
 ## Match Flow / Audio / HUD
 
-- Round = first to `MatchManager.KillTarget` (10) kills or
+- Round = first to `MatchManager.KillTarget` (3) kills or
   `MatchManager.TimeLimitSeconds` (3 min); winner by kills → deaths → collisions.
   Results overlay (`ResultsSeconds`, 4 s) → hangar (`HangarSeconds`, 30 s):
   weapon draft (keep-current + 2 random from `WeaponProfile.DraftPool`) + READY
@@ -119,12 +119,22 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   at the auto-start timeout (all synced via PlayerController ClientRpcs, same
   routing pattern as ScoreManager).
 - Weapons: static registry in `Scripts/Weapons/WeaponProfile.cs` (MG, Twin MG,
-  Flak, Heavy Flak) — every weapon is a parametric bullet variant (damage,
-  cooldown, force, gravity, pellets, spread, lifetime). `Shooting.NetWeaponId`
-  is server-write; hangar picks go through `RequestSelectWeaponServerRpc`. The
-  Weapon power-up crate climbs one tier of the current weapon's `UpgradesTo`
-  chain and is lost on death/round restart (back to the hangar pick). Maturity
-  profiles still scale ROF/force as multipliers.
+  Flak, Heavy Flak, Aero Bomb, Sniper, Rocket, Mine) — every weapon is a
+  parametric bullet variant (damage, cooldown, force, gravity, pellets, spread,
+  lifetime, explosion radius, acceleration, drag, arm delay, visual scale/tint).
+  `Shooting.NetWeaponId` is server-write; hangar picks go through
+  `RequestSelectWeaponServerRpc`. The Weapon power-up crate climbs one tier of
+  the current weapon's `UpgradesTo` chain and is lost on death/round restart
+  (back to the hangar pick). Maturity profiles still scale ROF/force as
+  multipliers.
+- Explosive weapons (`ExplosionRadius > 0`): server does an AoE
+  `Physics2D.OverlapCircleAll` (damages every plane in range, incl. the
+  shooter's own outside the spawn grace), then `ExplodeClientRpc` plays the
+  boom and calls `ForegroundScroller.DestroyTilesInRadius` — terrain craters
+  are local-visual, synced by position+radius. Bomb = dropped (force 0,
+  gravity), Rocket = accelerating thrust, Mine = drag-brakes and lurks (arm
+  delay 1.2 s, renders below clouds so it hides in them; unarmed projectiles
+  don't carve terrain — `ForegroundTile` checks `Bullet.IsArmed`).
 - Run (best-of-5): first client to `MatchManager.RoundWinsTarget` (3) round
   wins takes the run → podium (`PodiumSeconds`, 10 s) → full reset (upgrades,
   weapons, wins). Run points (1 účast / +1 top half / +1 round win, tracked
@@ -137,7 +147,8 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   `Handheld.Vibrate()` on own death. Regenerate WAVs with a Pillow-free pure
   Python script if the style changes.
 - HUD font: Press Start 2P (OFL, license next to the .ttf) in `Resources/Fonts`.
-- HUD panels: the local device's planes get detailed panels (segmented
+- HUD panels (bottom-right — the parallax foreground is calmest there): the
+  local device's planes get detailed panels (segmented
   shield/health 3+3, speed 12 segments, power-up chips with DMG countdown +
   handling %); remote opponents get compact rows (name + K|D|C + 3+3 pips)
   to save space on mobile.

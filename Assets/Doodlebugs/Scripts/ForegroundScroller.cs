@@ -373,6 +373,29 @@ public class ForegroundScroller : MonoBehaviour
         return false;
     }
 
+    /// <summary>
+    /// Blow away every active tile whose center lies within radius of the
+    /// world-space point (bomb/rocket craters). Local-visual, like single-tile
+    /// bullet hits - the caller syncs position+radius across clients.
+    /// </summary>
+    public void DestroyTilesInRadius(Vector2 center, float radius)
+    {
+        if (!_active) return;
+
+        float r2 = radius * radius;
+        foreach (var copy in _copies)
+        {
+            // Backwards: LaunchDebris() detaches the tile from this parent
+            for (int i = copy.transform.childCount - 1; i >= 0; i--)
+            {
+                var tile = copy.transform.GetChild(i);
+                if (!tile.gameObject.activeSelf) continue;
+                if (((Vector2)tile.position - center).sqrMagnitude > r2) continue;
+                tile.GetComponent<ForegroundTile>()?.LaunchDebris();
+            }
+        }
+    }
+
     private void ReactivateTiles(SpriteRenderer sr)
     {
         for (int i = 0; i < sr.transform.childCount; i++)

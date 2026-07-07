@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
@@ -18,13 +18,69 @@ public class Bullet : NetworkBehaviour
     // Optional lifetime for short-range weapons (0 = unlimited). Server-only.
     private float _lifetime;
 
+    private Rigidbody2D _rb;
+    private Vector3 _baseScale;
+    private bool _exploded;
+
+    // Which WeaponProfile drives this projectile (physics on the server,
+    // scale/tint everywhere). Synced so late-arriving visuals stay correct.
+    private NetworkVariable<int> _weaponId = new NetworkVariable<int>((int)WeaponType.MG,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    private WeaponProfile Profile => WeaponProfile.Get(_weaponId.Value);
+
+    /// <summary>False while a mine is still arming - it hits nothing yet.
+    /// Runs on every client (ForegroundTile checks it locally).</summary>
+    public bool IsArmed => Time.time - _spawnTime >= Profile.ArmDelay;
+
+    private void Awake()
+    {
+        _rb = GetComponent<Rigidbody2D>();
+        _baseScale = transform.localScale;
+    }
+
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
         _spawnTime = Time.time;
 
+        _weaponId.OnValueChanged += OnWeaponChanged;
+        ApplyVisual();
+
         // Bullet replicates to every client - this doubles as the shot sound
         SfxManager.PlayShoot();
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        base.OnNetworkDespawn();
+        _weaponId.OnValueChanged -= OnWeaponChanged;
+    }
+
+    /// <summary>Assign the weapon profile driving this projectile. Server-only.</summary>
+    public void SetWeapon(int weaponId)
+    {
+        if (IsServer)
+        {
+            _weaponId.Value = weaponId;
+            ApplyVisual();
+        }
+    }
+
+    private void OnWeaponChanged(int prev, int next) => ApplyVisual();
+
+    private void ApplyVisual()
+    {
+        var profile = Profile;
+        transform.localScale = _baseScale * profile.ProjectileScale;
+
+        var sr = GetComponent<SpriteRenderer>();
+        if (sr != null)
+        {
+            sr.color = profile.ProjectileTint;
+            // Bullets render below clouds (order 10), so a lurking mine is
+            // naturally hidden while it drifts inside one.
+        }
     }
 
     /// <summary>Despawn the bullet after this many seconds (short-range weapons). Server-only.</summary>
@@ -43,6 +99,27 @@ public class Bullet : NetworkBehaviour
         if (Time.time - _spawnTime >= _lifetime && NetworkObject != null && NetworkObject.IsSpawned)
         {
             NetworkObject.Despawn();
+        }
+    }
+
+    private void FixedUpdate()
+    {
+        if (!IsServer || _rb == null) return;
+
+        var profile = Profile;
+
+        // Rocket thrust along the projectile's facing
+        if (profile.Acceleration > 0f)
+        {
+            _rb.AddForce((Vector2)transform.right * profile.Acceleration * Time.fixedDeltaTime,
+                ForceMode2D.Impulse);
+        }
+
+        // Bombs tip nose-down, rockets keep facing their flight path
+        if ((profile.GravityScale > 0f || profile.Acceleration > 0f) &&
+            _rb.linearVelocity.sqrMagnitude > 0.5f)
+        {
+            transform.right = _rb.linearVelocity.normalized;
         }
     }
 
@@ -81,47 +158,136 @@ public class Bullet : NetworkBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        if (!IsServer) return;
+        HandleContact(other);
+    }
 
-        if (other.gameObject.name != "Space")
+    void OnTriggerStay2D(Collider2D other)
+    {
+        // A mine arms while a collider already overlaps it (or a plane parks on
+        // top of a drifting one) - Enter alone would never fire.
+        if (Profile.ArmDelay > 0f)
         {
-            var damagable = other.gameObject.GetComponent<IDamagable>();
-            if (damagable != null)
+            HandleContact(other);
+        }
+    }
+
+    private void HandleContact(Collider2D other)
+    {
+        if (!IsServer || _exploded) return;
+
+        // Not armed yet (mine) - pass through everything
+        if (Time.time - _spawnTime < Profile.ArmDelay) return;
+
+        if (other.gameObject.name == "Space") return;
+
+        // Clouds block bullets (cover), but a falling bomb drops through and
+        // a mine drifts inside one - that's where it hides.
+        if ((Profile.GravityScale > 0f || Profile.ArmDelay > 0f) &&
+            other.GetComponent<Cloud>() != null)
+        {
+            return;
+        }
+
+        var damagable = other.gameObject.GetComponent<IDamagable>();
+        if (damagable != null)
+        {
+            var targetPlayer = other.gameObject.GetComponent<PlayerController>();
+            if (targetPlayer != null && IsShootersOwnPlane(targetPlayer) &&
+                Time.time - _spawnTime < SelfHitGracePeriod)
             {
-                // Set last attacker on target for kill attribution
-                var targetPlayer = other.gameObject.GetComponent<PlayerController>();
-                if (targetPlayer != null)
-                {
-                    int targetLocalIdx = targetPlayer.LocalPlayerIndex >= 0 ? targetPlayer.LocalPlayerIndex : 0;
-                    bool isSamePlayer = targetPlayer.OwnerClientId == _shooterClientId.Value &&
-                                        targetLocalIdx == _shooterLocalPlayerIndex.Value;
+                // Fresh bullet still leaving the shooter's own plane -
+                // pass through without damage or despawn.
+                return;
+            }
 
-                    if (isSamePlayer && Time.time - _spawnTime < SelfHitGracePeriod)
-                    {
-                        // Fresh bullet still leaving the shooter's own plane -
-                        // pass through without damage or despawn.
-                        return;
-                    }
-
-                    if (!isSamePlayer)
-                    {
-                        targetPlayer.SetLastAttacker(_shooterClientId.Value, _shooterLocalPlayerIndex.Value);
-                    }
-                }
-
-                // Apply damage through IDamagable pipeline
-                damagable.Hit(_damage.Value);
+            if (Profile.ExplosionRadius > 0f)
+            {
+                // The direct target sits inside the blast radius - the
+                // explosion damages it, no separate direct hit.
+                Explode();
             }
             else
             {
-                // Non-damagable object (wall, etc.) - bullet creates explosion
+                if (targetPlayer != null && !IsShootersOwnPlane(targetPlayer))
+                {
+                    targetPlayer.SetLastAttacker(_shooterClientId.Value, _shooterLocalPlayerIndex.Value);
+                }
+                damagable.Hit(_damage.Value);
+            }
+        }
+        else
+        {
+            // Non-damagable object (wall, foreground tile, ...) - explode or spark
+            if (Profile.ExplosionRadius > 0f)
+            {
+                Explode();
+            }
+            else
+            {
                 PlayHitFxClientRpc(transform.position);
             }
+        }
 
-            if (NetworkObject != null && NetworkObject.IsSpawned)
+        if (NetworkObject != null && NetworkObject.IsSpawned)
+        {
+            NetworkObject.Despawn();
+        }
+    }
+
+    private bool IsShootersOwnPlane(PlayerController player)
+    {
+        int localIdx = player.LocalPlayerIndex >= 0 ? player.LocalPlayerIndex : 0;
+        return player.OwnerClientId == _shooterClientId.Value &&
+               localIdx == _shooterLocalPlayerIndex.Value;
+    }
+
+    /// <summary>
+    /// Server-side AoE: damage every plane in the blast radius, then blow away
+    /// foreground tiles and play the boom on all clients. Own planes are only
+    /// spared during the spawn grace period - a badly dropped bomb hurts.
+    /// </summary>
+    private void Explode()
+    {
+        if (_exploded) return;
+        _exploded = true;
+
+        float radius = Profile.ExplosionRadius;
+        Vector3 pos = transform.position;
+
+        var hitPlanes = new HashSet<PlayerController>();
+        foreach (var col in Physics2D.OverlapCircleAll(pos, radius))
+        {
+            var player = col.GetComponent<PlayerController>();
+            if (player == null || !hitPlanes.Add(player)) continue;
+
+            bool ownPlane = IsShootersOwnPlane(player);
+            if (ownPlane && Time.time - _spawnTime < SelfHitGracePeriod) continue;
+
+            if (!ownPlane)
             {
-                NetworkObject.Despawn();
+                player.SetLastAttacker(_shooterClientId.Value, _shooterLocalPlayerIndex.Value);
             }
+            player.Hit(_damage.Value);
+        }
+
+        ExplodeClientRpc(pos, radius);
+    }
+
+    [ClientRpc]
+    private void ExplodeClientRpc(Vector3 position, float radius)
+    {
+        SfxManager.PlayExplosion();
+
+        // Terrain destruction is local-visual, same as single-tile bullet hits;
+        // position+radius come from the server, so every client digs the
+        // same crater.
+        ForegroundScroller.Instance?.DestroyTilesInRadius(position, radius);
+
+        if (hitEffect != null)
+        {
+            var effect = Instantiate(hitEffect, position, Quaternion.identity);
+            effect.transform.localScale *= Mathf.Max(1f, radius);
+            Destroy(effect, 0.8f);
         }
     }
 

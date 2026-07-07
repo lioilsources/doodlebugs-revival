@@ -152,6 +152,7 @@ public class Shooting : NetworkBehaviour
         {
             bulletScript.SetShooter(shooterClientId, localPlayerIndex);
             bulletScript.SetDamage(damage);
+            bulletScript.SetWeapon((int)weapon.Type);
             if (weapon.BulletLifetime > 0f)
             {
                 bulletScript.SetLifetime(weapon.BulletLifetime);
@@ -162,6 +163,7 @@ public class Shooting : NetworkBehaviour
         if (rb != null)
         {
             rb.gravityScale = weapon.GravityScale;
+            rb.linearDamping = weapon.LinearDrag;
 
             // Bullet force = (base force * weapon * maturity) + plane speed
             float totalForce = baseBulletForce * weapon.ForceMultiplier * maturityForceMultiplier

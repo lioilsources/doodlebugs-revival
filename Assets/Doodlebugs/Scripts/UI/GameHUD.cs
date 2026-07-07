@@ -5,8 +5,8 @@ using UnityEngine.UI;
 using Unity.Netcode;
 
 /// <summary>
-/// Game HUD: per-player panels (top-right), round timer (top-center) and the
-/// round-over results overlay.
+/// Game HUD: per-player panels (bottom-right, where the parallax foreground
+/// is calmest), round timer (top-center) and the round-over results overlay.
 ///
 /// The local device's own planes get a DETAILED panel (segmented shield /
 /// health / speed bars + active power-up chips). Remote opponents get a
@@ -286,16 +286,17 @@ public class GameHUD : MonoBehaviour
         containerObj.transform.SetParent(transform, false);
 
         playerStatsContainer = containerObj.AddComponent<RectTransform>();
-        // Anchor to top-right (avoids phone notch on left side)
-        playerStatsContainer.anchorMin = new Vector2(1, 1);
-        playerStatsContainer.anchorMax = new Vector2(1, 1);
-        playerStatsContainer.pivot = new Vector2(1, 1);
-        playerStatsContainer.anchoredPosition = new Vector2(-60, -20);
+        // Anchor to bottom-right - the parallax foreground is calmest there
+        // (and the right side still avoids the phone notch)
+        playerStatsContainer.anchorMin = new Vector2(1, 0);
+        playerStatsContainer.anchorMax = new Vector2(1, 0);
+        playerStatsContainer.pivot = new Vector2(1, 0);
+        playerStatsContainer.anchoredPosition = new Vector2(-60, 20);
         playerStatsContainer.sizeDelta = new Vector2(420, 700);
 
         var layout = containerObj.AddComponent<VerticalLayoutGroup>();
         layout.spacing = 8;
-        layout.childAlignment = TextAnchor.UpperRight;
+        layout.childAlignment = TextAnchor.LowerRight;
         layout.childControlWidth = true;
         layout.childControlHeight = false;
         layout.childForceExpandWidth = true;
