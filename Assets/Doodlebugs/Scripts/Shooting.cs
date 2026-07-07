@@ -32,7 +32,10 @@ public class Shooting : NetworkBehaviour
     private float maturityRofMultiplier => (Profile?.fireRateCooldown ?? 0.4f) / 0.4f;
     private float maturityForceMultiplier => Profile?.bulletForceMultiplier ?? 1f;
 
-    private float fireRateCooldown => CurrentWeapon.Cooldown * maturityRofMultiplier;
+    // Run-upgrade FIRE RATE levels shorten the cooldown
+    private float runRofMultiplier => playerController?.PlaneStats?.RofMultiplier ?? 1f;
+
+    private float fireRateCooldown => CurrentWeapon.Cooldown * maturityRofMultiplier / runRofMultiplier;
 
     // Reference to PlayerController for local player index
     private PlayerController playerController;

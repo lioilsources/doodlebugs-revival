@@ -30,7 +30,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
     // Profile-aware properties (uses player's own maturity level, not global)
     private PilotMaturityProfile Profile => PilotMaturityManager.Instance?.GetProfile(_maturityLevel);
     private float rotateSpeed => Profile?.rotateSpeed ?? baseRotateSpeed;
-    private float maxSpeed => Profile?.maxSpeed ?? baseMaxSpeed;
+    // Run-upgrade ENGINE levels raise the speed cap (synced, works for owner input)
+    private float maxSpeed => (Profile?.maxSpeed ?? baseMaxSpeed) * (planeStats?.SpeedMultiplier ?? 1f);
     private float maxGravity => Profile?.maxGravity ?? baseMaxGravity;
     private float gravityIncreaseRate => Profile?.gravityIncreaseRate ?? baseGravityIncreaseRate;
     private float engineOffRotateMultiplier => Profile?.engineOffRotateMultiplier ?? baseEngineOffRotateMultiplier;
@@ -1002,15 +1003,40 @@ public class PlayerController : NetworkBehaviour, IDamagable
     }
 
     /// <summary>
-    /// Sync round end (winner) to all clients. Called by MatchManager.
+    /// Sync round end (winner + run progress) to all clients. Called by MatchManager.
     /// </summary>
     [ClientRpc]
-    public void SyncMatchEndClientRpc(ulong winnerClientId, int winnerLocalPlayerIndex, int winnerKills)
+    public void SyncMatchEndClientRpc(ulong winnerClientId, int winnerLocalPlayerIndex,
+        int winnerKills, int winnerRoundWins, bool runOver)
     {
         if (MatchManager.Instance != null)
         {
-            MatchManager.Instance.HandleMatchEndFromServer(winnerClientId, winnerLocalPlayerIndex, winnerKills);
+            MatchManager.Instance.HandleMatchEndFromServer(winnerClientId, winnerLocalPlayerIndex,
+                winnerKills, winnerRoundWins, runOver);
         }
+    }
+
+    /// <summary>Owner buys a run upgrade in the hangar - forward to the server.</summary>
+    [ServerRpc]
+    public void RequestBuyUpgradeServerRpc(int upgradeType, ServerRpcParams rpcParams = default)
+    {
+        MatchManager.Instance?.ServerBuyUpgrade(rpcParams.Receive.SenderClientId, upgradeType);
+    }
+
+    /// <summary>Sync a client's run points + upgrade levels. Called by MatchManager.</summary>
+    [ClientRpc]
+    public void SyncRunStateClientRpc(ulong clientId, int points,
+        int shieldLevel, int hullLevel, int fireRateLevel, int engineLevel)
+    {
+        MatchManager.Instance?.HandleRunStateFromServer(clientId, points,
+            shieldLevel, hullLevel, fireRateLevel, engineLevel);
+    }
+
+    /// <summary>Run over - clear run state everywhere. Called by MatchManager.</summary>
+    [ClientRpc]
+    public void SyncRunResetClientRpc()
+    {
+        MatchManager.Instance?.HandleRunResetFromServer();
     }
 
     /// <summary>
