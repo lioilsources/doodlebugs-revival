@@ -60,6 +60,16 @@ public class PlayerController : NetworkBehaviour, IDamagable
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server);
 
+    // True while this plane waits in the hangar (pre-battle lobby or late-join
+    // pick screen): hidden, frozen and non-collidable on every client.
+    // MatchManager deploys it by flipping this back to false.
+    public NetworkVariable<bool> NetInHangar = new NetworkVariable<bool>(false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
+
+    /// <summary>True while the plane is parked in the hangar (not deployed).</summary>
+    public bool InHangar => NetInHangar.Value;
+
     /// <summary>
     /// Get the display name for this player (device name, shortened)
     /// </summary>
@@ -206,11 +216,55 @@ public class PlayerController : NetworkBehaviour, IDamagable
             networkTransform = GetComponent<ClientNetworkTransform>();
         }
 
+        // Hangar state: the server hides remote clients' auto-spawned planes
+        // until MatchManager deploys them (pre-battle lobby or late join).
+        if (IsServer && MatchManager.Instance != null &&
+            MatchManager.Instance.ShouldSpawnHiddenInHangar(OwnerClientId))
+        {
+            NetInHangar.Value = true;
+        }
+        NetInHangar.OnValueChanged += OnInHangarChanged;
+        ApplyHangarState(NetInHangar.Value);
+
         // Initialize movement for owner (deferred to avoid NetworkVariable timing issues)
         if (IsOwner)
         {
             StartCoroutine(InitializeOwnerDelayed());
         }
+    }
+
+    private void OnInHangarChanged(bool previous, bool current)
+    {
+        ApplyHangarState(current);
+    }
+
+    /// <summary>
+    /// Park/unpark the plane visually and physically. Runs on every client
+    /// from the NetInHangar sync (and once on spawn with the initial value).
+    /// </summary>
+    private void ApplyHangarState(bool hidden)
+    {
+        if (rb == null) rb = GetComponent<Rigidbody2D>();
+        if (planeCollider == null) planeCollider = GetComponent<BoxCollider2D>();
+        if (visualEffects == null) visualEffects = GetComponent<PlaneVisualEffects>();
+
+        if (planeCollider != null) planeCollider.enabled = !hidden;
+        if (rb != null)
+        {
+            rb.simulated = !hidden;
+            if (!hidden && IsOwner)
+            {
+                // Give the freshly deployed plane forward motion; the deploy
+                // teleport (RespawnAtPositionClientRpc) lands right after
+                rb.linearVelocity = transform.right * Mathf.Max(speed, defaultSpeed);
+            }
+        }
+
+        visualEffects?.SetHangarHidden(hidden);
+
+        // Disabled before its Start() runs = no engine sound while parked
+        var engineAudio = GetComponent<EngineAudio>();
+        if (engineAudio != null) engineAudio.enabled = !hidden;
     }
 
     private IEnumerator InitializeOwnerDelayed()
@@ -242,6 +296,14 @@ public class PlayerController : NetworkBehaviour, IDamagable
         else
         {
             Debug.LogError("[PlayerController] rb is still null!");
+        }
+
+        // Ask the server for the current game state (phase, scores, timer,
+        // late-join hangar) now that this player object is provably spawned
+        // and able to receive the targeted reply RPCs.
+        if (!IsServer)
+        {
+            RequestStateSnapshotServerRpc();
         }
     }
 
@@ -435,6 +497,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private float _lastLogTime = 0f;
 
     void FixedUpdate() {
+        // Parked in the hangar - no movement, no out-of-bounds respawn spam
+        if (NetInHangar.Value) return;
+
         // Check if we should process input:
         // - Regular network player: IsOwner must be true
         // - Local couch co-op player: IsLocalPlayer and we're the host
@@ -991,15 +1056,57 @@ public class PlayerController : NetworkBehaviour, IDamagable
     }
 
     /// <summary>
-    /// Sync player stats to all clients. Called by ScoreManager.
+    /// Sync player stats to all clients (or one, via rpcParams). Called by ScoreManager.
     /// </summary>
     [ClientRpc]
-    public void SyncStatsClientRpc(ulong clientId, int localPlayerIndex, int kills, int deaths, int planeCollisions)
+    public void SyncStatsClientRpc(ulong clientId, int localPlayerIndex, int kills, int deaths, int planeCollisions, ClientRpcParams rpcParams = default)
     {
         if (ScoreManager.Instance != null)
         {
             ScoreManager.Instance.UpdateStatsFromServer(clientId, localPlayerIndex, kills, deaths, planeCollisions);
         }
+    }
+
+    /// <summary>Client asks for the game-state snapshot once its player object is ready.</summary>
+    [ServerRpc]
+    public void RequestStateSnapshotServerRpc(ServerRpcParams rpcParams = default)
+    {
+        MatchManager.Instance?.ServerSendSnapshotTo(rpcParams.Receive.SenderClientId, this);
+    }
+
+    /// <summary>Owner pressed JOIN in the late-join hangar - deploy now.</summary>
+    [ServerRpc]
+    public void RequestDeployServerRpc(ServerRpcParams rpcParams = default)
+    {
+        MatchManager.Instance?.ServerRequestDeploy(rpcParams.Receive.SenderClientId);
+    }
+
+    /// <summary>Game-phase sync, broadcast or targeted. Called by MatchManager.</summary>
+    [ClientRpc]
+    public void SyncGamePhaseClientRpc(byte phase, float secondsRemaining, ClientRpcParams rpcParams = default)
+    {
+        MatchManager.Instance?.HandlePhaseFromServer((MatchManager.GamePhase)phase, secondsRemaining);
+    }
+
+    /// <summary>Open the personal late-join hangar on the target client. Called by MatchManager.</summary>
+    [ClientRpc]
+    public void SyncLateJoinHangarClientRpc(int seconds, ClientRpcParams rpcParams = default)
+    {
+        MatchManager.Instance?.HandleLateJoinHangarFromServer(seconds);
+    }
+
+    /// <summary>Adopt match state WITHOUT clearing stats (late-join snapshot / freeze).</summary>
+    [ClientRpc]
+    public void SyncMatchStateClientRpc(bool started, float matchTime, ClientRpcParams rpcParams = default)
+    {
+        ScoreManager.Instance?.SetMatchStateFromServer(started, matchTime);
+    }
+
+    /// <summary>One round-wins entry (late-join snapshot). Called by MatchManager.</summary>
+    [ClientRpc]
+    public void SyncRoundWinsClientRpc(ulong clientId, int wins, ClientRpcParams rpcParams = default)
+    {
+        MatchManager.Instance?.HandleRoundWinsFromServer(clientId, wins);
     }
 
     /// <summary>
@@ -1026,7 +1133,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// <summary>Sync a client's run points + upgrade levels. Called by MatchManager.</summary>
     [ClientRpc]
     public void SyncRunStateClientRpc(ulong clientId, int points,
-        int shieldLevel, int hullLevel, int fireRateLevel, int engineLevel)
+        int shieldLevel, int hullLevel, int fireRateLevel, int engineLevel,
+        ClientRpcParams rpcParams = default)
     {
         MatchManager.Instance?.HandleRunStateFromServer(clientId, points,
             shieldLevel, hullLevel, fireRateLevel, engineLevel);

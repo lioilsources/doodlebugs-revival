@@ -111,6 +111,22 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 
 ## Match Flow / Audio / HUD
 
+- Game loop (hangar-as-lobby): `MatchManager.GamePhase` is server-authoritative
+  — WaitingForPlayers (host opens the Waiting hangar, may FLY out for a
+  scoreless warm-up; corner HANGAR button returns) → PreBattleCountdown (2nd
+  client connects; `PreBattleSeconds` = 10 s weapon-pick window on every
+  device, READY skips early) → Battle → Intermission/Podium → Battle…
+  Matches are NEVER auto-started on connect (`ScoreManager` no longer listens
+  to `OnClientConnectedCallback`) — only `MatchManager` calls `RestartMatch()`.
+- Late join: a client connecting mid-battle does NOT reset the match. Its
+  plane spawns parked (`PlayerController.NetInHangar` — hidden, frozen,
+  collider off on every client, no shooting), the client requests a state
+  snapshot via `RequestStateSnapshotServerRpc` once its player object is ready
+  (phase, full score table, timer, round wins, run state — targeted RPCs), and
+  gets a personal LateJoin hangar (`LateJoinSeconds` = 10 s, JOIN deploys
+  early). Deploy = `ServerRespawn()` (CloudManager position + 2 s
+  invulnerability). If a battle drops below 2 clients the server freezes back
+  to WaitingForPlayers (timer frozen, scores kept, run state kept).
 - Round = first to `MatchManager.KillTarget` (3) kills or
   `MatchManager.TimeLimitSeconds` (3 min); winner by kills → deaths → collisions.
   Results overlay (`ResultsSeconds`, 4 s) → hangar (`HangarSeconds`, 30 s):

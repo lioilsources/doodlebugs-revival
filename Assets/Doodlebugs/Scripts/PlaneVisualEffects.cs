@@ -310,10 +310,46 @@ public class PlaneVisualEffects : NetworkBehaviour
         flashCoroutine = StartCoroutine(DamageFlashCoroutine());
     }
 
+    // Parked in the hangar - renderers stay off and the blink coroutine must
+    // not re-enable them.
+    private bool _hangarHidden;
+
+    /// <summary>
+    /// Hide/show the whole plane while it waits in the hangar (lobby or late
+    /// join). Called from PlayerController's NetInHangar sync on every client.
+    /// </summary>
+    public void SetHangarHidden(bool hidden)
+    {
+        _hangarHidden = hidden;
+
+        if (hidden)
+        {
+            if (invulnerabilityBlinkCoroutine != null)
+            {
+                StopCoroutine(invulnerabilityBlinkCoroutine);
+                invulnerabilityBlinkCoroutine = null;
+            }
+            if (planeRenderer != null) planeRenderer.enabled = false;
+            if (glowOutlineRenderer != null) glowOutlineRenderer.enabled = false;
+        }
+        else
+        {
+            if (planeRenderer != null) planeRenderer.enabled = true;
+            UpdateGlowVisibility();
+            // Deploy grants invulnerability - restart the blink if it is active
+            if (planeStats != null && planeStats.IsInvulnerable)
+            {
+                if (invulnerabilityBlinkCoroutine != null) StopCoroutine(invulnerabilityBlinkCoroutine);
+                invulnerabilityBlinkCoroutine = StartCoroutine(InvulnerabilityBlinkCoroutine());
+            }
+        }
+    }
+
     private void OnInvulnerabilityChanged(bool prev, bool current)
     {
         if (current)
         {
+            if (_hangarHidden) return; // stay hidden; blink restarts on unhide
             if (invulnerabilityBlinkCoroutine != null)
                 StopCoroutine(invulnerabilityBlinkCoroutine);
             invulnerabilityBlinkCoroutine = StartCoroutine(InvulnerabilityBlinkCoroutine());
@@ -325,8 +361,8 @@ public class PlaneVisualEffects : NetworkBehaviour
                 StopCoroutine(invulnerabilityBlinkCoroutine);
                 invulnerabilityBlinkCoroutine = null;
             }
-            // Ensure sprite is visible
-            if (planeRenderer != null)
+            // Ensure sprite is visible (unless parked in the hangar)
+            if (planeRenderer != null && !_hangarHidden)
                 planeRenderer.enabled = true;
         }
     }
