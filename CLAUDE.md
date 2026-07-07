@@ -114,6 +114,12 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 
 ## Match Flow / Audio / HUD
 
+- Boot: GameHUD opens an OPAQUE "Searching" hangar on the very first frame
+  (discovery status + version, no arena visible); it morphs into the Waiting
+  hangar on host start or the PreBattle/LateJoin hangar from server RPCs.
+  The arena is first revealed by battle start or the FLY warm-up button.
+  Searching/Waiting overlays are opaque; PreBattle/LateJoin/Intermission
+  keep 0.82 alpha (battle/results context behind).
 - Game loop (hangar-as-lobby): `MatchManager.GamePhase` is server-authoritative
   — WaitingForPlayers (host opens the Waiting hangar, may FLY out for a
   scoreless warm-up; corner HANGAR button returns) → PreBattleCountdown (2nd

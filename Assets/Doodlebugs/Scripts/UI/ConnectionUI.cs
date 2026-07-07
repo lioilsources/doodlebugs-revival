@@ -93,6 +93,19 @@ namespace Doodlebugs.UI
             }
         }
 
+        // The hangar overlay shows the connection status itself - suppress the
+        // duplicate corner panel while it covers the screen.
+        private static bool HangarCoversScreen =>
+            GameHUD.Instance != null && GameHUD.Instance.IsHangarOpen;
+
+        private void LateUpdate()
+        {
+            if (_statusPanel != null && _statusPanel.activeSelf && HangarCoversScreen)
+            {
+                _statusPanel.SetActive(false);
+            }
+        }
+
         private void OnStatusMessage(string message)
         {
             Debug.Log($"[ConnectionUI] OnStatusMessage: {message}");
@@ -106,10 +119,10 @@ namespace Doodlebugs.UI
                 Debug.LogError("[ConnectionUI] _statusText is null!");
             }
 
-            // Make sure panel is visible
+            // Make sure panel is visible (unless the hangar overlay covers it)
             if (_statusPanel != null)
             {
-                _statusPanel.SetActive(true);
+                _statusPanel.SetActive(!HangarCoversScreen);
             }
         }
 
