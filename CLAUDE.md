@@ -125,6 +125,13 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   Weapon power-up crate climbs one tier of the current weapon's `UpgradesTo`
   chain and is lost on death/round restart (back to the hangar pick). Maturity
   profiles still scale ROF/force as multipliers.
+- Run (best-of-5): first client to `MatchManager.RoundWinsTarget` (3) round
+  wins takes the run → podium (`PodiumSeconds`, 10 s) → full reset (upgrades,
+  weapons, wins). Run points (1 účast / +1 top half / +1 round win, tracked
+  per clientId on the server) buy `RunUpgrades` in the hangar: Shield/Hull
+  (+1 max segment, cap 5), FireRate (+15 %), Engine (+10 % speed), max 2
+  levels each. Bonuses live in synced `PlaneStats.NetMax*`/multiplier
+  NetworkVariables and apply to all planes of the buying client.
 - SFX are procedurally generated 8-bit WAVs in `Resources/Sfx` played through the
   runtime-created `SfxManager` singleton (no scene wiring); haptics =
   `Handheld.Vibrate()` on own death. Regenerate WAVs with a Pillow-free pure
