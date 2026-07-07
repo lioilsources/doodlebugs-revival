@@ -113,9 +113,18 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 
 - Round = first to `MatchManager.KillTarget` (10) kills or
   `MatchManager.TimeLimitSeconds` (3 min); winner by kills → deaths → collisions.
-  Results overlay + `IntermissionSeconds` (8 s) countdown, then the server
-  respawns everyone and restarts (all synced via PlayerController ClientRpcs,
-  same routing pattern as ScoreManager).
+  Results overlay (`ResultsSeconds`, 4 s) → hangar (`HangarSeconds`, 30 s):
+  weapon draft (keep-current + 2 random from `WeaponProfile.DraftPool`) + READY
+  check; server restarts early when every connected client is ready, otherwise
+  at the auto-start timeout (all synced via PlayerController ClientRpcs, same
+  routing pattern as ScoreManager).
+- Weapons: static registry in `Scripts/Weapons/WeaponProfile.cs` (MG, Twin MG,
+  Flak, Heavy Flak) — every weapon is a parametric bullet variant (damage,
+  cooldown, force, gravity, pellets, spread, lifetime). `Shooting.NetWeaponId`
+  is server-write; hangar picks go through `RequestSelectWeaponServerRpc`. The
+  Weapon power-up crate climbs one tier of the current weapon's `UpgradesTo`
+  chain and is lost on death/round restart (back to the hangar pick). Maturity
+  profiles still scale ROF/force as multipliers.
 - SFX are procedurally generated 8-bit WAVs in `Resources/Sfx` played through the
   runtime-created `SfxManager` singleton (no scene wiring); haptics =
   `Handheld.Vibrate()` on own death. Regenerate WAVs with a Pillow-free pure

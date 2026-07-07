@@ -99,6 +99,8 @@ public class GameHUD : MonoBehaviour
         public Text dmgChipText;
         public GameObject repairChip;
         public Text repairChipText;
+        public Text weaponText;
+        public Shooting shooting;
 
         // Compact panel parts (null on detailed entries)
         public Image[] shieldPips;
@@ -204,7 +206,9 @@ public class GameHUD : MonoBehaviour
         if (MatchManager.Instance != null)
         {
             MatchManager.Instance.OnMatchEnded -= OnMatchEnded;
-            MatchManager.Instance.OnIntermissionTick -= OnIntermissionTick;
+            MatchManager.Instance.OnHangarOpened -= OnHangarOpened;
+            MatchManager.Instance.OnHangarTick -= OnHangarTick;
+            MatchManager.Instance.OnClientReadyChanged -= OnClientReadyChanged;
         }
     }
 
@@ -235,7 +239,9 @@ public class GameHUD : MonoBehaviour
             yield return new WaitForSeconds(0.1f);
         }
         MatchManager.Instance.OnMatchEnded += OnMatchEnded;
-        MatchManager.Instance.OnIntermissionTick += OnIntermissionTick;
+        MatchManager.Instance.OnHangarOpened += OnHangarOpened;
+        MatchManager.Instance.OnHangarTick += OnHangarTick;
+        MatchManager.Instance.OnClientReadyChanged += OnClientReadyChanged;
     }
 
     private void OnLocalPlayerToggled(int localPlayerIndex, bool enabled)
@@ -464,10 +470,24 @@ public class GameHUD : MonoBehaviour
             chipsLayout.childControlHeight = false;
             chipsLayout.childForceExpandWidth = false;
 
+            // Current weapon name (always visible, leftmost chip)
+            var weaponObj = new GameObject("WeaponName");
+            weaponObj.transform.SetParent(chipsRow.transform, false);
+            var weaponRect = weaponObj.AddComponent<RectTransform>();
+            weaponRect.sizeDelta = new Vector2(150, 22);
+            entry.weaponText = weaponObj.AddComponent<Text>();
+            entry.weaponText.font = PixelFont;
+            entry.weaponText.fontSize = ChipFontSize;
+            entry.weaponText.alignment = TextAnchor.MiddleRight;
+            entry.weaponText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            entry.weaponText.color = new Color(0.95f, 0.85f, 0.6f);
+
             entry.repairChip = CreateChip(chipsRow.transform, "RepairChip", GetRepairSprite(),
                 new Color(1f, 0.85f, 0.2f), out entry.repairChipText);
             entry.dmgChip = CreateChip(chipsRow.transform, "DmgChip", GetDmgSprite(),
                 new Color(1f, 0.45f, 0.2f), out entry.dmgChipText);
+
+            entry.shooting = player.GetComponent<Shooting>();
         }
         else
         {
@@ -781,6 +801,18 @@ public class GameHUD : MonoBehaviour
 
     private void UpdateChips(PlayerHUDEntry entry, PlaneStats stats)
     {
+        // Current weapon name (respawn can swap the player object - refresh cache)
+        if (entry.weaponText != null && entry.player != null)
+        {
+            if (entry.shooting == null || entry.shooting.gameObject != entry.player.gameObject)
+            {
+                entry.shooting = entry.player.GetComponent<Shooting>();
+            }
+            entry.weaponText.text = entry.shooting != null
+                ? entry.shooting.CurrentWeapon.DisplayName
+                : "";
+        }
+
         if (stats == null)
         {
             entry.dmgChip?.SetActive(false);
@@ -1019,16 +1051,8 @@ public class GameHUD : MonoBehaviour
         }
         _resultsStandingsText.text = string.Join("\n", lines);
 
-        _resultsCountdownText.text = $"NEXT ROUND IN {MatchManager.IntermissionSeconds}";
+        _resultsCountdownText.text = "HANGAR OPENING...";
         _resultsOverlay.SetActive(true);
-    }
-
-    private void OnIntermissionTick(int secondsLeft)
-    {
-        if (_resultsCountdownText != null)
-        {
-            _resultsCountdownText.text = $"NEXT ROUND IN {secondsLeft}";
-        }
     }
 
     private void OnMatchStarted()
@@ -1037,6 +1061,7 @@ public class GameHUD : MonoBehaviour
         {
             _resultsOverlay.SetActive(false);
         }
+        CloseHangar();
     }
 
     private void EnsureResultsOverlay()
@@ -1086,6 +1111,308 @@ public class GameHUD : MonoBehaviour
         text.verticalOverflow = VerticalWrapMode.Overflow;
         text.color = color;
 
+        return text;
+    }
+
+    // --- hangar overlay (weapon draft + ready check) ---------------------------
+
+    private GameObject _hangarOverlay;
+    private Text _hangarCountdownText;
+    private Text _hangarReadyCountText;
+    private Button _readyButton;
+    private Text _readyButtonText;
+    private readonly Dictionary<ulong, Text> _hangarReadyRows = new Dictionary<ulong, Text>();
+    private readonly HashSet<ulong> _readyClients = new HashSet<ulong>();
+    private readonly List<(GameObject card, Image bg, int weaponId)> _weaponCards =
+        new List<(GameObject, Image, int)>();
+    private int _selectedWeaponId;
+    private bool _localReady;
+
+    private static readonly Color CardIdle = new Color(0.10f, 0.12f, 0.16f, 0.95f);
+    private static readonly Color CardSelected = new Color(0.35f, 0.22f, 0.08f, 0.95f);
+    private static readonly Color ReadyGreen = new Color(0.35f, 0.85f, 0.35f);
+
+    private void OnHangarOpened()
+    {
+        if (_resultsOverlay != null) _resultsOverlay.SetActive(false);
+
+        BuildHangarOverlay();
+        _hangarOverlay.SetActive(true);
+    }
+
+    private void OnHangarTick(int secondsLeft)
+    {
+        if (_hangarCountdownText != null)
+        {
+            _hangarCountdownText.text = $"AUTO-START {secondsLeft}";
+        }
+    }
+
+    private void OnClientReadyChanged(ulong clientId)
+    {
+        _readyClients.Add(clientId);
+
+        if (_hangarReadyRows.TryGetValue(clientId, out var row) && row != null)
+        {
+            row.text = "READY";
+            row.color = ReadyGreen;
+        }
+        UpdateReadyCount();
+    }
+
+    private void CloseHangar()
+    {
+        if (_hangarOverlay != null)
+        {
+            Destroy(_hangarOverlay); // rebuilt fresh each round (offers change)
+            _hangarOverlay = null;
+        }
+        _hangarReadyRows.Clear();
+        _readyClients.Clear();
+        _weaponCards.Clear();
+        _localReady = false;
+    }
+
+    /// <summary>First PlayerController owned by this device (couch co-op: any of them).</summary>
+    private PlayerController FindOwnedPlayer()
+    {
+        foreach (var p in FindObjectsOfType<PlayerController>())
+        {
+            if (p.IsOwner) return p;
+        }
+        return null;
+    }
+
+    private void BuildHangarOverlay()
+    {
+        CloseHangar();
+
+        _hangarOverlay = new GameObject("HangarOverlay");
+        _hangarOverlay.transform.SetParent(transform, false);
+        var overlayRect = _hangarOverlay.AddComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.offsetMin = Vector2.zero;
+        overlayRect.offsetMax = Vector2.zero;
+
+        var bg = _hangarOverlay.AddComponent<Image>();
+        bg.color = new Color(0f, 0f, 0f, 0.82f);
+
+        CreateHangarText("Title", "HANGAR", 30, new Vector2(0, 170), new Color(1f, 0.85f, 0.3f));
+        _hangarCountdownText = CreateHangarText("Countdown", $"AUTO-START {MatchManager.HangarSeconds}",
+            12, new Vector2(0, 132), Color.white);
+        _hangarReadyCountText = CreateHangarText("ReadyCount", "", 12, new Vector2(0, 110),
+            new Color(1f, 1f, 1f, 0.6f));
+        CreateHangarText("DraftLabel", "WEAPON FOR NEXT ROUND", 12, new Vector2(0, 78),
+            new Color(1f, 1f, 1f, 0.6f));
+
+        BuildWeaponCards();
+        BuildReadyList();
+        BuildReadyButton();
+        UpdateReadyCount();
+    }
+
+    private void BuildWeaponCards()
+    {
+        // Offers: keep-current + up to 2 random distinct picks from the draft pool
+        var owned = FindOwnedPlayer();
+        var shooting = owned != null ? owned.GetComponent<Shooting>() : null;
+        int currentId = shooting != null ? shooting.NetWeaponId.Value : (int)WeaponType.MG;
+        _selectedWeaponId = currentId;
+
+        var offers = new List<int> { currentId };
+        var pool = new List<WeaponType>(WeaponProfile.DraftPool);
+        // shuffle
+        for (int i = pool.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (pool[i], pool[j]) = (pool[j], pool[i]);
+        }
+        foreach (var w in pool)
+        {
+            if (offers.Count >= 3) break;
+            if ((int)w != currentId) offers.Add((int)w);
+        }
+
+        const float cardWidth = 240f;
+        const float cardHeight = 150f;
+        const float gap = 20f;
+        float totalWidth = offers.Count * cardWidth + (offers.Count - 1) * gap;
+        float startX = -totalWidth / 2f + cardWidth / 2f;
+
+        for (int i = 0; i < offers.Count; i++)
+        {
+            int weaponId = offers[i];
+            var profile = WeaponProfile.Get(weaponId);
+
+            var cardObj = new GameObject($"WeaponCard_{profile.Type}");
+            cardObj.transform.SetParent(_hangarOverlay.transform, false);
+            var cardRect = cardObj.AddComponent<RectTransform>();
+            cardRect.anchorMin = new Vector2(0.5f, 0.5f);
+            cardRect.anchorMax = new Vector2(0.5f, 0.5f);
+            cardRect.anchoredPosition = new Vector2(startX + i * (cardWidth + gap), -20f);
+            cardRect.sizeDelta = new Vector2(cardWidth, cardHeight);
+
+            var cardBg = cardObj.AddComponent<Image>();
+            cardBg.color = weaponId == currentId ? CardSelected : CardIdle;
+
+            var button = cardObj.AddComponent<Button>();
+            button.targetGraphic = cardBg;
+            int captured = weaponId;
+            button.onClick.AddListener(() => SelectWeapon(captured));
+
+            string title = weaponId == currentId ? $"KEEP: {profile.DisplayName}" : profile.DisplayName;
+            CreateTextIn(cardObj.transform, "Name", title, 13, new Vector2(0, 40), Color.white);
+            CreateTextIn(cardObj.transform, "Desc", profile.Description, 9, new Vector2(0, 8),
+                new Color(1f, 1f, 1f, 0.65f));
+            string stats = $"DMG {profile.Damage} · ROF {1f / profile.Cooldown:F1}/s" +
+                           (profile.PelletCount > 1 ? $" · x{profile.PelletCount}" : "");
+            CreateTextIn(cardObj.transform, "Stats", stats, 9, new Vector2(0, -20),
+                new Color(1f, 0.75f, 0.4f));
+            CreateTextIn(cardObj.transform, "Sel", weaponId == currentId ? "SELECTED" : "", 9,
+                new Vector2(0, -50), ReadyGreen);
+
+            _weaponCards.Add((cardObj, cardBg, weaponId));
+        }
+    }
+
+    private void SelectWeapon(int weaponId)
+    {
+        if (_localReady) return; // locked in after READY
+
+        _selectedWeaponId = weaponId;
+
+        // Apply to every plane this device owns (couch co-op picks together)
+        foreach (var p in FindObjectsOfType<PlayerController>())
+        {
+            if (!p.IsOwner) continue;
+            var shooting = p.GetComponent<Shooting>();
+            if (shooting != null)
+            {
+                shooting.RequestSelectWeaponServerRpc(weaponId);
+            }
+        }
+
+        // Refresh card highlights
+        foreach (var (card, cardBg, id) in _weaponCards)
+        {
+            cardBg.color = id == weaponId ? CardSelected : CardIdle;
+            var sel = card.transform.Find("Sel")?.GetComponent<Text>();
+            if (sel != null) sel.text = id == weaponId ? "SELECTED" : "";
+        }
+
+        SfxManager.PlayTick();
+    }
+
+    private void BuildReadyList()
+    {
+        // One row per device (clientId); couch co-op pilots share one READY
+        var seen = new HashSet<ulong>();
+        float y = -120f;
+        foreach (var entry in _playerEntries)
+        {
+            if (!seen.Add(entry.clientId)) continue;
+
+            string name = entry.lastKnownName ?? $"P{entry.clientId + 1}";
+            Color color = PlayerColorManager.Instance != null
+                ? PlayerColorManager.Instance.GetColor(entry.clientId, 0)
+                : PlayerColorManager.GetColorByIndex((int)entry.clientId);
+
+            CreateHangarText($"Name_{entry.clientId}", name, 11, new Vector2(-120, y), color,
+                TextAnchor.MiddleLeft, 300);
+            var status = CreateHangarText($"Status_{entry.clientId}", "PICKING...", 11,
+                new Vector2(120, y), new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleLeft, 200);
+
+            _hangarReadyRows[entry.clientId] = status;
+            y -= 26f;
+        }
+    }
+
+    private void BuildReadyButton()
+    {
+        var buttonObj = new GameObject("ReadyButton");
+        buttonObj.transform.SetParent(_hangarOverlay.transform, false);
+        var rect = buttonObj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0f);
+        rect.anchorMax = new Vector2(0.5f, 0f);
+        rect.anchoredPosition = new Vector2(0, 70);
+        rect.sizeDelta = new Vector2(320, 72);
+
+        var bgImage = buttonObj.AddComponent<Image>();
+        bgImage.color = new Color(0.12f, 0.4f, 0.16f, 1f);
+
+        _readyButton = buttonObj.AddComponent<Button>();
+        _readyButton.targetGraphic = bgImage;
+        _readyButton.onClick.AddListener(PressReady);
+
+        _readyButtonText = CreateTextIn(buttonObj.transform, "Label", "READY", 20,
+            Vector2.zero, Color.white);
+    }
+
+    private void PressReady()
+    {
+        if (_localReady) return;
+        _localReady = true;
+
+        if (_readyButtonText != null) _readyButtonText.text = "WAITING...";
+        if (_readyButton != null)
+        {
+            _readyButton.interactable = false;
+            var img = _readyButton.targetGraphic as Image;
+            if (img != null) img.color = new Color(0.2f, 0.2f, 0.2f, 1f);
+        }
+
+        var owned = FindOwnedPlayer();
+        owned?.SetHangarReadyServerRpc();
+    }
+
+    private void UpdateReadyCount()
+    {
+        if (_hangarReadyCountText == null) return;
+        _hangarReadyCountText.text = $"READY {_readyClients.Count}/{_hangarReadyRows.Count}";
+    }
+
+    private Text CreateHangarText(string name, string content, int fontSize, Vector2 pos,
+        Color color, TextAnchor align = TextAnchor.MiddleCenter, float width = 900)
+    {
+        var obj = new GameObject(name);
+        obj.transform.SetParent(_hangarOverlay.transform, false);
+        var rect = obj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = pos;
+        rect.sizeDelta = new Vector2(width, 30);
+
+        var text = obj.AddComponent<Text>();
+        text.text = content;
+        text.font = PixelFont;
+        text.fontSize = fontSize;
+        text.alignment = align;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.color = color;
+        return text;
+    }
+
+    private Text CreateTextIn(Transform parent, string name, string content, int fontSize,
+        Vector2 pos, Color color)
+    {
+        var obj = new GameObject(name);
+        obj.transform.SetParent(parent, false);
+        var rect = obj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = pos;
+        rect.sizeDelta = new Vector2(300, 26);
+
+        var text = obj.AddComponent<Text>();
+        text.text = content;
+        text.font = PixelFont;
+        text.fontSize = fontSize;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.color = color;
         return text;
     }
 
