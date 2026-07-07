@@ -4,19 +4,22 @@ Instructions for Claude Code when working in this repository.
 
 ## Project
 
-2D multiplayer arcade air combat game. Unity 6000.2.9f1. WWI biplanes. Physics-based movement, one-hit kill, WiFi/couch multiplayer.
+2D multiplayer arcade air combat game. Unity 6000.3.13f1. WWI biplanes. Physics-based movement, one-hit kill, WiFi/couch multiplayer.
 
 ## Tech Stack
 
-- Unity 6000.2.9f1
-- Netcode for GameObjects 1.14.1
-- Unity Input System 1.7.0
+- Unity 6000.3.13f1
+- Netcode for GameObjects 2.11.0
+- Unity Input System 1.19.0
 - Platforms: Desktop (Win/macOS), iOS, Android
+- Built-in module `com.unity.modules.androidjni` must stay enabled —
+  NetworkDiscovery (MulticastLock) and NativeLocalCoop_Android use
+  AndroidJavaObject; without it every player build fails with CS1069
 
 ## Key Commands
 
 **Run the game:**
-1. Open in Unity 6000.2.9f1
+1. Open in Unity 6000.3.13f1
 2. Scene: `Assets/Doodlebugs/Scenes/Scene01.unity`
 3. Play → Start Host
 

@@ -6,6 +6,7 @@
 // Player Settings > Publishing Settings so Unity uses this file. If your Unity
 // version regenerates a different template, re-add the single Nearby line below.
 apply plugin: 'com.android.library'
+apply from: '../shared/keepUnitySymbols.gradle'
 **APPLY_PLUGINS**
 
 dependencies {
@@ -17,6 +18,7 @@ dependencies {
 **DEPS**}
 
 android {
+    ndkVersion "**NDKVERSION**"
     namespace "com.unity3d.player"
     ndkPath "**NDKPATH**"
 
@@ -29,9 +31,10 @@ android {
     }
 
     defaultConfig {
-        minSdkVersion **MINSDKVERSION**
-        targetSdkVersion **TARGETSDKVERSION**
+        minSdk **MINSDK**
+        targetSdk **TARGETSDK**
         ndk {
+            debugSymbolLevel **DEBUGSYMBOLLEVEL**
             abiFilters **ABIFILTERS**
         }
         versionCode **VERSIONCODE**
@@ -39,15 +42,15 @@ android {
         consumerProguardFiles 'proguard-unity.txt'**USER_PROGUARD**
     }
 
-    lintOptions {
+    lint {
         abortOnError false
     }
 
-    aaptOptions {
+    androidResources {
         noCompress = **BUILTIN_NOCOMPRESS** + unityStreamingAssets.tokenize(', ')
         ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
-**PACKAGING_OPTIONS**
+**PACKAGING**
 }
 **REPOSITORIES**
 **IL_CPP_BUILD_SETUP**
