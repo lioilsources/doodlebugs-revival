@@ -9,8 +9,9 @@ using Unity.Netcode;
 public class PlaneStats : NetworkBehaviour
 {
     // --- Constants ---
-    private const int MaxShield = 3;
-    private const int MaxHealth = 3;
+    private const int BaseMaxShield = 3;
+    private const int BaseMaxHealth = 3;
+    public const int AbsoluteMaxSegments = 5; // base 3 + up to 2 run-upgrade levels
     private const float MaxHandling = 1.0f;
     private const float MinHandling = 0.3f;
     private const float MaxDamageMultiplier = 2.0f;
@@ -20,10 +21,10 @@ public class PlaneStats : NetworkBehaviour
     private const float HandlingLossPerDamage = 0.1f;
 
     // --- Network Variables (server-write) ---
-    public NetworkVariable<int> NetShield = new NetworkVariable<int>(MaxShield,
+    public NetworkVariable<int> NetShield = new NetworkVariable<int>(BaseMaxShield,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    public NetworkVariable<int> NetHealth = new NetworkVariable<int>(MaxHealth,
+    public NetworkVariable<int> NetHealth = new NetworkVariable<int>(BaseMaxHealth,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     public NetworkVariable<float> NetHandling = new NetworkVariable<float>(MaxHandling,
@@ -32,11 +33,53 @@ public class PlaneStats : NetworkBehaviour
     public NetworkVariable<float> NetDamageMultiplier = new NetworkVariable<float>(1.0f,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    // Remaining damage-boost seconds, quantized to 0.5s so it syncs at most
+    // twice a second (for the HUD countdown on clients).
+    public NetworkVariable<float> NetDamageBoostRemaining = new NetworkVariable<float>(0f,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    // --- Run-upgrade bonuses (persist across rounds within a run) ---
+    public NetworkVariable<int> NetMaxShield = new NetworkVariable<int>(BaseMaxShield,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    public NetworkVariable<int> NetMaxHealth = new NetworkVariable<int>(BaseMaxHealth,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    public NetworkVariable<float> NetRofMultiplier = new NetworkVariable<float>(1f,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    public NetworkVariable<float> NetSpeedMultiplier = new NetworkVariable<float>(1f,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     // --- Public accessors ---
     public int Shield => NetShield.Value;
     public int Health => NetHealth.Value;
     public float Handling => NetHandling.Value;
     public float DamageMultiplier => NetDamageMultiplier.Value;
+    public int MaxShieldValue => NetMaxShield.Value;
+    public int MaxHealthValue => NetMaxHealth.Value;
+    public float RofMultiplier => NetRofMultiplier.Value;
+    public float SpeedMultiplier => NetSpeedMultiplier.Value;
+
+    /// <summary>
+    /// Apply run-upgrade levels (server-only). Current shield/health grow with
+    /// the new maximum so a fresh purchase is felt immediately.
+    /// </summary>
+    public void ApplyRunUpgrades(int shieldLevel, int hullLevel, int fireRateLevel, int engineLevel)
+    {
+        if (!IsServer) return;
+
+        int newMaxShield = Mathf.Min(BaseMaxShield + shieldLevel, AbsoluteMaxSegments);
+        int newMaxHealth = Mathf.Min(BaseMaxHealth + hullLevel, AbsoluteMaxSegments);
+
+        NetShield.Value = Mathf.Min(NetShield.Value + Mathf.Max(0, newMaxShield - NetMaxShield.Value), newMaxShield);
+        NetHealth.Value = Mathf.Min(NetHealth.Value + Mathf.Max(0, newMaxHealth - NetMaxHealth.Value), newMaxHealth);
+        NetMaxShield.Value = newMaxShield;
+        NetMaxHealth.Value = newMaxHealth;
+
+        NetRofMultiplier.Value = 1f + RunUpgrades.FireRatePerLevel * fireRateLevel;
+        NetSpeedMultiplier.Value = 1f + RunUpgrades.EnginePerLevel * engineLevel;
+    }
 
     // --- Server-side timers (not networked) ---
     private float _shieldRegenTimer;
@@ -60,7 +103,7 @@ public class PlaneStats : NetworkBehaviour
         float dt = Time.deltaTime;
 
         // Shield regeneration
-        if (NetShield.Value < MaxShield)
+        if (NetShield.Value < NetMaxShield.Value)
         {
             _shieldRegenCooldown -= dt;
             if (_shieldRegenCooldown <= 0f)
@@ -68,7 +111,7 @@ public class PlaneStats : NetworkBehaviour
                 _shieldRegenTimer -= dt;
                 if (_shieldRegenTimer <= 0f)
                 {
-                    NetShield.Value = Mathf.Min(NetShield.Value + 1, MaxShield);
+                    NetShield.Value = Mathf.Min(NetShield.Value + 1, NetMaxShield.Value);
                     _shieldRegenTimer = ShieldRegenInterval;
                 }
             }
@@ -85,6 +128,13 @@ public class PlaneStats : NetworkBehaviour
             }
         }
 
+        // Sync quantized boost time for HUD (only writes on 0.5s steps)
+        float quantized = Mathf.Ceil(Mathf.Max(0f, _damageBoostTimer) * 2f) / 2f;
+        if (!Mathf.Approximately(NetDamageBoostRemaining.Value, quantized))
+        {
+            NetDamageBoostRemaining.Value = quantized;
+        }
+
         // Invulnerability countdown
         if (_invulnerabilityTimer > 0f)
         {
@@ -96,6 +146,9 @@ public class PlaneStats : NetworkBehaviour
             }
         }
     }
+
+    /// <summary>True when the most recent TakeDamage was fully absorbed by shield (server-only).</summary>
+    public bool LastDamageAbsorbedByShield { get; private set; }
 
     /// <summary>
     /// Apply damage to this plane. Returns true if the plane is dead.
@@ -112,6 +165,7 @@ public class PlaneStats : NetworkBehaviour
         int shieldAbsorbed = Mathf.Min(remaining, NetShield.Value);
         NetShield.Value -= shieldAbsorbed;
         remaining -= shieldAbsorbed;
+        LastDamageAbsorbedByShield = remaining <= 0;
 
         // Health takes the rest
         NetHealth.Value = Mathf.Max(0, NetHealth.Value - remaining);
@@ -137,11 +191,11 @@ public class PlaneStats : NetworkBehaviour
         switch (type)
         {
             case PowerUpType.Health:
-                NetHealth.Value = Mathf.Min(NetHealth.Value + 2, MaxHealth);
+                NetHealth.Value = Mathf.Min(NetHealth.Value + 2, NetMaxHealth.Value);
                 break;
 
             case PowerUpType.Shield:
-                NetShield.Value = Mathf.Min(NetShield.Value + 2, MaxShield);
+                NetShield.Value = Mathf.Min(NetShield.Value + 2, NetMaxShield.Value);
                 break;
 
             case PowerUpType.Repair:
@@ -164,8 +218,8 @@ public class PlaneStats : NetworkBehaviour
     {
         if (!IsServer) return;
 
-        NetShield.Value = MaxShield;
-        NetHealth.Value = MaxHealth;
+        NetShield.Value = NetMaxShield.Value;
+        NetHealth.Value = NetMaxHealth.Value;
         NetHandling.Value = MaxHandling;
         NetDamageMultiplier.Value = 1.0f;
 
@@ -179,7 +233,7 @@ public class PlaneStats : NetworkBehaviour
     }
 
     /// <summary>
-    /// Get remaining damage boost time (for HUD). Approximate on clients.
+    /// Get remaining damage boost time (for HUD). Quantized to 0.5s on clients.
     /// </summary>
-    public float DamageBoostTimeRemaining => _damageBoostTimer;
+    public float DamageBoostTimeRemaining => IsServer ? _damageBoostTimer : NetDamageBoostRemaining.Value;
 }

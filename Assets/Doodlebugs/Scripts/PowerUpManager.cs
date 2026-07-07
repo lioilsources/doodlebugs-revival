@@ -17,8 +17,8 @@ public class PowerUpManager : MonoBehaviour
     [SerializeField] private float dropChance = 0.7f;
     [SerializeField] private int maxActivePowerUps = 5;
 
-    // Weighted random: Health=30%, Shield=25%, Repair=25%, Damage=20%
-    private static readonly float[] TypeWeights = { 0.30f, 0.25f, 0.25f, 0.20f };
+    // Weighted random: Health=25%, Shield=20%, Repair=20%, Damage=15%, Weapon=20%
+    private static readonly float[] TypeWeights = { 0.25f, 0.20f, 0.20f, 0.15f, 0.20f };
 
     private List<NetworkObject> _activePowerUps = new List<NetworkObject>();
 

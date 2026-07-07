@@ -36,6 +36,11 @@ public class PlaneVisualEffects : NetworkBehaviour
     private PlayerController playerController;
     private PlaneStats planeStats;
 
+    // Damage smoke trail (runtime-created, driven by synced NetHealth)
+    private ParticleSystem smokeParticles;
+    private static readonly Color LightSmoke = new Color(0.75f, 0.75f, 0.75f, 1f);
+    private static readonly Color HeavySmoke = new Color(0.22f, 0.20f, 0.18f, 1f);
+
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
@@ -59,6 +64,15 @@ public class PlaneVisualEffects : NetworkBehaviour
         if (planeStats != null)
         {
             planeStats.NetInvulnerable.OnValueChanged += OnInvulnerabilityChanged;
+        }
+
+        // Damage smoke trail: emission driven by the synced health value
+        int smokeSorting = planeRenderer != null ? planeRenderer.sortingOrder - 1 : 40;
+        smokeParticles = EffectAssets.CreateSmokeSystem(transform, smokeSorting);
+        if (planeStats != null)
+        {
+            planeStats.NetHealth.OnValueChanged += OnHealthChangedForSmoke;
+            UpdateSmoke(planeStats.NetHealth.Value);
         }
 
         // Subscribe to expert status changes
@@ -86,11 +100,35 @@ public class PlaneVisualEffects : NetworkBehaviour
         if (planeStats != null)
         {
             planeStats.NetInvulnerable.OnValueChanged -= OnInvulnerabilityChanged;
+            planeStats.NetHealth.OnValueChanged -= OnHealthChangedForSmoke;
         }
 
         if (IsOwner && playerController != null)
         {
             playerController.OnMaturityChanged -= HandleLevelChange;
+        }
+    }
+
+    private void OnHealthChangedForSmoke(int prev, int next)
+    {
+        UpdateSmoke(next);
+    }
+
+    // 3 HP = clean, 2 HP = light grey smoke, 1 HP = heavy dark smoke,
+    // 0 HP = off (the falling wreck carries its own smoke).
+    private void UpdateSmoke(int health)
+    {
+        switch (health)
+        {
+            case 2:
+                EffectAssets.SetSmokeIntensity(smokeParticles, 10f, LightSmoke);
+                break;
+            case 1:
+                EffectAssets.SetSmokeIntensity(smokeParticles, 28f, HeavySmoke);
+                break;
+            default:
+                EffectAssets.SetSmokeIntensity(smokeParticles, 0f, LightSmoke);
+                break;
         }
     }
 
@@ -251,15 +289,19 @@ public class PlaneVisualEffects : NetworkBehaviour
     /// Triggers the damage flash effect. Call this from PlayerController when hit.
     /// Only server should call this method.
     /// </summary>
-    public void TriggerDamageFlash()
+    /// <param name="shieldHit">True when the shield absorbed the whole hit (different sound).</param>
+    public void TriggerDamageFlash(bool shieldHit = false)
     {
         if (!IsServer) return;
-        TriggerDamageFlashClientRpc();
+        TriggerDamageFlashClientRpc(shieldHit);
     }
 
     [ClientRpc]
-    private void TriggerDamageFlashClientRpc()
+    private void TriggerDamageFlashClientRpc(bool shieldHit)
     {
+        if (shieldHit) SfxManager.PlayShieldHit();
+        else SfxManager.PlayHullHit();
+
         // Stop any existing flash
         if (flashCoroutine != null)
         {
