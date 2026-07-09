@@ -1362,6 +1362,17 @@ public class GameHUD : MonoBehaviour
         }
     }
 
+    /// <summary>The local late-joiner's own plane just deployed into a running
+    /// battle. No OnMatchStarted fires mid-battle, so the personal LateJoin
+    /// hangar has to be closed off the owner's own deploy.</summary>
+    public void OnLocalPlayerDeployed()
+    {
+        if (_hangarMode == MatchManager.HangarMode.LateJoin && IsHangarOpen)
+        {
+            CloseHangar();
+        }
+    }
+
     private void OnSessionReset()
     {
         CloseHangar();

@@ -236,6 +236,14 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private void OnInHangarChanged(bool previous, bool current)
     {
         ApplyHangarState(current);
+
+        // A late-joiner deploying mid-battle: no OnMatchStarted fires to close
+        // the personal LateJoin hangar, so drive it off the owner's own deploy
+        // (parked -> deployed). Guarded to the LateJoin overlay inside the HUD.
+        if (IsOwner && previous && !current)
+        {
+            GameHUD.Instance?.OnLocalPlayerDeployed();
+        }
     }
 
     /// <summary>
