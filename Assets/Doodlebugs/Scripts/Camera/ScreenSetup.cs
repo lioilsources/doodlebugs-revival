@@ -33,6 +33,7 @@ public class ScreenSetup : MonoBehaviour
     private CameraAspectHandler aspectHandler;
     private float lastAspect;
     private float lastOrthoSize;
+    private Sprite lastBackgroundSprite;
     private GameObject[] borders = new GameObject[4];
     private bool initialized = false;
 
@@ -69,11 +70,15 @@ public class ScreenSetup : MonoBehaviour
         // Check if aspect ratio OR orthoSize changed (CameraAspectHandler modifies orthoSize)
         bool aspectChanged = Mathf.Abs(currentAspect - lastAspect) > 0.01f;
         bool orthoChanged = Mathf.Abs(currentOrthoSize - lastOrthoSize) > 0.01f;
+        // BackgroundManager swaps the sprite every round - profiles have different
+        // pixel sizes, so the scale computed for the previous sprite is wrong
+        bool spriteChanged = background != null && background.sprite != lastBackgroundSprite;
 
-        if (!initialized || aspectChanged || orthoChanged)
+        if (!initialized || aspectChanged || orthoChanged || spriteChanged)
         {
             lastAspect = currentAspect;
             lastOrthoSize = currentOrthoSize;
+            lastBackgroundSprite = background != null ? background.sprite : null;
             UpdateBorders();
             ScaleBackground();
             initialized = true;
