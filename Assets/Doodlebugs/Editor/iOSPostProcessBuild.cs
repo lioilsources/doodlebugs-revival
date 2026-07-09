@@ -36,6 +36,15 @@ namespace Doodlebugs.Editor
             bonjourServices.AddString("_doodlebugs._tcp");
 
             plist.WriteToFile(plistPath);
+
+            // DoodlebugsMultipeer.m uses MCSession/MCPeerID — without this the
+            // UnityFramework link step fails with undefined _OBJC_CLASS_$_MC* symbols.
+            string projPath = PBXProject.GetPBXProjectPath(pathToBuiltProject);
+            PBXProject proj = new PBXProject();
+            proj.ReadFromFile(projPath);
+            proj.AddFrameworkToProject(proj.GetUnityFrameworkTargetGuid(),
+                "MultipeerConnectivity.framework", false);
+            proj.WriteToFile(projPath);
         }
     }
 }
