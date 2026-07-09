@@ -26,6 +26,14 @@ namespace Doodlebugs.Network
         NativeP2P
     }
 
+    /// <summary>This device's role in the current lobby, for a persistent UI badge.</summary>
+    public enum LocalRole
+    {
+        None,
+        Host,
+        Client
+    }
+
     public class ConnectionManager : MonoBehaviour
     {
         public static ConnectionManager Instance { get; private set; }
@@ -35,6 +43,19 @@ namespace Doodlebugs.Network
         public ConnectionState State { get; private set; } = ConnectionState.Idle;
         public event Action<ConnectionState> OnStateChanged;
         public event Action<string> OnStatusMessage;
+
+        // Host/Client role for the UI badge. Set once the local device commits to a
+        // role (LAN or native path); surfaced to the HUD via OnRoleChanged.
+        public LocalRole Role { get; private set; } = LocalRole.None;
+        public event Action<LocalRole> OnRoleChanged;
+
+        private void SetRole(LocalRole role)
+        {
+            if (Role == role) return;
+            Role = role;
+            Debug.Log($"[ConnectionManager] Local role = {role}");
+            OnRoleChanged?.Invoke(role);
+        }
 
         private const int MAX_PLAYERS = 20;         // LAN: 4 local on desktop host + 16 remote clients
         private const int MAX_PLAYERS_NATIVE = 8;   // Mobile-data native fallback limit
@@ -144,6 +165,7 @@ namespace Doodlebugs.Network
         {
             SetState(ConnectionState.Searching);
             SetStatus($"{UI.ConnectionUI.GameVersion}  •  Searching for game...");
+            SetRole(LocalRole.None);
 
             _discovery?.StartListening();
         }
@@ -210,6 +232,7 @@ namespace Doodlebugs.Network
 
             // Start as client
             NetworkManager.Singleton.StartClient();
+            SetRole(LocalRole.Client);
         }
 
         // Deterministic tie-break against a competing LAN host: the host with the
@@ -279,6 +302,7 @@ namespace Doodlebugs.Network
 
             // Start as host
             NetworkManager.Singleton.StartHost();
+            SetRole(LocalRole.Host);
 
             // Select random background for this session
             BackgroundManager.Instance?.SelectRandomBackground();
@@ -301,6 +325,7 @@ namespace Doodlebugs.Network
         private void StartNativeP2P()
         {
             SetState(ConnectionState.Searching);
+            SetRole(LocalRole.None);
 
             // Orchestrator + transport live on a child object; RequireComponent
             // adds the NativeLocalTransport automatically.
@@ -324,6 +349,7 @@ namespace Doodlebugs.Network
             NetworkManager.Singleton.NetworkConfig.NetworkTransport = _native.Transport;
             NetworkManager.Singleton.ConnectionApprovalCallback = ApproveConnection;
             NetworkManager.Singleton.StartHost();
+            SetRole(LocalRole.Host);
 
             BackgroundManager.Instance?.SelectRandomBackground();
             LocalPlayerManager.Instance?.OnHostStarted();
@@ -338,6 +364,7 @@ namespace Doodlebugs.Network
 
             NetworkManager.Singleton.NetworkConfig.NetworkTransport = _native.Transport;
             NetworkManager.Singleton.StartClient();
+            SetRole(LocalRole.Client);
 
             Debug.Log($"[ConnectionManager] Native client started, host={hostPeerId}");
         }

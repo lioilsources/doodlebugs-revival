@@ -189,6 +189,7 @@ public class GameHUD : MonoBehaviour
         }
         _connectionManager = Doodlebugs.Network.ConnectionManager.Instance;
         _connectionManager.OnStatusMessage += OnConnectionStatus;
+        _connectionManager.OnRoleChanged += OnRoleChanged;
     }
 
     // Discovery status ("Searching for game...", "Connecting...") shown in
@@ -199,6 +200,28 @@ public class GameHUD : MonoBehaviour
         if (_hangarCountdownText != null)
         {
             _hangarCountdownText.text = message.ToUpperInvariant();
+        }
+    }
+
+    // Persistent HOST/CLIENT badge in the hangar overlay.
+    private void OnRoleChanged(Doodlebugs.Network.LocalRole role) => UpdateHangarRoleBadge(role);
+
+    private void UpdateHangarRoleBadge(Doodlebugs.Network.LocalRole role)
+    {
+        if (_hangarRoleText == null) return;
+        switch (role)
+        {
+            case Doodlebugs.Network.LocalRole.Host:
+                _hangarRoleText.text = "HOST";
+                _hangarRoleText.color = new Color(1f, 0.85f, 0.3f);
+                break;
+            case Doodlebugs.Network.LocalRole.Client:
+                _hangarRoleText.text = "CLIENT";
+                _hangarRoleText.color = new Color(0.45f, 0.8f, 1f);
+                break;
+            default:
+                _hangarRoleText.text = "";
+                break;
         }
     }
 
@@ -255,6 +278,7 @@ public class GameHUD : MonoBehaviour
         if (_connectionManager != null)
         {
             _connectionManager.OnStatusMessage -= OnConnectionStatus;
+            _connectionManager.OnRoleChanged -= OnRoleChanged;
             _connectionManager = null;
         }
     }
@@ -1286,6 +1310,7 @@ public class GameHUD : MonoBehaviour
 
     private GameObject _hangarOverlay;
     private Text _hangarCountdownText;
+    private Text _hangarRoleText;
     private Text _hangarReadyCountText;
     private Button _readyButton;
     private Text _readyButtonText;
@@ -1424,6 +1449,13 @@ public class GameHUD : MonoBehaviour
 
         string title = searching ? "DOODLEBUGS" : lateJoin ? "BATTLE IN PROGRESS" : "HANGAR";
         CreateHangarText("Title", title, 28, new Vector2(0, 195), new Color(1f, 0.85f, 0.3f));
+
+        // Persistent HOST/CLIENT badge above the title so it's clear which device
+        // created the lobby vs. joined it, in every hangar mode.
+        _hangarRoleText = CreateHangarText("RoleBadge", "", 11, new Vector2(0, 228), Color.white);
+        UpdateHangarRoleBadge(_connectionManager != null
+            ? _connectionManager.Role
+            : Doodlebugs.Network.LocalRole.None);
 
         // Status line: centered when there is no ready counter next to it
         string statusInit =

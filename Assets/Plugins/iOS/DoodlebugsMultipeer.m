@@ -75,6 +75,10 @@ static DoodlebugsMultipeer *gInstance = nil;
     MCPeerID *peer = self.knownPeers[peerId];
     if (peer && self.browser) {
         [self.browser invitePeer:peer toSession:self.session withContext:nil timeout:30];
+    } else {
+        // The invite goes through the live browser; if it was stopped/nil'd first
+        // the host never receives it and the session never connects.
+        NSLog(@"[DBMP] connectToPeer '%@' skipped: peer=%@ browser=%@", peerId, peer, self.browser);
     }
 }
 

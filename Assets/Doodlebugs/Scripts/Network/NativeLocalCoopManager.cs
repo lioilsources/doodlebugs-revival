@@ -43,6 +43,7 @@ namespace Doodlebugs.Network
         private float _browseWindow;
         private bool _browsing;
         private string _pendingHostPeerId;
+        private string _clientHostPeerId;
 
         private void Awake()
         {
@@ -93,8 +94,10 @@ namespace Doodlebugs.Network
             if (_backend != null)
             {
                 _backend.OnPeerFound -= HandlePeerFound;
+                _backend.OnPeerConnected -= HandleClientSessionConnected;
                 _backend.StopAll();
             }
+            _clientHostPeerId = null;
             _browsing = false;
             _roleDecided = false;
         }
@@ -192,7 +195,14 @@ namespace Doodlebugs.Network
             _roleDecided = true;
             _isHost = false;
             _browsing = false;
-            _backend.StopBrowsing();
+
+            // Do NOT StopBrowsing() here. On iOS Multipeer the invitation issued
+            // by Connect() is sent through the live MCNearbyServiceBrowser;
+            // StopBrowsing nil's that browser natively and cancels the in-flight
+            // invite, so the host never sees it. Keep the browser alive until the
+            // session is Connected, then stop browsing in HandleClientSessionConnected.
+            _clientHostPeerId = hostPeerId;
+            _backend.OnPeerConnected += HandleClientSessionConnected;
 
             Transport.Configure(_backend, isServer: false, hostPeerId: hostPeerId);
             OnStatus?.Invoke("Joining lobby...");
@@ -201,8 +211,20 @@ namespace Doodlebugs.Network
             // ConnectionManager performs StartClient() synchronously here.
             OnBecomeClient?.Invoke(hostPeerId);
 
-            // Establish the native session with the host.
+            // Establish the native session with the host (client invites host).
             _backend.Connect(hostPeerId);
+        }
+
+        // The browser's job is done once the host session is established; stop
+        // browsing so the client isn't scanning forever. Safe here because
+        // MCSessionStateConnected has already fired, so the session no longer
+        // depends on the browser instance.
+        private void HandleClientSessionConnected(string peerId)
+        {
+            if (peerId != _clientHostPeerId) return;
+            _backend.OnPeerConnected -= HandleClientSessionConnected;
+            _backend.StopBrowsing();
+            Debug.Log($"[NativeLocalCoop] Client session established host={peerId}; stopped browsing");
         }
     }
 }
