@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BackgroundProfile
   backgroundSprite: {fileID: 2308427231218076146, guid: 5f3c190e5cc054556bc8b6ef323ea3f3,
     type: 3}
-  foregroundSprite: {fileID: 8720718600438211812, guid: 6c96ec90470344d9fbb5ff426a8edb72,
+  foregroundSprite: {fileID: 2192210793205341756, guid: f69d34783462d40deaf9878d4e368040,
     type: 3}
   foregroundScrollSpeed: -2
   foregroundBottomOffset: 0

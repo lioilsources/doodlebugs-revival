@@ -12,9 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 165c3cee643354c4fb67ce87ed71d506, type: 3}
   m_Name: Profile_SierraNevada
   m_EditorClassIdentifier: Assembly-CSharp::BackgroundProfile
-  backgroundSprite: {fileID: 21300000, guid: 35313af049b4a2f42a0325330c51d74a,
-    type: 3}
-  foregroundSprite: {fileID: 8720718600438211812, guid: 6c96ec90470344d9fbb5ff426a8edb72,
+  backgroundSprite: {fileID: 21300000, guid: 35313af049b4a2f42a0325330c51d74a, type: 3}
+  foregroundSprite: {fileID: 2192210793205341756, guid: f69d34783462d40deaf9878d4e368040,
     type: 3}
   foregroundScrollSpeed: -2
   foregroundBottomOffset: 0

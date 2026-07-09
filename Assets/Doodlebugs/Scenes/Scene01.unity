@@ -1251,7 +1251,7 @@ MonoBehaviour:
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
   ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 1
+  SceneMigrationSynchronization: 0
   SpawnWithObservers: 1
   DontDestroyWithOwner: 0
   AutoObjectParentSync: 1
@@ -1273,9 +1273,12 @@ MonoBehaviour:
   backgroundRenderer: {fileID: 112089966}
   profiles:
   - {fileID: 11400000, guid: 026482804247f4389beeaf23432fd354, type: 2}
+  - {fileID: 11400000, guid: 4ff0d28110d694e15afe2c302b3170b7, type: 2}
   - {fileID: 11400000, guid: 68566ec1da764db9bb140b9c56634dbb, type: 2}
-  - {fileID: 11400000, guid: 2f0a184fe84d540ef800665eb040e4b8, type: 2}
   - {fileID: 11400000, guid: 075c915196fdd4daaa43c91ccee1fc83, type: 2}
+  - {fileID: 11400000, guid: 5fae625dcbdba489a90c8dc76ce2fa14, type: 2}
+  - {fileID: 11400000, guid: 65efefff1f5b5464ba220f7fd2b0247e, type: 2}
+  - {fileID: 11400000, guid: 2f0a184fe84d540ef800665eb040e4b8, type: 2}
 --- !u!4 &1705687248
 Transform:
   m_ObjectHideFlags: 0
