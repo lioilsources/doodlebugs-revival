@@ -54,9 +54,12 @@ static void DBMPApplyCallbacks(void) {
         self.serviceType = serviceType;
         self.knownPeers = [NSMutableDictionary dictionary];
         self.localPeerID = [[MCPeerID alloc] initWithDisplayName:displayName];
+        // EncryptionRequired: with MCEncryptionOptional the TLS negotiation
+        // between iOS peers frequently fails (Connecting -> NotConnected) and
+        // the session never establishes.
         self.session = [[MCSession alloc] initWithPeer:self.localPeerID
                                       securityIdentity:nil
-                                  encryptionPreference:MCEncryptionOptional];
+                                  encryptionPreference:MCEncryptionRequired];
         self.session.delegate = self;
     }
     return self;
@@ -90,6 +93,7 @@ static void DBMPApplyCallbacks(void) {
 - (void)connectToPeer:(NSString *)peerId {
     MCPeerID *peer = self.knownPeers[peerId];
     if (peer && self.browser) {
+        NSLog(@"[DBMP] inviting peer=%@", peerId);
         [self.browser invitePeer:peer toSession:self.session withContext:nil timeout:30];
     } else {
         // The invite goes through the live browser; if it was stopped/nil'd first
@@ -131,20 +135,34 @@ withDiscoveryInfo:(NSDictionary<NSString *,NSString *> *)info {
 didReceiveInvitationFromPeer:(MCPeerID *)peerID
        withContext:(NSData *)context
  invitationHandler:(void (^)(BOOL, MCSession *))invitationHandler {
+    NSLog(@"[DBMP] invitation from peer=%@ - auto-accepting", peerID.displayName);
     self.knownPeers[peerID.displayName] = peerID;
     invitationHandler(YES, self.session); // auto-accept (lobby is open)
 }
 
 #pragma mark - Session delegate
 
+// Both endpoints are our own app; accept the peer's TLS certificate so the
+// EncryptionRequired handshake can complete without stalling.
+- (void)session:(MCSession *)session
+didReceiveCertificate:(NSArray *)certificate
+       fromPeer:(MCPeerID *)peerID
+certificateHandler:(void (^)(BOOL accept))certificateHandler {
+    certificateHandler(YES);
+}
+
 - (void)session:(MCSession *)session
            peer:(MCPeerID *)peerID
  didChangeState:(MCSessionState)state {
     const char *name = peerID.displayName.UTF8String;
-    if (state == MCSessionStateConnected) {
+    if (state == MCSessionStateConnecting) {
+        NSLog(@"[DBMP] state Connecting peer=%@", peerID.displayName);
+    } else if (state == MCSessionStateConnected) {
+        NSLog(@"[DBMP] state Connected peer=%@", peerID.displayName);
         self.knownPeers[peerID.displayName] = peerID;
         if (self.onConnected) self.onConnected(name);
     } else if (state == MCSessionStateNotConnected) {
+        NSLog(@"[DBMP] state NotConnected peer=%@", peerID.displayName);
         if (self.onDisconnected) self.onDisconnected(name);
     }
 }

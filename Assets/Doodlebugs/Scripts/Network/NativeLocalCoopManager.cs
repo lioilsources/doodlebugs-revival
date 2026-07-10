@@ -24,6 +24,11 @@ namespace Doodlebugs.Network
         // too short a window makes both devices give up and host (split-brain).
         private const float BROWSE_WINDOW_SECONDS = 4f;
 
+        // Session handshakes fail transiently on the radio; re-invite a few times
+        // before giving up and restarting the whole discovery flow.
+        private const float CONNECT_RETRY_SECONDS = 5f;
+        private const int CONNECT_MAX_ATTEMPTS = 3;
+
         public NativeLocalTransport Transport { get; private set; }
 
         /// <summary>We decided to host. Handler should StartHost(); fired synchronously.</summary>
@@ -46,6 +51,7 @@ namespace Doodlebugs.Network
         private bool _browsing;
         private string _pendingHostPeerId;
         private string _clientHostPeerId;
+        private int _connectAttempts;
         private int _beginToken; // invalidates a pending EnsurePermissions callback
 
         private void Awake()
@@ -109,15 +115,19 @@ namespace Doodlebugs.Network
         {
             _beginToken++; // a pending permission callback must not restart browsing
             CancelInvoke(nameof(DeferredBecomeClient));
+            CancelInvoke(nameof(ClientConnectWatchdog));
+            CancelInvoke(nameof(RestartDiscoveryFlow));
             _pendingHostPeerId = null;
 
             if (_backend != null)
             {
                 _backend.OnPeerFound -= HandlePeerFound;
                 _backend.OnPeerConnected -= HandleClientSessionConnected;
+                _backend.OnPeerDisconnected -= HandleClientSessionFailed;
                 _backend.StopAll();
             }
             _clientHostPeerId = null;
+            _connectAttempts = 0;
             _browsing = false;
             _roleDecided = false;
         }
@@ -222,7 +232,9 @@ namespace Doodlebugs.Network
             // invite, so the host never sees it. Keep the browser alive until the
             // session is Connected, then stop browsing in HandleClientSessionConnected.
             _clientHostPeerId = hostPeerId;
+            _connectAttempts = 1;
             _backend.OnPeerConnected += HandleClientSessionConnected;
+            _backend.OnPeerDisconnected += HandleClientSessionFailed;
 
             Transport.Configure(_backend, isServer: false, hostPeerId: hostPeerId);
             OnStatus?.Invoke("Joining lobby...");
@@ -233,6 +245,7 @@ namespace Doodlebugs.Network
 
             // Establish the native session with the host (client invites host).
             _backend.Connect(hostPeerId);
+            Invoke(nameof(ClientConnectWatchdog), CONNECT_RETRY_SECONDS);
         }
 
         // The browser's job is done once the host session is established; stop
@@ -242,9 +255,45 @@ namespace Doodlebugs.Network
         private void HandleClientSessionConnected(string peerId)
         {
             if (peerId != _clientHostPeerId) return;
+            CancelInvoke(nameof(ClientConnectWatchdog));
             _backend.OnPeerConnected -= HandleClientSessionConnected;
+            _backend.OnPeerDisconnected -= HandleClientSessionFailed;
+            _clientHostPeerId = null;
             _backend.StopBrowsing();
             Debug.Log($"[NativeLocalCoop] Client session established host={peerId}; stopped browsing");
         }
+
+        // The pending session dropped before it ever connected (handshake failure)
+        // - retry immediately instead of waiting out the watchdog timer.
+        private void HandleClientSessionFailed(string peerId)
+        {
+            if (string.IsNullOrEmpty(_clientHostPeerId) || peerId != _clientHostPeerId) return;
+            Debug.LogWarning($"[NativeLocalCoop] Session to host {peerId} failed before connecting");
+            CancelInvoke(nameof(ClientConnectWatchdog));
+            ClientConnectWatchdog();
+        }
+
+        private void ClientConnectWatchdog()
+        {
+            if (string.IsNullOrEmpty(_clientHostPeerId)) return; // connected or stopped
+
+            if (_connectAttempts < CONNECT_MAX_ATTEMPTS)
+            {
+                _connectAttempts++;
+                Debug.Log($"[NativeLocalCoop] Connect retry {_connectAttempts}/{CONNECT_MAX_ATTEMPTS} host={_clientHostPeerId}");
+                _backend.Connect(_clientHostPeerId);
+                Invoke(nameof(ClientConnectWatchdog), CONNECT_RETRY_SECONDS);
+                return;
+            }
+
+            // Out of retries - the host may be gone; start the whole flow over.
+            Debug.LogWarning("[NativeLocalCoop] Could not join lobby - restarting discovery");
+            OnStatus?.Invoke("Join failed - searching again...");
+            OnResetNetworking?.Invoke(); // NGO client shuts down asynchronously
+            Stop();
+            Invoke(nameof(RestartDiscoveryFlow), 0.5f);
+        }
+
+        private void RestartDiscoveryFlow() => Begin();
     }
 }
