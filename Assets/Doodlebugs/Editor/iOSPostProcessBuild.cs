@@ -8,6 +8,12 @@ namespace Doodlebugs.Editor
 {
     public static class iOSPostProcessBuild
     {
+        // Apple Developer team the test devices are registered under. A clean
+        // Unity export leaves the main target on manual signing with an empty
+        // team (PlayerSettings has automatic signing off), so xcodebuild fails
+        // with "requires a provisioning profile" — set it here instead.
+        private const string AppleTeamId = "P82HWPG7FN";
+
         [PostProcessBuild(1)]
         public static void OnPostProcessBuild(BuildTarget target, string pathToBuiltProject)
         {
@@ -42,8 +48,20 @@ namespace Doodlebugs.Editor
             string projPath = PBXProject.GetPBXProjectPath(pathToBuiltProject);
             PBXProject proj = new PBXProject();
             proj.ReadFromFile(projPath);
-            proj.AddFrameworkToProject(proj.GetUnityFrameworkTargetGuid(),
-                "MultipeerConnectivity.framework", false);
+
+            string mainGuid = proj.GetUnityMainTargetGuid();
+            string frameworkGuid = proj.GetUnityFrameworkTargetGuid();
+
+            proj.AddFrameworkToProject(frameworkGuid, "MultipeerConnectivity.framework", false);
+
+            // Enable automatic signing with the team so `xcodebuild` can provision
+            // a development profile without hand-editing the exported project.
+            foreach (string guid in new[] { mainGuid, frameworkGuid })
+            {
+                proj.SetBuildProperty(guid, "CODE_SIGN_STYLE", "Automatic");
+                proj.SetTeamId(guid, AppleTeamId);
+            }
+
             proj.WriteToFile(projPath);
         }
     }
