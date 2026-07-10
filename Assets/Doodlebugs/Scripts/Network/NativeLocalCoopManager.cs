@@ -20,7 +20,9 @@ namespace Doodlebugs.Network
     {
         public const string SERVICE_TYPE = "doodlebugs"; // iOS: 1-15 chars, lowercase + hyphen
         public const int MAX_PLAYERS = 8;
-        private const float BROWSE_WINDOW_SECONDS = 2.5f;
+        // Multipeer/Nearby discovery over the radio commonly takes a few seconds;
+        // too short a window makes both devices give up and host (split-brain).
+        private const float BROWSE_WINDOW_SECONDS = 4f;
 
         public NativeLocalTransport Transport { get; private set; }
 
@@ -44,6 +46,7 @@ namespace Doodlebugs.Network
         private bool _browsing;
         private string _pendingHostPeerId;
         private string _clientHostPeerId;
+        private int _beginToken; // invalidates a pending EnsurePermissions callback
 
         private void Awake()
         {
@@ -64,20 +67,36 @@ namespace Doodlebugs.Network
                 return;
             }
 
-            _backend.OnPeerFound += HandlePeerFound;
-            _backend.Initialize(SERVICE_TYPE, _localId);
-
-            // Look for an existing lobby first. A deterministic per-device jitter on
-            // the window staggers timeouts so two devices rarely both become host
-            // (split-brain) — the earlier one starts advertising and the other finds
-            // it before its own window elapses.
-            _browsing = true;
-            _roleDecided = false;
-            _browseStartTime = Time.realtimeSinceStartup;
-            _browseWindow = BROWSE_WINDOW_SECONDS + JitterSeconds();
-            _backend.StartBrowsing();
+            // Android needs runtime-granted Nearby/Bluetooth permissions before
+            // discovery can work at all; the browse window must not start ticking
+            // while the user is still answering the system dialogs.
+            int token = ++_beginToken;
             OnStatus?.Invoke($"{UI.ConnectionUI.GameVersion}  •  Searching nearby (mobile data)...");
-            Debug.Log("[NativeLocalCoop] Browsing for an existing lobby");
+            _backend.EnsurePermissions(granted =>
+            {
+                if (token != _beginToken) return; // Stop()/Begin() cycled meanwhile
+
+                if (!granted)
+                {
+                    Debug.LogWarning("[NativeLocalCoop] Required permissions denied - cannot discover players");
+                    OnStatus?.Invoke("Nearby permissions denied - enable them in Settings");
+                    return;
+                }
+
+                _backend.OnPeerFound += HandlePeerFound;
+                _backend.Initialize(SERVICE_TYPE, _localId);
+
+                // Look for an existing lobby first. A deterministic per-device jitter on
+                // the window staggers timeouts so two devices rarely both become host
+                // (split-brain) — the earlier one starts advertising and the other finds
+                // it before its own window elapses.
+                _browsing = true;
+                _roleDecided = false;
+                _browseStartTime = Time.realtimeSinceStartup;
+                _browseWindow = BROWSE_WINDOW_SECONDS + JitterSeconds();
+                _backend.StartBrowsing();
+                Debug.Log("[NativeLocalCoop] Browsing for an existing lobby");
+            });
         }
 
         /// <summary>Stop accepting new players (lobby full). Called by ConnectionManager.</summary>
@@ -88,6 +107,7 @@ namespace Doodlebugs.Network
 
         public void Stop()
         {
+            _beginToken++; // a pending permission callback must not restart browsing
             CancelInvoke(nameof(DeferredBecomeClient));
             _pendingHostPeerId = null;
 

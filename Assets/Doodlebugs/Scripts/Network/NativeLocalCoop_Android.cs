@@ -1,6 +1,8 @@
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Android;
 
 namespace Doodlebugs.Network
 {
@@ -26,6 +28,77 @@ namespace Doodlebugs.Network
         public event Action<string> OnPeerConnected;
         public event Action<string> OnPeerDisconnected;
         public event Action<string, byte[]> OnDataReceived;
+
+        /// <summary>
+        /// Nearby Connections needs dangerous runtime permissions that the user
+        /// must grant (they are declared in the manifest but denied by default):
+        /// Android 12+ BLUETOOTH_SCAN/ADVERTISE/CONNECT, 13+ NEARBY_WIFI_DEVICES,
+        /// pre-12 fine location. Without them startAdvertising/startDiscovery
+        /// fail silently and no lobby is ever found.
+        /// </summary>
+        public void EnsurePermissions(Action<bool> done)
+        {
+            string[] required = RequiredPermissions();
+
+            var missing = new List<string>();
+            foreach (string p in required)
+            {
+                if (!Permission.HasUserAuthorizedPermission(p)) missing.Add(p);
+            }
+            if (missing.Count == 0)
+            {
+                done?.Invoke(true);
+                return;
+            }
+
+            Debug.Log($"[Nearby] Requesting runtime permissions: {string.Join(", ", missing)}");
+
+            int pending = missing.Count;
+            var callbacks = new PermissionCallbacks();
+            void OnOneResolved(string _)
+            {
+                if (--pending > 0) return;
+                bool allGranted = true;
+                foreach (string p in required)
+                {
+                    if (!Permission.HasUserAuthorizedPermission(p)) { allGranted = false; break; }
+                }
+                Debug.Log($"[Nearby] Permission request finished, allGranted={allGranted}");
+                done?.Invoke(allGranted);
+            }
+            callbacks.PermissionGranted += OnOneResolved;
+            callbacks.PermissionDenied += OnOneResolved;
+            Permission.RequestUserPermissions(missing.ToArray(), callbacks);
+        }
+
+        private static string[] RequiredPermissions()
+        {
+            using var version = new AndroidJavaClass("android.os.Build$VERSION");
+            int sdk = version.GetStatic<int>("SDK_INT");
+
+            if (sdk >= 33)
+            {
+                return new[]
+                {
+                    "android.permission.BLUETOOTH_SCAN",
+                    "android.permission.BLUETOOTH_ADVERTISE",
+                    "android.permission.BLUETOOTH_CONNECT",
+                    "android.permission.NEARBY_WIFI_DEVICES",
+                };
+            }
+            if (sdk >= 31)
+            {
+                return new[]
+                {
+                    "android.permission.BLUETOOTH_SCAN",
+                    "android.permission.BLUETOOTH_ADVERTISE",
+                    "android.permission.BLUETOOTH_CONNECT",
+                };
+            }
+            // Legacy Bluetooth permissions are install-time; Nearby additionally
+            // needs location at runtime on Android 11 and below.
+            return new[] { Permission.FineLocation };
+        }
 
         public void Initialize(string serviceType, string displayName)
         {
@@ -94,6 +167,10 @@ namespace Doodlebugs.Network
             byte[] data = Convert.FromBase64String(message.Substring(split + 1));
             _backend?.RaiseDataReceived(endpointId, data);
         }
+
+        // "where|message" from the Java failure listeners — Nearby calls used to
+        // fail completely silently (e.g. on missing runtime permissions).
+        public void OnNearbyError(string message) => Debug.LogError($"[Nearby] {message}");
     }
 }
 #endif

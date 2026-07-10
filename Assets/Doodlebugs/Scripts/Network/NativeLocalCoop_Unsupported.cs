@@ -20,6 +20,8 @@ namespace Doodlebugs.Network
         public event Action<string, byte[]> OnDataReceived;
 #pragma warning restore 67
 
+        public void EnsurePermissions(Action<bool> done) => done?.Invoke(true);
+
         public void Initialize(string serviceType, string displayName)
         {
             Debug.LogWarning("[NativeLocalCoop] Native local co-op is not supported on this platform.");

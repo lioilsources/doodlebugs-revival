@@ -30,6 +30,22 @@ typedef void (*DBMPDataCallback)(const char *peerId, const unsigned char *data, 
 
 static DoodlebugsMultipeer *gInstance = nil;
 
+// Callback registration must survive any C#-side call ordering: store the
+// pointers in statics and apply them to the instance on both SetCallbacks
+// and Initialize (a guard on gInstance alone used to silently drop them).
+static DBMPPeerCallback gFoundCb = NULL;
+static DBMPPeerCallback gConnectedCb = NULL;
+static DBMPPeerCallback gDisconnectedCb = NULL;
+static DBMPDataCallback gDataCb = NULL;
+
+static void DBMPApplyCallbacks(void) {
+    if (!gInstance) return;
+    gInstance.onFound = gFoundCb;
+    gInstance.onConnected = gConnectedCb;
+    gInstance.onDisconnected = gDisconnectedCb;
+    gInstance.onData = gDataCb;
+}
+
 @implementation DoodlebugsMultipeer
 
 - (instancetype)initWithService:(NSString *)serviceType displayName:(NSString *)displayName {
@@ -153,15 +169,16 @@ static NSString *CStr(const char *s) { return s ? [NSString stringWithUTF8String
 
 void _DBMP_Initialize(const char *serviceType, const char *displayName) {
     gInstance = [[DoodlebugsMultipeer alloc] initWithService:CStr(serviceType) displayName:CStr(displayName)];
+    DBMPApplyCallbacks();
 }
 
 void _DBMP_SetCallbacks(DBMPPeerCallback found, DBMPPeerCallback connected,
                         DBMPPeerCallback disconnected, DBMPDataCallback data) {
-    if (!gInstance) return;
-    gInstance.onFound = found;
-    gInstance.onConnected = connected;
-    gInstance.onDisconnected = disconnected;
-    gInstance.onData = data;
+    gFoundCb = found;
+    gConnectedCb = connected;
+    gDisconnectedCb = disconnected;
+    gDataCb = data;
+    DBMPApplyCallbacks();
 }
 
 void _DBMP_StartAdvertising(void) { [gInstance startAdvertising]; }

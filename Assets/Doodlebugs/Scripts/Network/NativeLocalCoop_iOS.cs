@@ -42,8 +42,18 @@ namespace Doodlebugs.Network
         public void Initialize(string serviceType, string displayName)
         {
             _instance = this;
-            _DBMP_SetCallbacks(OnFoundNative, OnConnectedNative, OnDisconnectedNative, OnDataNative);
+            // Initialize FIRST: the native _DBMP_SetCallbacks used to silently
+            // drop the registration when gInstance did not exist yet, which left
+            // all callbacks NULL and no discovery event ever reached C#.
             _DBMP_Initialize(serviceType, displayName);
+            _DBMP_SetCallbacks(OnFoundNative, OnConnectedNative, OnDisconnectedNative, OnDataNative);
+        }
+
+        public void EnsurePermissions(Action<bool> done)
+        {
+            // iOS surfaces its Local Network prompt automatically on first
+            // Multipeer use; there is nothing to pre-request here.
+            done?.Invoke(true);
         }
 
         public void StartAdvertising(int maxPlayers) => _DBMP_StartAdvertising();

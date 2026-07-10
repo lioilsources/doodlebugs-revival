@@ -50,12 +50,14 @@ public class DoodlebugsNearby {
     // maxPlayers is enforced by the game (NGO ApproveConnection); kept for parity.
     public void startAdvertising(int maxPlayers) {
         AdvertisingOptions options = new AdvertisingOptions.Builder().setStrategy(STRATEGY).build();
-        connectionsClient.startAdvertising(displayName, serviceId, lifecycleCallback, options);
+        connectionsClient.startAdvertising(displayName, serviceId, lifecycleCallback, options)
+            .addOnFailureListener(e -> send("OnNearbyError", "startAdvertising|" + e.getMessage()));
     }
 
     public void startDiscovery() {
         DiscoveryOptions options = new DiscoveryOptions.Builder().setStrategy(STRATEGY).build();
-        connectionsClient.startDiscovery(serviceId, discoveryCallback, options);
+        connectionsClient.startDiscovery(serviceId, discoveryCallback, options)
+            .addOnFailureListener(e -> send("OnNearbyError", "startDiscovery|" + e.getMessage()));
     }
 
     public void stopAdvertising() { connectionsClient.stopAdvertising(); }
@@ -68,7 +70,8 @@ public class DoodlebugsNearby {
     }
 
     public void connect(String endpointId) {
-        connectionsClient.requestConnection(displayName, endpointId, lifecycleCallback);
+        connectionsClient.requestConnection(displayName, endpointId, lifecycleCallback)
+            .addOnFailureListener(e -> send("OnNearbyError", "requestConnection|" + e.getMessage()));
     }
 
     public void disconnect(String endpointId) {

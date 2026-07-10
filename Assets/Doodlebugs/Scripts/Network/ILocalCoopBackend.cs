@@ -31,6 +31,14 @@ namespace Doodlebugs.Network
         /// <summary>Data arrived from a peer. Args = peer id, payload bytes.</summary>
         event Action<string, byte[]> OnDataReceived;
 
+        /// <summary>
+        /// Request any runtime permissions the native stack needs (Android 12+
+        /// Bluetooth/Nearby permissions). Invokes <paramref name="done"/> with
+        /// true when everything required is granted; may complete synchronously
+        /// when nothing is missing. Call before <see cref="Initialize"/>.
+        /// </summary>
+        void EnsurePermissions(Action<bool> done);
+
         /// <summary>Prepare the native stack (service type / display name).</summary>
         void Initialize(string serviceType, string displayName);
 
