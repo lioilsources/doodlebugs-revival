@@ -300,15 +300,36 @@ public class MatchManager : MonoBehaviour
         _lateJoinDeadlines.Clear();
         Debug.Log("[MatchManager] Phase -> Battle");
 
+        // Start scoring and close every hangar FIRST: RestartMatch's broadcast
+        // is the ONLY signal that closes the PreBattle overlay. It must not sit
+        // behind anything that can throw - a silent respawn exception used to
+        // strand every device on "BATTLE IN 1" with the battle never starting.
+        ScoreManager.Instance?.RestartMatch();
+
         // Fresh arena for the first battle (synced NetworkVariable)
-        BackgroundManager.Instance?.SelectRandomBackground();
+        try { BackgroundManager.Instance?.SelectRandomBackground(); }
+        catch (Exception e) { Debug.LogException(e); }
 
         foreach (var player in FindObjectsOfType<PlayerController>())
+        {
+            SafeDeploy(player);
+        }
+    }
+
+    // Un-park and respawn one plane; a single bad plane must never abort the
+    // caller's whole battle-start loop.
+    private static void SafeDeploy(PlayerController player)
+    {
+        try
         {
             player.NetInHangar.Value = false;
             player.ServerRespawn();
         }
-        ScoreManager.Instance?.RestartMatch();
+        catch (Exception e)
+        {
+            Debug.LogError($"[MatchManager] Deploy failed for client {player.OwnerClientId}");
+            Debug.LogException(e);
+        }
     }
 
     /// <summary>
@@ -418,8 +439,7 @@ public class MatchManager : MonoBehaviour
 
             // NetworkVariable write first, then the respawn teleport (risk:
             // the owner must re-enable physics before the position lands)
-            player.NetInHangar.Value = false;
-            player.ServerRespawn();
+            SafeDeploy(player);
         }
         Debug.Log($"[MatchManager] Client {clientId} deployed into the running battle");
     }
@@ -819,16 +839,16 @@ public class MatchManager : MonoBehaviour
             if (!IsServer()) yield break;
         }
 
-        // Fresh planes for everyone - including anyone still parked in the
-        // hangar (late joiners whose round ended while picking) - then reset
-        // stats + timer (syncs to clients)
+        // Reset stats + timer and close the hangars FIRST (see ServerStartBattle
+        // - the close broadcast must never sit behind a throwing respawn), then
+        // fresh planes for everyone - including anyone still parked in the
+        // hangar (late joiners whose round ended while picking)
         Phase = GamePhase.Battle;
+        ScoreManager.Instance?.RestartMatch();
         foreach (var player in FindObjectsOfType<PlayerController>())
         {
-            player.NetInHangar.Value = false;
-            player.ServerRespawn();
+            SafeDeploy(player);
         }
-        ScoreManager.Instance?.RestartMatch();
         _serverRoundFlowCoroutine = null;
         Debug.Log("[MatchManager] New round started");
     }

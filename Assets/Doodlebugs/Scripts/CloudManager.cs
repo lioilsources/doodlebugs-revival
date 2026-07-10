@@ -332,8 +332,12 @@ public class CloudManager : MonoBehaviour
             return new Vector3(0, (minHeight + maxHeight) / 2f, 0);
         }
 
-        // Pick random cloud
+        // Pick random cloud (skip destroyed entries)
         var cloud = _clouds[Random.Range(0, _clouds.Count)];
+        if (cloud == null)
+        {
+            return new Vector3(0, (minHeight + maxHeight) / 2f, 0);
+        }
         return cloud.transform.position;
     }
 
@@ -410,6 +414,7 @@ public class CloudManager : MonoBehaviour
         var available = new List<int>();
         for (int i = 0; i < _clouds.Count; i++)
         {
+            if (_clouds[i] == null) continue; // destroyed cloud still in the list
             if (!_cloudCooldowns.ContainsKey(i) || Time.time > _cloudCooldowns[i])
                 available.Add(i);
         }
@@ -420,6 +425,15 @@ public class CloudManager : MonoBehaviour
 
     private void SpawnPlayerAtCloud(PlayerController player, int cloudIndex)
     {
+        // The cloud may have been destroyed since the index was picked - never
+        // let a dead reference abort the caller (battle start runs through here).
+        if (cloudIndex < 0 || cloudIndex >= _clouds.Count || _clouds[cloudIndex] == null)
+        {
+            Debug.LogWarning($"[CloudManager] Cloud {cloudIndex} gone - fallback respawn");
+            player.ExecuteRespawnAtPosition(GetFallbackPosition(player));
+            return;
+        }
+
         _cloudCooldowns[cloudIndex] = Time.time + CLOUD_COOLDOWN;
 
         var cloudPos = _clouds[cloudIndex].transform.position;
