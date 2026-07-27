@@ -1,0 +1,98 @@
+name: Release iOS
+
+# One tag ships the build. Runs entirely on the self-hosted Mac Mini: the Unity
+# licence is activated locally, so there is no UNITY_LICENSE secret and no
+# activate/return cycle to get wrong.
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+# Both mobile workflows share this group on purpose. They run on the same machine
+# against the same Unity install, and two editors writing one Library/ folder is
+# how you get a corrupted project lock. A per-workflow group would let iOS and
+# Android start simultaneously and defeat the point.
+concurrency:
+  group: unity-build
+  cancel-in-progress: false
+
+env:
+  BUNDLE_ID_IOS: com.ol1n.doodlebugsRevival   # must match ProjectSettings → applicationIdentifier.iPhone
+
+jobs:
+  ios:
+    name: Build & TestFlight
+    runs-on: [self-hosted, macos-unity]
+    timeout-minutes: 90
+
+    env:
+      IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+      IOS_P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+      IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+      IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+      IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+      APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+      APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          lfs: true
+          # clean:false keeps the gitignored Library/ folder between runs. The
+          # default would git clean -ffdx it away and add ~10 min of reimport to
+          # every build for no benefit — this is why the project is not cached
+          # with actions/cache either.
+          clean: false
+
+      - name: Compute version
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            # Handles both v1.2.3 and the repo's prefixed forms (beta/1.2.3).
+            VERSION="${GITHUB_REF_NAME##*/}"
+            VERSION="${VERSION#v}"
+          else
+            VERSION="$(awk '/^  bundleVersion:/ {print $2}' ProjectSettings/ProjectSettings.asset)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "building version $VERSION build ${GITHUB_RUN_NUMBER}"
+
+      # Everything cheap that can fail runs before the ~30 minute Unity step, so a
+      # bad secret or a broken Gemfile surfaces in the first minute.
+      - name: Select Ruby
+        run: ./ci/select-ruby.sh
+
+      - name: Install fastlane
+        run: |
+          ruby --version
+          bundle config set --local path vendor/bundle
+          bundle install --jobs 4
+
+      - name: Prepare signing keychain
+        run: ./ci/unlock-keychain.sh
+
+      - name: Install provisioning profile
+        run: ./ci/install-profile.sh
+
+      - name: Build Xcode project
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+        run: ./ci/unity-build.sh ios Builds/iOS
+
+      - name: Archive, export and upload to TestFlight
+        run: bundle exec fastlane ios ios_beta
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: doodlebugs-ios
+          path: Builds/ipa/doodlebugs.ipa
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove signing material
+        if: always()
+        run: ./ci/lock-keychain.sh

@@ -27,6 +27,18 @@ Instructions for Claude Code when working in this repository.
 
 **Logs (macOS):** `~/Library/Company/Project/Player.log`
 
+**Release:** `git tag v2.1.1 && git push --tags` builds every platform.
+Desktop goes through `release.yml` (game-ci, GitHub-hosted); iOS and Android go
+through `release-ios.yml` / `release-android.yml` on the self-hosted Mac Mini and
+ship to TestFlight and Firebase App Distribution. Both mobile builds run locally too:
+
+```bash
+./ci/unity-build.sh android /tmp/out/doodlebugs.apk
+./ci/unity-build.sh ios /tmp/out/ios
+```
+
+See `ci/README.md` for secrets, runner requirements and the signing details.
+
 ## Architecture
 
 **Networking:** Host/Client topology. Client authority for movement, server authority for collisions and damage.

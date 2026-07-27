@@ -1,0 +1,6 @@
+# Bundle identifier must match ProjectSettings → applicationIdentifier.iPhone.
+app_identifier ENV["BUNDLE_ID_IOS"] || "com.ol1n.doodlebugsRevival"
+
+# Deliberately no apple_id: authentication goes through the App Store Connect API
+# key, which is what keeps the pipeline free of interactive 2FA.
+team_id ENV["IOS_TEAM_ID"]

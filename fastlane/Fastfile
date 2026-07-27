@@ -1,0 +1,116 @@
+default_platform(:ios)
+
+XCODE_PROJECT    = "Builds/iOS/Unity-iPhone.xcodeproj"
+APP_TARGET       = "Unity-iPhone"
+FRAMEWORK_TARGET = "UnityFramework"
+
+# The App Store Connect API key lives in secrets in one of two shapes depending on
+# how it was uploaded. Prefer the base64 variant: a raw .p8 pasted into a secret
+# keeps its newlines only by luck, and when it doesn't the failure surfaces much
+# later as an opaque "invalid signature" from Apple.
+def asc_api_key
+  key_b64 = ENV["APP_STORE_CONNECT_API_KEY_BASE64"]
+  key_raw = ENV["APPSTORE_API_PRIVATE_KEY"]
+
+  content, is_base64 =
+    if key_b64.to_s.strip.empty?
+      UI.user_error!("Neither APP_STORE_CONNECT_API_KEY_BASE64 nor APPSTORE_API_PRIVATE_KEY is set") if key_raw.to_s.strip.empty?
+      [key_raw, false]
+    else
+      [key_b64.strip, true]
+    end
+
+  app_store_connect_api_key(
+    key_id: ENV.fetch("APPSTORE_API_KEY_ID"),
+    issuer_id: ENV.fetch("APPSTORE_ISSUER_ID"),
+    key_content: content,
+    is_key_content_base64: is_base64,
+    in_house: false
+  )
+end
+
+platform :ios do
+  desc "Build the Unity-generated Xcode project and ship it to TestFlight"
+  lane :ios_beta do
+    api_key = asc_api_key
+
+    UI.user_error!("#{XCODE_PROJECT} not found — run ci/unity-build.sh ios first") unless File.exist?(XCODE_PROJECT)
+
+    profile_name = ENV.fetch("PROFILE_NAME")   # exported by ci/install-profile.sh
+    team_id      = ENV.fetch("IOS_TEAM_ID")
+    bundle_id    = ENV["BUNDLE_ID_IOS"] || "com.ol1n.doodlebugsRevival"
+
+    # iOSPostProcessBuild sets CODE_SIGN_STYLE=Automatic on both targets so a plain
+    # local `xcodebuild` provisions itself. That cannot work here: automatic signing
+    # needs an Xcode account signed in, and the runner is a headless daemon. So both
+    # targets get flipped back to manual after every Unity build — it has to happen
+    # after, because Unity regenerates the project each time.
+    #
+    # Only the app target carries the provisioning profile. UnityFramework is an
+    # embedded framework: it needs an identity but no profile of its own, and is
+    # re-signed with the app's identity when embedded. Leaving it on Automatic makes
+    # the archive step fail with "No signing certificate found".
+    update_code_signing_settings(
+      path: XCODE_PROJECT,
+      targets: [APP_TARGET],
+      use_automatic_signing: false,
+      team_id: team_id,
+      profile_name: profile_name,
+      code_sign_identity: "Apple Distribution",
+      bundle_identifier: bundle_id
+    )
+
+    update_code_signing_settings(
+      path: XCODE_PROJECT,
+      targets: [FRAMEWORK_TARGET],
+      use_automatic_signing: false,
+      team_id: team_id,
+      code_sign_identity: "Apple Distribution"
+    )
+
+    build_app(
+      project: XCODE_PROJECT,
+      scheme: APP_TARGET,
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "Builds/ipa",
+      output_name: "doodlebugs.ipa",
+      export_options: {
+        signingStyle: "manual",
+        teamID: team_id,
+        provisioningProfiles: { bundle_id => profile_name }
+      }
+    )
+
+    # skip_waiting_for_build_processing keeps the runner from idling for the 10–30
+    # minutes Apple takes to process a build. Export compliance is already declared
+    # in Info.plist by iOSPostProcessBuild, so nothing downstream needs a human.
+    #
+    # No changelog here: fastlane rejects it together with
+    # skip_waiting_for_build_processing, because the "What to Test" text can only be
+    # attached once Apple has finished processing. The version and build number
+    # already identify the build in TestFlight.
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true
+    )
+  end
+end
+
+platform :android do
+  desc "Upload the signed APK to Firebase App Distribution"
+  lane :android_beta do
+    apk_path = ENV["APK_PATH"] || "Builds/Android/doodlebugs-signed.apk"
+    UI.user_error!("#{apk_path} not found — run ci/unity-build.sh android first") unless File.exist?(apk_path)
+
+    # service_credentials_file, not firebase_cli_token: the token flow is deprecated
+    # and Google has been switching it off for new projects.
+    firebase_app_distribution(
+      app: ENV.fetch("FIREBASE_ANDROID_APP_ID"),
+      service_credentials_file: ENV.fetch("FIREBASE_SA_PATH"),
+      groups: ENV["FIREBASE_GROUPS"] || "testers",
+      apk_path: apk_path,
+      release_notes: ENV["RELEASE_NOTES"]
+    )
+  end
+end

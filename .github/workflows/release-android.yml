@@ -1,0 +1,108 @@
+name: Release Android
+
+# Same trigger as the iOS workflow, so a single tag ships both platforms.
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+# Shared with release-ios.yml — see the comment there. Both run on the same Mac
+# Mini against the same Unity install and must not overlap.
+concurrency:
+  group: unity-build
+  cancel-in-progress: false
+
+jobs:
+  android:
+    name: Build & Firebase App Distribution
+    runs-on: [self-hosted, macos-unity]
+    timeout-minutes: 90
+
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      FIREBASE_ANDROID_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+      FIREBASE_GROUPS: testers
+      FIREBASE_SA_PATH: ${{ github.workspace }}/.firebase-sa.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          lfs: true
+          # See release-ios.yml — keeps the gitignored Library/ folder alive.
+          clean: false
+
+      - name: Compute version
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            # Handles both v1.2.3 and the repo's prefixed forms (beta/1.2.3).
+            VERSION="${GITHUB_REF_NAME##*/}"
+            VERSION="${VERSION#v}"
+          else
+            VERSION="$(awk '/^  bundleVersion:/ {print $2}' ProjectSettings/ProjectSettings.asset)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "building version $VERSION build ${GITHUB_RUN_NUMBER}"
+
+      # Everything cheap that can fail runs before the ~30 minute Unity step, so a
+      # bad secret or a broken Gemfile surfaces in the first minute.
+      - name: Select Ruby
+        run: ./ci/select-ruby.sh
+
+      - name: Install fastlane
+        run: |
+          ruby --version
+          bundle config set --local path vendor/bundle
+          bundle install --jobs 4
+
+      - name: Build unsigned APK
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          # versionCode must never go backwards or Android refuses to install the
+          # APK over an existing one ("app not installed"). Releases up to v1.0.6
+          # already shipped versionCode 8, but github.run_number restarts at 1 for
+          # this workflow, so it is offset clear of everything published so far.
+          # Raise VERSION_CODE_BASE, never lower it.
+          BUILD_NUMBER: ${{ 100 + github.run_number }}
+        run: ./ci/unity-build.sh android Builds/Android/doodlebugs.apk
+
+      # Signing happens after the build rather than inside Unity because this
+      # project's upload keystore is a PKCS#12 that Java's KeyStore cannot parse.
+      # ci/sign-apk.sh explains the details.
+      - name: Sign APK
+        run: ./ci/sign-apk.sh Builds/Android/doodlebugs.apk Builds/Android/doodlebugs-signed.apk
+
+      - name: Write Firebase service account
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+        run: |
+          umask 077
+          # The secret may hold raw JSON or base64 depending on how it was uploaded.
+          if printf '%s' "$FIREBASE_SERVICE_ACCOUNT_KEY" | base64 --decode 2>/dev/null | head -c 1 | grep -q '{'; then
+            printf '%s' "$FIREBASE_SERVICE_ACCOUNT_KEY" | tr -d '[:space:]' | base64 --decode > "$FIREBASE_SA_PATH"
+          else
+            printf '%s' "$FIREBASE_SERVICE_ACCOUNT_KEY" > "$FIREBASE_SA_PATH"
+          fi
+          python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$FIREBASE_SA_PATH"
+
+      - name: Upload to Firebase App Distribution
+        env:
+          APK_PATH: Builds/Android/doodlebugs-signed.apk
+          RELEASE_NOTES: "Doodlebugs Revival ${{ steps.version.outputs.version }} (build ${{ github.run_number }})"
+        run: bundle exec fastlane android android_beta
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: doodlebugs-android
+          path: Builds/Android/doodlebugs-signed.apk
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove service account key
+        if: always()
+        run: rm -f "$FIREBASE_SA_PATH"

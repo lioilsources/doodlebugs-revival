@@ -41,6 +41,12 @@ namespace Doodlebugs.Editor
             bonjourServices.AddString("_doodlebugs._udp");
             bonjourServices.AddString("_doodlebugs._tcp");
 
+            // Declare export compliance up front. Without this key every upload stops
+            // in TestFlight on the "does your app use encryption?" question and waits
+            // for someone to click through it in App Store Connect — from CI that just
+            // looks like the build never arrived.
+            plist.root.SetBoolean("ITSAppUsesNonExemptEncryption", false);
+
             plist.WriteToFile(plistPath);
 
             // DoodlebugsMultipeer.m uses MCSession/MCPeerID — without this the
@@ -56,6 +62,11 @@ namespace Doodlebugs.Editor
 
             // Enable automatic signing with the team so `xcodebuild` can provision
             // a development profile without hand-editing the exported project.
+            //
+            // This is for local/dev builds only. The release pipeline flips both
+            // targets back to manual in fastlane/Fastfile after the Unity step:
+            // automatic signing needs an Xcode account signed in, which a headless
+            // runner does not have. See ci/README.md.
             foreach (string guid in new[] { mainGuid, frameworkGuid })
             {
                 proj.SetBuildProperty(guid, "CODE_SIGN_STYLE", "Automatic");
