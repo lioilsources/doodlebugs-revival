@@ -23,10 +23,21 @@ mkdir -p "$PROFILE_DIR"
 TMP_PROFILE="$(mktemp -t doodlebugs-profile)"
 trap 'rm -f "$TMP_PROFILE"' EXIT
 
-echo -n "$IOS_PROVISION_PROFILE_BASE64" | tr -d '[:space:]' | base64 --decode > "$TMP_PROFILE"
+echo -n "$IOS_PROVISION_PROFILE_BASE64" | tr -d '[:space:]' | base64 --decode > "$TMP_PROFILE" 2>/dev/null
+
+if [[ ! -s "$TMP_PROFILE" ]]; then
+  echo "IOS_PROVISION_PROFILE_BASE64 decoded to nothing — empty secret or not valid base64." >&2
+  exit 1
+fi
 
 # .mobileprovision is a CMS-signed plist; strip the signature before parsing.
-DECODED="$(security cms -D -i "$TMP_PROFILE")"
+if ! DECODED="$(security cms -D -i "$TMP_PROFILE" 2>/dev/null)" || [[ -z "$DECODED" ]]; then
+  echo "The decoded IOS_PROVISION_PROFILE_BASE64 is not a CMS-signed provisioning profile." >&2
+  echo "First bytes: $(head -c 16 "$TMP_PROFILE" | xxd -p)" >&2
+  echo "Download the App Store profile for the bundle id from the Apple Developer portal," >&2
+  echo "then: base64 -i profile.mobileprovision | tr -d '\\n' | gh secret set IOS_PROVISION_PROFILE_BASE64" >&2
+  exit 1
+fi
 PROFILE_UUID="$(printf '%s' "$DECODED" | plutil -extract UUID raw -)"
 PROFILE_NAME="$(printf '%s' "$DECODED" | plutil -extract Name raw -)"
 PROFILE_TEAM_ID="$(printf '%s' "$DECODED" | plutil -extract TeamIdentifier.0 raw -)"
