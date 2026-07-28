@@ -55,8 +55,21 @@ if [[ ! -s "$P12" ]]; then
   exit 1
 fi
 
-if ! openssl pkcs12 -in "$P12" -passin "pass:$IOS_P12_PASSWORD" -noout -legacy 2>/dev/null \
-   && ! openssl pkcs12 -in "$P12" -passin "pass:$IOS_P12_PASSWORD" -noout 2>/dev/null; then
+# macOS system openssl is LibreSSL: it cannot decrypt the modern PBES2/AES p12s
+# that Keychain Access exports and has no -legacy, so it reports a false "wrong
+# password" for a perfectly good certificate. Insist on a real OpenSSL 3.
+OPENSSL="$(
+  for c in /opt/homebrew/opt/openssl@3/bin/openssl /usr/local/opt/openssl@3/bin/openssl \
+           /opt/homebrew/bin/openssl /usr/local/bin/openssl openssl; do
+    command -v "$c" >/dev/null 2>&1 && "$c" version 2>/dev/null | grep -q '^OpenSSL 3' && { echo "$c"; break; }
+  done
+)"
+
+if [[ -z "$OPENSSL" ]]; then
+  echo "note: no OpenSSL 3 found, skipping the pre-flight check on the .p12" >&2
+  echo "      (brew install openssl@3 to get a useful message instead of errSecParam)" >&2
+elif ! "$OPENSSL" pkcs12 -in "$P12" -passin "pass:$IOS_P12_PASSWORD" -noout 2>/dev/null \
+   && ! "$OPENSSL" pkcs12 -in "$P12" -passin "pass:$IOS_P12_PASSWORD" -noout -legacy 2>/dev/null; then
   echo "The decoded IOS_P12_BASE64 is not a PKCS#12 that opens with IOS_P12_PASSWORD." >&2
   echo "First bytes: $(head -c 16 "$P12" | xxd -p)" >&2
   if head -c 32 "$P12" | grep -q "BEGIN"; then
