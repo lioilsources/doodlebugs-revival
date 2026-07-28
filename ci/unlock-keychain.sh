@@ -41,10 +41,32 @@ security set-keychain-settings -t 3600 -u "$KEYCHAIN_PATH"
 # keychain in the list so anything else on the machine keeps working.
 security list-keychains -d user -s "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
 
-P12="$(mktemp -t doodlebugs-signing).p12"
-trap 'rm -f "$P12"' EXIT
+WORK="$(mktemp -d -t doodlebugs-signing)"
+trap 'rm -rf "$WORK"' EXIT
+P12="$WORK/signing.p12"
 
-echo -n "$IOS_P12_BASE64" | tr -d '[:space:]' | base64 --decode > "$P12"
+echo -n "$IOS_P12_BASE64" | tr -d '[:space:]' | base64 --decode > "$P12" 2>/dev/null
+
+# security import reports both a malformed file and a wrong password as
+# "One or more parameters passed to a function were not valid", which sends you
+# looking in the wrong place. Probe with openssl first and say which it is.
+if [[ ! -s "$P12" ]]; then
+  echo "IOS_P12_BASE64 decoded to nothing — the secret is empty or not valid base64." >&2
+  exit 1
+fi
+
+if ! openssl pkcs12 -in "$P12" -passin "pass:$IOS_P12_PASSWORD" -noout -legacy 2>/dev/null \
+   && ! openssl pkcs12 -in "$P12" -passin "pass:$IOS_P12_PASSWORD" -noout 2>/dev/null; then
+  echo "The decoded IOS_P12_BASE64 is not a PKCS#12 that opens with IOS_P12_PASSWORD." >&2
+  echo "First bytes: $(head -c 16 "$P12" | xxd -p)" >&2
+  if head -c 32 "$P12" | grep -q "BEGIN"; then
+    echo "Looks like PEM, not PKCS#12. Re-export from Keychain Access as .p12," >&2
+    echo "then: base64 -i cert.p12 | tr -d '\\n' | gh secret set IOS_P12_BASE64" >&2
+  else
+    echo "Either the blob is not a .p12 at all, or IOS_P12_PASSWORD is wrong." >&2
+  fi
+  exit 1
+fi
 
 security import "$P12" \
   -k "$KEYCHAIN_PATH" \

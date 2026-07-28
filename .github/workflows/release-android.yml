@@ -65,10 +65,17 @@ jobs:
           # versionCode must never go backwards or Android refuses to install the
           # APK over an existing one ("app not installed"). Releases up to v1.0.6
           # already shipped versionCode 8, but github.run_number restarts at 1 for
-          # this workflow, so it is offset clear of everything published so far.
-          # Raise VERSION_CODE_BASE, never lower it.
-          BUILD_NUMBER: ${{ 100 + github.run_number }}
-        run: ./ci/unity-build.sh android Builds/Android/doodlebugs.apk
+          # this workflow, so offset it clear of everything published so far.
+          # Raise this, never lower it.
+          VERSION_CODE_BASE: 100
+        run: |
+          # Arithmetic happens here, not in a ${{ }} expression: GitHub Actions
+          # expressions have no + operator, and using one makes the whole workflow
+          # file unparseable — it shows up as a run named after the file path with
+          # no jobs, which is not an obvious error message.
+          export BUILD_NUMBER=$(( VERSION_CODE_BASE + GITHUB_RUN_NUMBER ))
+          echo "Android versionCode = $BUILD_NUMBER"
+          ./ci/unity-build.sh android Builds/Android/doodlebugs.apk
 
       # Signing happens after the build rather than inside Unity because this
       # project's upload keystore is a PKCS#12 that Java's KeyStore cannot parse.
