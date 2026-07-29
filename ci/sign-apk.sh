@@ -84,23 +84,20 @@ if [[ -z "$OPENSSL" ]]; then
   echo "warning: no OpenSSL 3 found, PKCS#12 extraction may falsely fail (brew install openssl@3)" >&2
 fi
 
-# apksigner --key/--cert want DER, not PEM. Passing PEM fails with a misleading
-# "Not an RSA, EC, or DSA private key", so -outform DER is load-bearing here.
-KEY_DER="$WORK/key.der"
-CERT_DER="$WORK/cert.der"
-
-if "$OPENSSL" pkcs12 -in "$KEYSTORE" -nocerts -nodes -passin "pass:$ANDROID_KEYSTORE_PASSWORD" 2>/dev/null \
-     | "$OPENSSL" pkcs8 -topk8 -nocrypt -outform DER > "$KEY_DER" 2>/dev/null \
-   && [[ -s "$KEY_DER" ]] \
-   && "$OPENSSL" pkcs12 -in "$KEYSTORE" -nokeys -clcerts -passin "pass:$ANDROID_KEYSTORE_PASSWORD" 2>/dev/null \
-     | "$OPENSSL" x509 -outform DER > "$CERT_DER" 2>/dev/null \
-   && [[ -s "$CERT_DER" ]]; then
-
-  echo "keystore read as PKCS#12, signing via extracted DER key/cert"
-  "$APKSIGNER" sign --key "$KEY_DER" --cert "$CERT_DER" --out "$OUT_APK" "$IN_APK"
-
-else
-  echo "keystore is not PKCS#12, signing via Java KeyStore"
+# Probe what the blob actually is before choosing a path. Keychain/keytool-era
+# p12s use RC2/3DES, which OpenSSL 3 only opens with -legacy — without this
+# probe a legacy p12 (or a wrong password) silently fell through to the Java
+# KeyStore branch, which dies on the very "Tag number over 30" parse this
+# script exists to bypass, blaming the wrong thing entirely.
+# Scalar, expanded unquoted below: an empty array under set -u breaks the
+# macOS system bash 3.2 that `shell: bash` steps run with.
+LEGACY_FLAG=""
+if "$OPENSSL" pkcs12 -in "$KEYSTORE" -noout -passin "pass:$ANDROID_KEYSTORE_PASSWORD" 2>/dev/null; then
+  :
+elif "$OPENSSL" pkcs12 -in "$KEYSTORE" -noout -passin "pass:$ANDROID_KEYSTORE_PASSWORD" -legacy 2>/dev/null; then
+  LEGACY_FLAG="-legacy"
+elif [[ "$(head -c 4 "$KEYSTORE" | xxd -p)" == "feedfeed" ]]; then
+  echo "keystore is JKS, signing via Java KeyStore"
   : "${ANDROID_KEY_ALIAS:?ANDROID_KEY_ALIAS is required for a JKS keystore}"
   : "${ANDROID_KEY_PASSWORD:?ANDROID_KEY_PASSWORD is required for a JKS keystore}"
   "$APKSIGNER" sign \
@@ -110,7 +107,32 @@ else
     --key-pass "pass:$ANDROID_KEY_PASSWORD" \
     --out "$OUT_APK" \
     "$IN_APK"
+  "$APKSIGNER" verify --print-certs "$OUT_APK"
+  echo "signed: $OUT_APK"
+  exit 0
+else
+  echo "The keystore does not open with ANDROID_KEYSTORE_PASSWORD (tried plain and -legacy)" >&2
+  echo "and it is not a JKS either. Either the password secret is wrong, or the" >&2
+  echo "ANDROID_KEYSTORE_BASE64 blob is not the real upload keystore." >&2
+  echo "size: $(wc -c < "$KEYSTORE") B, first bytes: $(head -c 8 "$KEYSTORE" | xxd -p)" >&2
+  "$OPENSSL" pkcs12 -in "$KEYSTORE" -noout -passin "pass:$ANDROID_KEYSTORE_PASSWORD" 2>&1 | head -3 >&2 || true
+  exit 1
 fi
+
+# apksigner --key/--cert want DER, not PEM. Passing PEM fails with a misleading
+# "Not an RSA, EC, or DSA private key", so -outform DER is load-bearing here.
+KEY_DER="$WORK/key.der"
+CERT_DER="$WORK/cert.der"
+
+echo "keystore read as PKCS#12${LEGACY_FLAG:+ (legacy ciphers)}, signing via extracted DER key/cert"
+"$OPENSSL" pkcs12 -in "$KEYSTORE" -nocerts -nodes -passin "pass:$ANDROID_KEYSTORE_PASSWORD" $LEGACY_FLAG \
+  | "$OPENSSL" pkcs8 -topk8 -nocrypt -outform DER > "$KEY_DER"
+[[ -s "$KEY_DER" ]] || { echo "private key extraction produced nothing" >&2; exit 1; }
+"$OPENSSL" pkcs12 -in "$KEYSTORE" -nokeys -clcerts -passin "pass:$ANDROID_KEYSTORE_PASSWORD" $LEGACY_FLAG \
+  | "$OPENSSL" x509 -outform DER > "$CERT_DER"
+[[ -s "$CERT_DER" ]] || { echo "certificate extraction produced nothing" >&2; exit 1; }
+
+"$APKSIGNER" sign --key "$KEY_DER" --cert "$CERT_DER" --out "$OUT_APK" "$IN_APK"
 
 "$APKSIGNER" verify --print-certs "$OUT_APK"
 echo "signed: $OUT_APK"
