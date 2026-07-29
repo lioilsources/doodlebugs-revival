@@ -29,9 +29,16 @@ if [[ -z "$PLATFORM" || -z "$OUTPUT" ]]; then
   exit 2
 fi
 
+# BUILD_TARGET matters beyond the player itself: without -buildTarget the editor
+# opens on whatever platform the previous run on this machine left active and
+# compiles editor scripts with THAT platform's defines. Everything guarded by
+# #if UNITY_IOS — iOSPostProcessBuild above all — then simply does not exist, so
+# the exported project misses its Info.plist keys and framework links and the
+# archive dies on undefined _OBJC_CLASS_$_MC* symbols. Batchmode never reloads
+# scripts mid-run, so the target has to be right from the start.
 case "$PLATFORM" in
-  ios)     BUILD_METHOD="BuildIOS" ;;
-  android) BUILD_METHOD="BuildAndroid"
+  ios)     BUILD_METHOD="BuildIOS"     BUILD_TARGET="iOS" ;;
+  android) BUILD_METHOD="BuildAndroid" BUILD_TARGET="Android"
            # Unity wants a file path for an APK; accept a bare directory too.
            [[ "$OUTPUT" == *.apk ]] || OUTPUT="${OUTPUT%/}/doodlebugs.apk" ;;
   *)       echo "unknown platform '$PLATFORM' (expected ios or android)" >&2; exit 2 ;;
@@ -102,6 +109,7 @@ set +e
   -nographics \
   -quit \
   -projectPath "$REPO_ROOT" \
+  -buildTarget "$BUILD_TARGET" \
   -executeMethod "Doodlebugs.Editor.BuildScript.$BUILD_METHOD" \
   -buildPath "$OUTPUT" \
   -buildNumber "$BUILD_NUMBER" \
