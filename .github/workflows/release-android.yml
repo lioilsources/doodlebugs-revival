@@ -69,10 +69,12 @@ jobs:
           # Raise this, never lower it.
           VERSION_CODE_BASE: 100
         run: |
-          # Arithmetic happens here, not in a ${{ }} expression: GitHub Actions
-          # expressions have no + operator, and using one makes the whole workflow
-          # file unparseable — it shows up as a run named after the file path with
-          # no jobs, which is not an obvious error message.
+          # Arithmetic happens here, not in a GitHub Actions expression: those have
+          # no + operator, and using one makes the whole workflow file unparseable —
+          # it shows up as a run named after the file path with no jobs, which is
+          # not an obvious error message. Never write the dollar-brace-brace marker
+          # in these comments either; GitHub scans run: blocks for it regardless of
+          # the shell '#', so an empty one breaks the parse in exactly that way.
           export BUILD_NUMBER=$(( VERSION_CODE_BASE + GITHUB_RUN_NUMBER ))
           echo "Android versionCode = $BUILD_NUMBER"
           ./ci/unity-build.sh android Builds/Android/doodlebugs.apk
