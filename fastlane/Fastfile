@@ -36,8 +36,13 @@ platform :ios do
 
     UI.user_error!("#{XCODE_PROJECT} not found — run ci/unity-build.sh ios first") unless File.exist?(XCODE_PROJECT)
 
-    profile_name = ENV.fetch("PROFILE_NAME")   # exported by ci/install-profile.sh
-    team_id      = ENV.fetch("IOS_TEAM_ID")
+    # Xcode 26 cannot resolve a provisioning profile by NAME even when it sits in
+    # ~/Library/MobileDevice/Provisioning Profiles — PROVISIONING_PROFILE_SPECIFIER
+    # has to carry the UUID. Both come from ci/install-profile.sh, which also reads
+    # the team out of the profile itself so a stale IOS_TEAM_ID secret cannot break
+    # signing; the secret stays as a fallback only.
+    profile_uuid = ENV.fetch("PROFILE_UUID")
+    team_id      = ENV["PROFILE_TEAM_ID"] || ENV.fetch("IOS_TEAM_ID")
     bundle_id    = ENV["BUNDLE_ID_IOS"] || "com.ol1n.doodlebugsRevival"
 
     # iOSPostProcessBuild sets CODE_SIGN_STYLE=Automatic on both targets so a plain
@@ -55,7 +60,7 @@ platform :ios do
       targets: [APP_TARGET],
       use_automatic_signing: false,
       team_id: team_id,
-      profile_name: profile_name,
+      profile_name: profile_uuid,
       code_sign_identity: "Apple Distribution",
       bundle_identifier: bundle_id
     )
@@ -78,7 +83,7 @@ platform :ios do
       export_options: {
         signingStyle: "manual",
         teamID: team_id,
-        provisioningProfiles: { bundle_id => profile_name }
+        provisioningProfiles: { bundle_id => profile_uuid }
       }
     )
 
