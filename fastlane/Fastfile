@@ -1,6 +1,10 @@
 default_platform(:ios)
 
-XCODE_PROJECT    = "Builds/iOS/Unity-iPhone.xcodeproj"
+# fastlane executes the Fastfile from inside the fastlane/ directory, so a bare
+# relative path here silently points at fastlane/Builds/... which never exists.
+# Anchor everything to the repo root instead.
+ROOT             = File.expand_path("..", __dir__)
+XCODE_PROJECT    = File.join(ROOT, "Builds/iOS/Unity-iPhone.xcodeproj")
 APP_TARGET       = "Unity-iPhone"
 FRAMEWORK_TARGET = "UnityFramework"
 
@@ -78,7 +82,7 @@ platform :ios do
       scheme: APP_TARGET,
       configuration: "Release",
       export_method: "app-store",
-      output_directory: "Builds/ipa",
+      output_directory: File.join(ROOT, "Builds/ipa"),
       output_name: "doodlebugs.ipa",
       export_options: {
         signingStyle: "manual",
@@ -105,7 +109,9 @@ end
 platform :android do
   desc "Upload the signed APK to Firebase App Distribution"
   lane :android_beta do
-    apk_path = ENV["APK_PATH"] || "Builds/Android/doodlebugs-signed.apk"
+    # APK_PATH arrives relative to the repo root; expand it against ROOT because
+    # fastlane's working directory is fastlane/, not the repo (see header).
+    apk_path = File.expand_path(ENV["APK_PATH"] || "Builds/Android/doodlebugs-signed.apk", ROOT)
     UI.user_error!("#{apk_path} not found — run ci/unity-build.sh android first") unless File.exist?(apk_path)
 
     # service_credentials_file, not firebase_cli_token: the token flow is deprecated
