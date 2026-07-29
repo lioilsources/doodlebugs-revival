@@ -68,16 +68,32 @@ APKSIGNER="$(find_apksigner)"
 echo "using $APKSIGNER"
 
 # ── Sign ─────────────────────────────────────────────────────────────────────
+# The PKCS#12 extraction must run under a real OpenSSL 3. A launchd-started
+# runner has a bare PATH where `openssl` is LibreSSL, which cannot decrypt this
+# modern p12 — the extraction then fails silently and the script falls through
+# to the Java KeyStore branch, which dies on the very "Tag number over 30"
+# problem this script exists to bypass. Same trap as ci/unlock-keychain.sh.
+OPENSSL="$(
+  for c in /opt/homebrew/opt/openssl@3/bin/openssl /usr/local/opt/openssl@3/bin/openssl \
+           /opt/homebrew/bin/openssl /usr/local/bin/openssl openssl; do
+    command -v "$c" >/dev/null 2>&1 && "$c" version 2>/dev/null | grep -q '^OpenSSL 3' && { echo "$c"; break; }
+  done
+)"
+if [[ -z "$OPENSSL" ]]; then
+  OPENSSL=openssl
+  echo "warning: no OpenSSL 3 found, PKCS#12 extraction may falsely fail (brew install openssl@3)" >&2
+fi
+
 # apksigner --key/--cert want DER, not PEM. Passing PEM fails with a misleading
 # "Not an RSA, EC, or DSA private key", so -outform DER is load-bearing here.
 KEY_DER="$WORK/key.der"
 CERT_DER="$WORK/cert.der"
 
-if openssl pkcs12 -in "$KEYSTORE" -nocerts -nodes -passin "pass:$ANDROID_KEYSTORE_PASSWORD" 2>/dev/null \
-     | openssl pkcs8 -topk8 -nocrypt -outform DER > "$KEY_DER" 2>/dev/null \
+if "$OPENSSL" pkcs12 -in "$KEYSTORE" -nocerts -nodes -passin "pass:$ANDROID_KEYSTORE_PASSWORD" 2>/dev/null \
+     | "$OPENSSL" pkcs8 -topk8 -nocrypt -outform DER > "$KEY_DER" 2>/dev/null \
    && [[ -s "$KEY_DER" ]] \
-   && openssl pkcs12 -in "$KEYSTORE" -nokeys -clcerts -passin "pass:$ANDROID_KEYSTORE_PASSWORD" 2>/dev/null \
-     | openssl x509 -outform DER > "$CERT_DER" 2>/dev/null \
+   && "$OPENSSL" pkcs12 -in "$KEYSTORE" -nokeys -clcerts -passin "pass:$ANDROID_KEYSTORE_PASSWORD" 2>/dev/null \
+     | "$OPENSSL" x509 -outform DER > "$CERT_DER" 2>/dev/null \
    && [[ -s "$CERT_DER" ]]; then
 
   echo "keystore read as PKCS#12, signing via extracted DER key/cert"
