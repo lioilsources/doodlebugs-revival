@@ -116,12 +116,27 @@ platform :android do
 
     # service_credentials_file, not firebase_cli_token: the token flow is deprecated
     # and Google has been switching it off for new projects.
-    firebase_app_distribution(
+    common = {
       app: ENV.fetch("FIREBASE_ANDROID_APP_ID"),
       service_credentials_file: ENV.fetch("FIREBASE_SA_PATH"),
-      groups: ENV["FIREBASE_GROUPS"] || "testers",
       apk_path: apk_path,
       release_notes: ENV["RELEASE_NOTES"]
-    )
+    }
+
+    begin
+      firebase_app_distribution(common.merge(groups: ENV["FIREBASE_GROUPS"] || "testers"))
+    rescue => e
+      # The upload and the hand-out to testers are two separate API calls, and
+      # only the second one is failing here ("HALTED release must have
+      # fraction"). Failing the whole job at that point throws away a build
+      # that is already sitting in the Firebase console, so retry without the
+      # group and let a human hand it out.
+      UI.important("Distributing to the tester group failed: #{e.message}")
+      UI.important("Retrying upload without a group — the release will need to " \
+                   "be handed out from the Firebase console.")
+      firebase_app_distribution(common)
+      UI.important("Uploaded, but NOT distributed to testers. Check the group " \
+                   "alias in FIREBASE_GROUPS against the Firebase console.")
+    end
   end
 end
