@@ -1279,6 +1279,13 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 5fae625dcbdba489a90c8dc76ce2fa14, type: 2}
   - {fileID: 11400000, guid: 65efefff1f5b5464ba220f7fd2b0247e, type: 2}
   - {fileID: 11400000, guid: 2f0a184fe84d540ef800665eb040e4b8, type: 2}
+  adStrips:
+  - {fileID: 21300000, guid: 3ad28527fcdc4712998a56444252b4c5, type: 3}
+  - {fileID: 21300000, guid: 1dee69a269664aacb18bd3858a551777, type: 3}
+  - {fileID: 21300000, guid: 0527a8d1550c4cf0b69e7fbf44116bfa, type: 3}
+  - {fileID: 21300000, guid: af6e27b7536a4644a04c0a74051283d9, type: 3}
+  - {fileID: 21300000, guid: a130d3d0c1ff4beabeb55f17ef7296d9, type: 3}
+  - {fileID: 21300000, guid: 3b3fe7ea83ae4ec5941b9d0997c8fc97, type: 3}
 --- !u!4 &1705687248
 Transform:
   m_ObjectHideFlags: 0
