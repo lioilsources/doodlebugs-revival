@@ -3,7 +3,7 @@ guid: a130d3d0c1ff4beabeb55f17ef7296d9
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 2192210793205343004
+      213: 2192210793205341756
     second: AdStrip_strip_2_0
   externalObjects: {}
   serializedVersion: 13
@@ -132,7 +132,7 @@ TextureImporter:
         x: 0
         y: 0
         width: 4096
-        height: 1250
+        height: 810
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
