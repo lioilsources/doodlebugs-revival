@@ -119,6 +119,21 @@ def mix(a, b, t):
     return tuple(int(x + (y - x) * t) for x, y in zip(ca, cb))
 
 
+def _lum(c):
+    r, g, b = hex_rgb(c) if isinstance(c, str) else c[:3]
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def ink_for(bg, pal):
+    """Highest-contrast palette colour to print on `bg`.
+
+    Picking a fixed role (e.g. always pal['bg'] on white) fails for brands
+    whose palette is pale all round — cream on white is invisible.
+    """
+    return max((pal[k] for k in ("bg", "text", "border", "accent")),
+               key=lambda c: abs(_lum(c) - _lum(bg)))
+
+
 def draw_neon_sign(spec, rng):
     """Times-Square rooftop sign: near-black panel, bulb border, tube text."""
     w, h = spec["size"]
@@ -258,6 +273,88 @@ def draw_board(spec, variant):
     f2 = fit_font(d, initial, 80, start=64, floor=32)
     d.text((BOARD_W - 72 - d.textlength(initial, font=f2) // 2,
             (BOARD_H - f2.size) // 2), initial, font=f2, fill=bg)
+    return img
+
+
+def draw_panel(spec, variant, w, h, style):
+    """One advertising panel at an arbitrary size.
+
+    Rendered in memory rather than to a file: the tower builder needs many
+    width/height/style combinations and caching them all as sprites would be a
+    combinatorial mess.
+
+      board   painted tin panel, headline + slogan + initial block
+      neon    dark lit panel, marquee bulbs, glowing tube type
+      poster  the SDXL print creative for this brand, fitted and framed
+    """
+    pal = spec["palette"]
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+
+    if style == "poster":
+        src = OUT_DIR / f"ad_{spec['id']}.png"
+        if src.exists():
+            art = Image.open(src).convert("RGBA")
+            # Contain, not cover: the print creative carries its own headline
+            # along the bottom edge, and cropping to fill slices it off. The
+            # letterbox becomes a mat, which is how a poster is mounted anyway.
+            mat = mix(pal["bg"], "#151219", 0.55)
+            d.rectangle([0, 0, w - 1, h - 1], fill=mat)
+            s = min((w - 16) / art.width, (h - 16) / art.height)
+            art = art.resize((max(1, int(art.width * s)), max(1, int(art.height * s))),
+                             Image.LANCZOS)
+            img.alpha_composite(art, ((w - art.width) // 2, (h - art.height) // 2))
+            d.rectangle([0, 0, w - 1, h - 1], outline="#1C150F", width=max(3, w // 90))
+            return img
+        style = "board"      # print creative not generated yet — fall back
+
+    if style == "neon":
+        d.rectangle([0, 0, w - 1, h - 1], fill="#1A1822")
+        d.rectangle([8, 8, w - 9, h - 9],
+                    fill=mix(pal["bg"], "#0E0D14", 0.84) if variant == "c" else "#12111A")
+        step = max(26, w // 14)
+        for i, x in enumerate(range(16, w - 12, step)):
+            c = "#FFE9B0" if i % 2 == 0 else "#6B5A33"
+            d.ellipse([x - 4, 1, x + 4, 9], fill=c)
+            d.ellipse([x - 4, h - 10, x + 4, h - 2], fill=c)
+        inner = w - 44
+        lines = wrap_two_lines(d, spec["name"], inner, start=max(20, h // 4))
+        sf = fit_font(d, spec["slogan"], inner, start=max(12, h // 11), floor=10)
+        gap = 8
+        total = sum(f.size for _, f in lines) + gap * (len(lines) - 1) + 14 + sf.size
+        y = (h - total) // 2
+        for text, font in lines:
+            neon_text(img, ((w - d.textlength(text, font=font)) // 2, y),
+                      text, font, hex_rgb(pal["text"]))
+            y += font.size + gap
+        y += 14 - gap
+        neon_text(img, ((w - d.textlength(spec["slogan"], font=sf)) // 2, y),
+                  spec["slogan"], sf, hex_rgb(pal["accent"]))
+        return img
+
+    # board
+    if variant == "w":
+        bg = "#F2EFE6"
+        txt = ink_for(bg, pal)
+        accent = pal["border"] if _lum(pal["border"]) < 200 else txt
+    else:
+        bg, txt, accent = pal["bg"], ink_for(pal["bg"], pal), pal["accent"]
+    d.rectangle([0, 0, w - 1, h - 1], fill=bg)
+    rail = max(6, h // 16)
+    d.rectangle([0, 0, w - 1, rail], fill=accent)
+    d.rectangle([0, h - rail - 1, w - 1, h - 1], fill=accent)
+    inner = w - 32
+    lines = wrap_two_lines(d, spec["name"], inner, start=max(20, h // 3))
+    sf = fit_font(d, spec["slogan"], inner, start=max(11, h // 10), floor=9)
+    gap = 6
+    total = sum(f.size for _, f in lines) + gap * (len(lines) - 1) + 10 + sf.size
+    y = (h - total) // 2
+    for text, font in lines:
+        d.text(((w - d.textlength(text, font=font)) // 2, y), text, font=font, fill=txt)
+        y += font.size + gap
+    y += 10 - gap
+    d.text(((w - d.textlength(spec["slogan"], font=sf)) // 2, y),
+           spec["slogan"], font=sf, fill=mix(txt, bg, 0.30))
     return img
 
 

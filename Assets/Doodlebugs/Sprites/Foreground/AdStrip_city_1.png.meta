@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 712dd2a52aa44a9ab4f34c2be3d6b4c4
+guid: 1dee69a269664aacb18bd3858a551777
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 2192210793205342002
-    second: AdStrip_mixed_1_0
+      213: 2192210793205343001
+    second: AdStrip_city_1_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -126,7 +126,7 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: AdStrip_mixed_1_0
+      name: AdStrip_city_1_0
       rect:
         serializedVersion: 2
         x: 0
@@ -161,7 +161,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      AdStrip_mixed_1_0: 2192210793205341756
+      AdStrip_city_1_0: 2192210793205341756
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

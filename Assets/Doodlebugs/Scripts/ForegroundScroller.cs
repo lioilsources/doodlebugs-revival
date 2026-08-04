@@ -314,6 +314,9 @@ public class ForegroundScroller : MonoBehaviour
         int rows = Mathf.CeilToInt((float)spriteH / tilePixelSize);
         int tileCount = 0;
 
+        var grid = sr.GetComponent<ForegroundTileGrid>();
+        if (grid == null) grid = sr.gameObject.AddComponent<ForegroundTileGrid>();
+
         for (int row = 0; row < rows; row++)
         {
             for (int col = 0; col < cols; col++)
@@ -350,6 +353,7 @@ public class ForegroundScroller : MonoBehaviour
                 var ft = tileGO.AddComponent<ForegroundTile>();
                 ft.Col = col;
                 ft.Row = row;
+                grid.Register(ft);
                 tileCount++;
             }
         }
@@ -385,14 +389,29 @@ public class ForegroundScroller : MonoBehaviour
         float r2 = radius * radius;
         foreach (var copy in _copies)
         {
+            int minCol = int.MaxValue, maxCol = int.MinValue, minRow = int.MaxValue;
+            ForegroundTile any = null;
+
             // Backwards: LaunchDebris() detaches the tile from this parent
             for (int i = copy.transform.childCount - 1; i >= 0; i--)
             {
                 var tile = copy.transform.GetChild(i);
                 if (!tile.gameObject.activeSelf) continue;
                 if (((Vector2)tile.position - center).sqrMagnitude > r2) continue;
-                tile.GetComponent<ForegroundTile>()?.LaunchDebris();
+
+                var ft = tile.GetComponent<ForegroundTile>();
+                if (ft == null) continue;
+                minCol = Mathf.Min(minCol, ft.Col);
+                maxCol = Mathf.Max(maxCol, ft.Col);
+                minRow = Mathf.Min(minRow, ft.Row);
+                any = ft;
+                ft.LaunchDebris();
             }
+
+            // A crater is a hole like any other: whatever was standing on the
+            // part that just went up in smoke comes down after it.
+            if (any != null)
+                any.CollapseAbove(minCol - 1, maxCol + 1, minRow - 1);
         }
     }
 
@@ -400,6 +419,11 @@ public class ForegroundScroller : MonoBehaviour
     {
         for (int i = 0; i < sr.transform.childCount; i++)
             sr.transform.GetChild(i).gameObject.SetActive(true);
+
+        // Healing puts the tiles back, so the structure they form has to be
+        // registered again — otherwise a healed tower is still remembered as
+        // cut and collapses the moment anything grazes it.
+        sr.GetComponent<ForegroundTileGrid>()?.Rebuild();
     }
 
     private double GetNetworkTime()
