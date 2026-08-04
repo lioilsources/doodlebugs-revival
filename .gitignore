@@ -101,3 +101,10 @@ fastlane/screenshots/
 fastlane/test_output/
 vendor/bundle/
 .bundle/
+
+# ads pipeline working dirs (base/ holds pristine strips incl. superseded art)
+tools/ads/base/
+tools/ads/out/
+tools/ads/sprites/
+tools/ads/art/
+__pycache__/
