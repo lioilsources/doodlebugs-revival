@@ -216,6 +216,40 @@ def compose_map(name, cfg, out_dir, apply_to_assets):
         placed.append((x, y, tilted.width, tilted.height))
         print(f"  {name}: prop {prop['shape']}/{prop['brand']} at x={x + 8} y={y}")
 
+    # Continuous advertising wall — the hockey-rink / Broadway treatment. Runs
+    # the full 4096px at ONE fixed height instead of following the terrain, so
+    # it reads as a built structure rather than scattered signage. 512 divides
+    # 4096 exactly, so the last panel butts against the first across the wrap
+    # seam and the wall has no visible end while the strip scrolls.
+    band_cfg = cfg.get("band")
+    if band_cfg:
+        import generate_ad_signs as gas_band
+        style = band_cfg.get("style", "rink")
+        bw, bh = gas_band.BAND_W, gas_band.BAND_H[style]
+        pool = [s for s in BRANDS["signs"] if name in s["maps"]] or list(BRANDS["signs"])
+        rng.shuffle(pool)
+
+        solid = [t for t in soil if t is not None]
+        # Sit the wall on the typical ground height, not the extremes: a single
+        # peak or gully must not drag the whole run up or down.
+        solid.sort()
+        base = solid[int(len(solid) * band_cfg.get("ground_quantile", 0.5))]
+        band_bottom = base + band_cfg.get("sink", 20)
+        band_top = band_bottom - bh
+
+        for i, x in enumerate(range(0, strip.width, bw)):
+            spec = pool[i % len(pool)]
+            panel = Image.open(
+                ADS_DIR / f"band_{style}_{spec['id']}_{'w' if i % 2 == 0 else 'c'}.png")
+            # Plinth: fill from the panel down to whatever ground is under this
+            # column, so the wall stands solid over dips instead of floating.
+            for cx in range(x, min(x + bw, strip.width)):
+                g = soil[cx]
+                if g is not None and g > band_bottom:
+                    draw.line([(cx, band_bottom - 2), (cx, g)], fill="#2E2A24")
+            strip.alpha_composite(panel, (x, band_top))
+        print(f"  {name}: {style} band, {strip.width // bw} panels at y={band_top}")
+
     # Stadium perimeter boards — a continuous run of low ad panels standing on
     # the ground like hockey rink boards. Each 480px segment steps up or down
     # with its own stretch of terrain, so the run follows rolling ground the

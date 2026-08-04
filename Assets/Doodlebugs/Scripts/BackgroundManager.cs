@@ -16,7 +16,17 @@ public class BackgroundManager : NetworkBehaviour
     [Header("Available Backgrounds")]
     [SerializeField] private BackgroundProfile[] profiles;
 
+    [Header("Advertising Foregrounds")]
+    [Tooltip("Ad-wall strips that rotate independently of the background. When " +
+             "any are assigned they replace the profile's own foreground, so a " +
+             "new background needs no foreground authored for it.")]
+    [SerializeField] private Sprite[] adStrips;
+
     private NetworkVariable<int> _backgroundIndex = new NetworkVariable<int>(-1);
+
+    // Separate from the background index on purpose: the same map showing a
+    // different wall of ads each round is most of where the variety comes from.
+    private NetworkVariable<int> _adStripIndex = new NetworkVariable<int>(-1);
 
     private void Awake()
     {
@@ -33,6 +43,7 @@ public class BackgroundManager : NetworkBehaviour
         base.OnNetworkSpawn();
 
         _backgroundIndex.OnValueChanged += OnBackgroundIndexChanged;
+        _adStripIndex.OnValueChanged += OnAdStripIndexChanged;
 
         // Late-joining client: apply already-selected background
         if (_backgroundIndex.Value >= 0)
@@ -49,6 +60,7 @@ public class BackgroundManager : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         _backgroundIndex.OnValueChanged -= OnBackgroundIndexChanged;
+        _adStripIndex.OnValueChanged -= OnAdStripIndexChanged;
         base.OnNetworkDespawn();
     }
 
@@ -77,8 +89,36 @@ public class BackgroundManager : NetworkBehaviour
             newIndex = (newIndex + 1) % profiles.Length;
         }
 
+        // Ad strip first: both indices trigger a foreground rebuild, and
+        // setting this one last would make every round rebuild the terrain
+        // twice.
+        SelectRandomAdStrip();
+
         Debug.Log($"[BackgroundManager] Server selected background index: {newIndex}");
         _backgroundIndex.Value = newIndex;
+    }
+
+    /// <summary>
+    /// Picks the advertising wall for this round and syncs it. Runs alongside
+    /// the background selection but keeps its own index, so background and ads
+    /// vary independently.
+    /// </summary>
+    public void SelectRandomAdStrip()
+    {
+        if (!IsServer || adStrips == null || adStrips.Length == 0)
+        {
+            return;
+        }
+
+        int newIndex = Random.Range(0, adStrips.Length);
+
+        if (adStrips.Length > 1 && newIndex == _adStripIndex.Value)
+        {
+            newIndex = (newIndex + 1) % adStrips.Length;
+        }
+
+        Debug.Log($"[BackgroundManager] Server selected ad strip index: {newIndex}");
+        _adStripIndex.Value = newIndex;
     }
 
     /// <summary>
@@ -106,6 +146,37 @@ public class BackgroundManager : NetworkBehaviour
         ApplyBackground(newValue);
     }
 
+    private void OnAdStripIndexChanged(int oldValue, int newValue)
+    {
+        // Re-apply the current background so the foreground is rebuilt with the
+        // new strip; the two indices can change in either order.
+        if (_backgroundIndex.Value >= 0)
+        {
+            ApplyBackground(_backgroundIndex.Value);
+        }
+    }
+
+    /// <summary>
+    /// The ad wall to show, or the profile's own foreground when no ad strips
+    /// are assigned (which is how the pre-ads maps keep working unchanged).
+    /// </summary>
+    private Sprite ResolveForeground(BackgroundProfile profile)
+    {
+        if (adStrips != null && adStrips.Length > 0)
+        {
+            int i = _adStripIndex.Value;
+            if (i < 0 || i >= adStrips.Length)
+            {
+                i = 0;
+            }
+            if (adStrips[i] != null)
+            {
+                return adStrips[i];
+            }
+        }
+        return profile.foregroundSprite;
+    }
+
     private void ApplyBackground(int index)
     {
         if (profiles == null || index < 0 || index >= profiles.Length)
@@ -129,7 +200,7 @@ public class BackgroundManager : NetworkBehaviour
         if (ForegroundScroller.Instance != null)
         {
             ForegroundScroller.Instance.SetForeground(
-                profile.foregroundSprite,
+                ResolveForeground(profile),
                 profile.foregroundScrollSpeed,
                 profile.foregroundBottomOffset,
                 profile.foregroundScale

@@ -113,6 +113,12 @@ def hex_rgb(h):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 
+def mix(a, b, t):
+    """Blend hex colour a toward b by t (0..1)."""
+    ca, cb = hex_rgb(a), hex_rgb(b)
+    return tuple(int(x + (y - x) * t) for x, y in zip(ca, cb))
+
+
 def draw_neon_sign(spec, rng):
     """Times-Square rooftop sign: near-black panel, bulb border, tube text."""
     w, h = spec["size"]
@@ -152,6 +158,77 @@ def draw_neon_sign(spec, rng):
 
 
 BOARD_W, BOARD_H = 480, 130
+
+# Band panels tile edge to edge across the whole 4096px strip. 512 divides
+# 4096 exactly, which is what lets the run continue through the wrap seam —
+# the last panel meets the first one and the wall never shows an end.
+BAND_W = 512
+BAND_H = {"rink": 150, "broadway": 320}
+
+
+def draw_band_panel(spec, variant, style):
+    """One segment of a continuous advertising wall.
+
+    'rink'     — low hockey-boards panel, alternating white/brand.
+    'broadway' — tall lit sign: dark panel, marquee bulbs, neon-ish type.
+    """
+    w, h = BAND_W, BAND_H[style]
+    pal = spec["palette"]
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+
+    if style == "rink":
+        if variant == "w":
+            bg, txt, accent = "#F2EFE6", pal["bg"], pal["border"]
+        else:
+            bg, txt, accent = pal["bg"], pal["text"], pal["accent"]
+        d.rectangle([0, 0, w - 1, h - 1], fill=bg)
+        d.rectangle([0, 0, w - 1, 10], fill=accent)              # top rail
+        d.rectangle([0, h - 11, w - 1, h - 1], fill=accent)      # kick plate
+        name = " ".join(spec["name"].split()[:2])
+        font = fit_font(d, name, w - 150, start=44, floor=16)
+        d.text((26, (h - font.size) // 2 - 6), name, font=font, fill=txt)
+        sf = fit_font(d, spec["slogan"], w - 150, start=16, floor=10)
+        # Slogan in a faded headline colour, not the accent: several accents
+        # sit too close to their own panel colour to stay legible at this size.
+        d.text((26, (h + font.size) // 2 + 2), spec["slogan"], font=sf,
+               fill=mix(txt, bg, 0.30))
+        d.rectangle([w - 108, 26, w - 22, h - 27], fill=accent)  # brand block
+        initial = name[0]
+        f2 = fit_font(d, initial, 70, start=56, floor=28)
+        d.text((w - 65 - d.textlength(initial, font=f2) // 2,
+                (h - f2.size) // 2), initial, font=f2, fill=bg)
+        return img
+
+    # broadway: a lit sign in the wall. The panel is always dark — brands with
+    # a pale palette (gold, cream) would otherwise wash the neon out entirely —
+    # so the brand colour survives only as a faint tint and in the tubes.
+    d.rectangle([0, 0, w - 1, h - 1], fill="#1A1822")
+    d.rectangle([10, 10, w - 11, h - 11],
+                fill=mix(pal["bg"], "#0E0D14", 0.84) if variant == "c" else "#12111A")
+    for i, x in enumerate(range(22, w - 16, 34)):                # marquee bulbs
+        c = "#FFE9B0" if i % 2 == 0 else "#6B5A33"
+        d.ellipse([x - 5, 2, x + 5, 12], fill=c)
+        d.ellipse([x - 5, h - 13, x + 5, h - 3], fill=c)
+    for i, y in enumerate(range(24, h - 18, 34)):
+        c = "#FFE9B0" if i % 2 == 0 else "#6B5A33"
+        d.ellipse([2, y - 5, 12, y + 5], fill=c)
+        d.ellipse([w - 13, y - 5, w - 3, y + 5], fill=c)
+
+    inner = w - 70
+    lines = wrap_two_lines(d, spec["name"], inner, start=56)
+    sf = fit_font(d, spec["slogan"], inner, start=22, floor=12)
+    gap = 12
+    total = sum(f.size for _, f in lines) + gap * (len(lines) - 1) + 20 + sf.size
+    y = (h - total) // 2
+    for text, font in lines:
+        neon_text(img, ((w - d.textlength(text, font=font)) // 2, y),
+                  text, font, hex_rgb(pal["text"]))
+        y += font.size + gap
+    y += 20 - gap
+    neon_text(img, ((w - d.textlength(spec["slogan"], font=sf)) // 2, y),
+              spec["slogan"], sf, hex_rgb(pal["accent"]))
+    return img
 
 
 def draw_board(spec, variant):
@@ -197,6 +274,9 @@ def main():
         print(f"{out.name}  {img.size[0]}x{img.size[1]}")
         for variant in ("w", "c"):
             draw_board(spec, variant).save(OUT_DIR / f"board_{spec['id']}_{variant}.png")
+            for style in BAND_H:
+                draw_band_panel(spec, variant, style).save(
+                    OUT_DIR / f"band_{style}_{spec['id']}_{variant}.png")
 
 
 if __name__ == "__main__":
