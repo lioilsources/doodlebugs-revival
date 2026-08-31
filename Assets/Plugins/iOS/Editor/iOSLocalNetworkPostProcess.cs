@@ -28,13 +28,20 @@ public class iOSLocalNetworkPostProcess
         if (target != BuildTarget.iOS)
             return;
 
-        // Info.plist: local network usage description.
-        // NSBonjourServices is intentionally NOT set - discovery uses raw UDP
-        // broadcast, not Bonjour.
+        // Info.plist: local network usage description + Bonjour service types.
+        // NSBonjourServices is REQUIRED on iOS 14+ for MultipeerConnectivity —
+        // MCNearbyServiceBrowser/Advertiser publish the session as Bonjour
+        // services named after NativeLocalCoopManager.SERVICE_TYPE. Without
+        // these keys browsing fails silently and iOS devices never pair
+        // (iOS pairs exclusively through Multipeer since the Wi-Fi broadcast
+        // path was gated off in ConnectionManager.DetermineMode).
         string plistPath = Path.Combine(pathToBuiltProject, "Info.plist");
         PlistDocument plist = new PlistDocument();
         plist.ReadFromFile(plistPath);
         plist.root.SetString("NSLocalNetworkUsageDescription", LocalNetworkUsageDescription);
+        PlistElementArray bonjour = plist.root.CreateArray("NSBonjourServices");
+        bonjour.AddString("_doodlebugs._tcp");
+        bonjour.AddString("_doodlebugs._udp");
         plist.WriteToFile(plistPath);
 
         // Optional multicast entitlement

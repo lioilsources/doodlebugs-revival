@@ -73,10 +73,20 @@ namespace Doodlebugs.Network
         private static bool IsMobile => Application.platform == RuntimePlatform.Android ||
                                         Application.platform == RuntimePlatform.IPhonePlayer;
 
-        // Native P2P fallback only when on mobile (Android/iOS) AND on carrier data.
-        // On Wi-Fi we keep the existing UDP broadcast path unchanged.
+        // iOS always pairs over MultipeerConnectivity. The UDP broadcast path
+        // needs Apple's multicast entitlement on iOS 14+ (not granted — see
+        // iOSLocalNetworkPostProcess), so over Wi-Fi it fails to pair in
+        // production even after the user accepts the local-network prompt.
+        // Multipeer needs no entitlement and covers Wi-Fi, peer-to-peer Wi-Fi
+        // and Bluetooth. Costs: 8-player cap and no iOS↔desktop LAN cross-play.
+        // Android keeps the old behaviour: broadcast works there (with the
+        // MulticastLock), so carrier data remains the only Nearby trigger.
         private LocalCoopMode DetermineMode()
         {
+            if (Application.platform == RuntimePlatform.IPhonePlayer)
+            {
+                return LocalCoopMode.NativeP2P;
+            }
             if (IsMobile &&
                 Application.internetReachability == NetworkReachability.ReachableViaCarrierDataNetwork)
             {
