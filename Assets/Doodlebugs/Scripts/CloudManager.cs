@@ -13,12 +13,12 @@ public class CloudManager : MonoBehaviour
     public static CloudManager Instance { get; private set; }
 
     [Header("Cloud Settings")]
-    public int cloudCount = 3;
+    public int cloudCount = 2;
     public float minSpeed = 1f;
     public float maxSpeed = 3f;
 
     [Header("Cloud Scales (one per cloud)")]
-    public float[] cloudScales = new float[] { 3f, 6f, 9f };
+    public float[] cloudScales = new float[] { 2.5f, 5f };
 
     [Header("Height Range")]
     public float minHeight = 5f;
@@ -31,6 +31,13 @@ public class CloudManager : MonoBehaviour
     private GameObject _cloudPrefab;
     private bool _networkedCloudsSpawned = false;
     private bool _localCloudsSpawned = false;
+
+    // Per-round cloud skins: variants load from Resources and are chosen by
+    // the replicated background index, so all clients agree without any new
+    // netcode. Canvases match the original Cloud.png size, keeping collider
+    // and spawn maths untouched.
+    private Sprite[] _cloudSkins;
+    private int _appliedSkinIndex = -1;
 
     // Respawn queue system - prevents multiple players spawning at same cloud
     private Dictionary<int, float> _cloudCooldowns = new Dictionary<int, float>();
@@ -291,6 +298,31 @@ public class CloudManager : MonoBehaviour
         Debug.Log($"[CloudManager] Spawned networked cloud at ({x}, {y}) with speed={speed}, scale={scale}");
     }
 
+    /// <summary>Re-skin every cloud when the round's background changes.</summary>
+    private void ApplyRoundSkin()
+    {
+        var bm = BackgroundManager.Instance;
+        if (bm == null) return;
+        int index = bm.BackgroundIndex;
+        if (index < 0 || index == _appliedSkinIndex) return;
+
+        _cloudSkins ??= Resources.LoadAll<Sprite>("Sprites/Clouds");
+        if (_cloudSkins == null || _cloudSkins.Length == 0) return;
+        _appliedSkinIndex = index;
+
+        int i = 0;
+        foreach (var cloud in _clouds)
+        {
+            var sr = cloud != null ? cloud.GetComponent<SpriteRenderer>() : null;
+            if (sr != null) sr.sprite = _cloudSkins[(index + i++) % _cloudSkins.Length];
+        }
+        foreach (var go in _localClouds)
+        {
+            var sr = go != null ? go.GetComponent<SpriteRenderer>() : null;
+            if (sr != null) sr.sprite = _cloudSkins[(index + i++) % _cloudSkins.Length];
+        }
+    }
+
     /// <summary>
     /// Called by Cloud when it reaches the right edge
     /// </summary>
@@ -454,6 +486,7 @@ public class CloudManager : MonoBehaviour
 
     private void Update()
     {
+        ApplyRoundSkin();
         // Process respawn queue - try to spawn waiting players
         if (_respawnQueue.Count > 0)
         {

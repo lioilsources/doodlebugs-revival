@@ -24,6 +24,11 @@ public class BackgroundManager : NetworkBehaviour
 
     private NetworkVariable<int> _backgroundIndex = new NetworkVariable<int>(-1);
 
+    /// <summary>Replicated index of the round's background; -1 before the
+    /// first selection. Cosmetic systems (cloud skins) key off it so every
+    /// client derives the same look with no netcode of their own.</summary>
+    public int BackgroundIndex => _backgroundIndex.Value;
+
     // Separate from the background index on purpose: the same map showing a
     // different wall of ads each round is most of where the variety comes from.
     private NetworkVariable<int> _adStripIndex = new NetworkVariable<int>(-1);
