@@ -33,10 +33,16 @@ public class Bullet : NetworkBehaviour
     /// Runs on every client (ForegroundTile checks it locally).</summary>
     public bool IsArmed => Time.time - _spawnTime >= Profile.ArmDelay;
 
+    /// <summary>The prefab's shared bullet sprite, restored when a pooled
+    /// bullet switches from an override weapon back to a plain one.</summary>
+    private Sprite _defaultSprite;
+
     private void Awake()
     {
         _rb = GetComponent<Rigidbody2D>();
         _baseScale = transform.localScale;
+        var sr = GetComponent<SpriteRenderer>();
+        if (sr != null) _defaultSprite = sr.sprite;
     }
 
     public override void OnNetworkSpawn()
@@ -77,7 +83,25 @@ public class Bullet : NetworkBehaviour
         var sr = GetComponent<SpriteRenderer>();
         if (sr != null)
         {
-            sr.color = profile.ProjectileTint;
+            if (!string.IsNullOrEmpty(profile.ProjectileSpriteName))
+            {
+                var overrideSprite = Resources.Load<Sprite>(
+                    "Sprites/Projectiles/" + profile.ProjectileSpriteName);
+                if (overrideSprite != null)
+                {
+                    sr.sprite = overrideSprite;
+                    sr.color = Color.white; // the art carries its own colours
+                }
+                else
+                {
+                    sr.color = profile.ProjectileTint;
+                }
+            }
+            else
+            {
+                if (_defaultSprite != null) sr.sprite = _defaultSprite;
+                sr.color = profile.ProjectileTint;
+            }
             // Bullets render below clouds (order 10), so a lurking mine is
             // naturally hidden while it drifts inside one.
         }

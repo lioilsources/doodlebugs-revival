@@ -58,6 +58,11 @@ public class WeaponProfile
     /// <summary>Visual tint (bomb dark, rocket orange, mine near-black).</summary>
     public Color ProjectileTint = Color.white;
 
+    /// <summary>Optional sprite override, loaded from Resources/Sprites/
+    /// Projectiles. Null = the shared bullet sprite. When set, the tint is
+    /// ignored — the art carries its own colours.</summary>
+    public string ProjectileSpriteName;
+
     /// <summary>Next tier when a weapon crate is collected (null = maxed).</summary>
     public WeaponType? UpgradesTo;
 
@@ -123,8 +128,11 @@ public class WeaponProfile
             GravityScale = 1.2f,
             BulletLifetime = 8f,         // safety despawn if it never lands
             ExplosionRadius = 3.5f,
-            ProjectileScale = 2.2f,
+            // Scale 1: the Little Boy sprite is authored at its world size,
+            // unlike the shared tracer sprite the 2.2 was compensating for.
+            ProjectileScale = 1f,
             ProjectileTint = new Color(0.25f, 0.25f, 0.28f),
+            ProjectileSpriteName = "bomb_littleboy",
             UpgradesTo = null
         },
         new WeaponProfile

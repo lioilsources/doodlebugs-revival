@@ -23,6 +23,13 @@ public class MusicManager : MonoBehaviour
     private float _battleWeight;   // 0 = hangar bed, 1 = battle bed
     private bool _ducked;
 
+    // Variant pools: every clip in Resources/Music/Hangar and /Battle is a
+    // candidate; the round's replicated background index picks one, so every
+    // device in the room hears the same track and it rotates with the arena.
+    private AudioClip[] _hangarPool;
+    private AudioClip[] _battlePool;
+    private int _appliedVariant = -1;
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Initialize()
     {
@@ -40,15 +47,16 @@ public class MusicManager : MonoBehaviour
         }
         Instance = this;
 
-        _hangar = CreateLoop("Music/music_hangar");
-        _battle = CreateLoop("Music/music_battle");
+        _hangarPool = Resources.LoadAll<AudioClip>("Music/Hangar");
+        _battlePool = Resources.LoadAll<AudioClip>("Music/Battle");
+        _hangar = CreateLoop(_hangarPool.Length > 0 ? _hangarPool[0] : null);
+        _battle = CreateLoop(_battlePool.Length > 0 ? _battlePool[0] : null);
         if (_hangar != null) _hangar.volume = Volume;
         if (_battle != null) _battle.volume = 0f;
     }
 
-    private AudioSource CreateLoop(string resourcePath)
+    private AudioSource CreateLoop(AudioClip clip)
     {
-        var clip = Resources.Load<AudioClip>(resourcePath);
         if (clip == null) return null;
         var source = gameObject.AddComponent<AudioSource>();
         source.clip = clip;
@@ -59,9 +67,33 @@ public class MusicManager : MonoBehaviour
         return source;
     }
 
+    /// <summary>Swap both beds to the round's variant when the arena rotates.</summary>
+    private void ApplyVariant()
+    {
+        var bm = BackgroundManager.Instance;
+        if (bm == null) return;
+        int index = bm.BackgroundIndex;
+        if (index < 0 || index == _appliedVariant) return;
+        _appliedVariant = index;
+
+        Retarget(_hangar, _hangarPool, index);
+        Retarget(_battle, _battlePool, index);
+    }
+
+    private static void Retarget(AudioSource source, AudioClip[] pool, int index)
+    {
+        if (source == null || pool == null || pool.Length == 0) return;
+        var clip = pool[index % pool.Length];
+        if (source.clip == clip) return;
+        source.clip = clip;
+        source.Play();
+    }
+
     private void Update()
     {
         if (_hangar == null || _battle == null) return;
+
+        ApplyVariant();
 
         var mm = MatchManager.Instance;
         bool battle = mm != null && mm.Phase == MatchManager.GamePhase.Battle;
