@@ -53,13 +53,13 @@ FRAME, FRAME_LIT = "#2A2721", "#3E392F"
 # gap       (min, max) px of sky between towers
 # styles    weighted panel styles
 PROFILES = {
-    "city":     dict(tower_w=(320, 448, 576), floors=(2, 6), gap=(90, 260),
+    "city":     dict(tower_w=(320, 448, 576), floors=(1, 4), gap=(70, 420),
                      styles=["board", "poster", "poster", "neon"], seeds=(101, 202)),
-    "broadway": dict(tower_w=(448, 576), floors=(2, 5), gap=(130, 320),
+    "broadway": dict(tower_w=(448, 576), floors=(1, 3), gap=(110, 480),
                      styles=["neon", "neon", "poster"], seeds=(303,)),
-    "suburb":   dict(tower_w=(384, 512), floors=(1, 3), gap=(220, 520),
+    "suburb":   dict(tower_w=(384, 512), floors=(1, 2), gap=(220, 640),
                      styles=["board", "poster"], seeds=(404,)),
-    "strip":    dict(tower_w=(512, 640), floors=(1, 2), gap=(180, 420),
+    "strip":    dict(tower_w=(512, 640), floors=(1, 2), gap=(180, 520),
                      styles=["board", "board", "poster"], seeds=(505, 606)),
 }
 FLOOR_H = (150, 300)
@@ -97,7 +97,15 @@ def plan(cfg, rng):
     towers, x = [], rng.randint(*cfg["gap"])
     while True:
         w = rng.choice(cfg["tower_w"])
-        gap = rng.randint(*cfg["gap"])
+        # A skyline breathes when the rhythm breaks: every few towers either
+        # a huddled pair (almost touching) or a wide-open block of sky.
+        r = rng.random()
+        if r < 0.22:
+            gap = rng.randint(24, 60)                       # huddle
+        elif r < 0.40:
+            gap = int(rng.randint(*cfg["gap"]) * 1.8)       # open sky
+        else:
+            gap = rng.randint(*cfg["gap"])
         if x + w + gap > STRIP_W:
             break
         floors = [floor_height(w, rng) for _ in range(rng.randint(*cfg["floors"]))]
@@ -136,6 +144,66 @@ def draw_tower(img, d, x, w, floors, ground_y, pool, cfg, rng, idx):
     d.ellipse([x + w // 2 - 6, top - 32, x + w // 2 + 6, top - 20], fill="#C4452F")
 
 
+FLOWER_PALETTES = [("#D8433C", "#F2B23A"), ("#E8B4C8", "#F2E23A"),
+                   ("#F2F2F2", "#F2B23A"), ("#B44CC8", "#F2E23A")]
+
+
+def draw_flower(d, x, base_y, rng):
+    """One chunky 8-bit flower: stem, two leaves, cross of petals, centre."""
+    h = rng.randint(48, 92)
+    petal, centre = rng.choice(FLOWER_PALETTES)
+    d.rectangle([x - 3, base_y - h, x + 3, base_y], fill="#3E7A34")
+    d.rectangle([x - 14, base_y - h // 2, x - 3, base_y - h // 2 + 8], fill="#4E9440")
+    d.rectangle([x + 3, base_y - h // 3, x + 14, base_y - h // 3 + 8], fill="#4E9440")
+    r = rng.randint(12, 19)
+    cx, cy = x, base_y - h
+    for dx, dy in ((-r, 0), (r, 0), (0, -r), (0, r)):
+        d.rectangle([cx + dx - r + 2, cy + dy - r + 2,
+                     cx + dx + r - 2, cy + dy + r - 2], fill=petal)
+    d.rectangle([cx - r + 3, cy - r + 3, cx + r - 3, cy + r - 3], fill=centre)
+
+
+def dress_street(img, d, towers, ground_y, rng):
+    """Flower beds and parked motorcars along the plinth, in the gaps between
+    towers so the destructible tiles they land on are scenery, not cover."""
+    import generate_ad_props as gap_props
+    by_id = {s["id"]: s for s in BRANDS["signs"]}
+    car_brands = [p["brand"] for p in BRANDS.get("props", []) if p["shape"] == "car"] or ["griffon_motors"]
+
+    edges = [t[0] for t in towers] + [t[0] + t[1] for t in towers]
+    spans = []
+    xs = sorted([0] + edges + [STRIP_W])
+    for a, b in zip(xs[::2], xs[1::2]):
+        pass  # spans built below from tower extents instead
+    occupied = sorted((x, x + w) for x, w, _ in towers)
+    cur = 0
+    for a, b in occupied:
+        if a - cur > 140:
+            spans.append((cur, a))
+        cur = b
+    if STRIP_W - cur > 140:
+        spans.append((cur, STRIP_W))
+
+    for a, b in spans:
+        width = b - a
+        # Flower bed: a loose row filling part of the gap.
+        if rng.random() < 0.9:
+            n = max(3, min(10, width // 70))
+            for i in range(n):
+                fx = a + 30 + int((width - 60) * (i + rng.uniform(0.1, 0.9)) / n)
+                draw_flower(d, fx, ground_y + rng.randint(6, 14), rng)
+        # Parked car in the wider gaps.
+        if width > 420 and rng.random() < 0.6:
+            spec = by_id[rng.choice(car_brands)]
+            car = gap_props.draw_car(spec["palette"], spec["name"].split()[0])
+            scale = rng.uniform(0.42, 0.55)
+            # No mirroring: the door carries brand lettering and flipped text
+            # reads as a glitch, not a parked car.
+            car = car.resize((int(car.width * scale), int(car.height * scale)), Image.LANCZOS)
+            cx = rng.randint(a + 20, b - car.width - 20)
+            img.alpha_composite(car, (cx, ground_y + 16 - car.height))
+
+
 def build(profile, seed):
     cfg = PROFILES[profile]
     rng = random.Random(seed)
@@ -154,6 +222,7 @@ def build(profile, seed):
     for x, w, floors in towers:
         draw_tower(img, d, x, w, floors, ground_y, pool, cfg, rng, idx)
         idx += len(floors)
+    dress_street(img, d, towers, ground_y, rng)
     return img, len(towers), tallest
 
 
