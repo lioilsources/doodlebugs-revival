@@ -110,7 +110,13 @@ def plan(cfg, rng):
             break
         floors = [floor_height(w, rng) for _ in range(rng.randint(*cfg["floors"]))]
         towers.append((x, w, floors))
-        x += w + gap
+        x += w
+        # An open block of sky still gets an ad: a knee-high roadside board
+        # in the middle of the gap. Billboards everywhere — just not tall ones.
+        if gap > 420:
+            mw = rng.choice((256, 288, 320))
+            towers.append((x + (gap - mw) // 2, mw, [rng.randint(140, 180)]))
+        x += gap
     return towers
 
 
@@ -164,17 +170,9 @@ def draw_flower(d, x, base_y, rng):
 
 
 def dress_street(img, d, towers, ground_y, rng):
-    """Flower beds and parked motorcars along the plinth, in the gaps between
-    towers so the destructible tiles they land on are scenery, not cover."""
-    import generate_ad_props as gap_props
-    by_id = {s["id"]: s for s in BRANDS["signs"]}
-    car_brands = [p["brand"] for p in BRANDS.get("props", []) if p["shape"] == "car"] or ["griffon_motors"]
-
-    edges = [t[0] for t in towers] + [t[0] + t[1] for t in towers]
+    """Flower beds along the plinth. Motorcars now live INSIDE the billboards
+    as Matchbox-style print creatives, not parked on the kerb."""
     spans = []
-    xs = sorted([0] + edges + [STRIP_W])
-    for a, b in zip(xs[::2], xs[1::2]):
-        pass  # spans built below from tower extents instead
     occupied = sorted((x, x + w) for x, w, _ in towers)
     cur = 0
     for a, b in occupied:
@@ -192,16 +190,6 @@ def dress_street(img, d, towers, ground_y, rng):
             for i in range(n):
                 fx = a + 30 + int((width - 60) * (i + rng.uniform(0.1, 0.9)) / n)
                 draw_flower(d, fx, ground_y + rng.randint(6, 14), rng)
-        # Parked car in the wider gaps.
-        if width > 420 and rng.random() < 0.6:
-            spec = by_id[rng.choice(car_brands)]
-            car = gap_props.draw_car(spec["palette"], spec["name"].split()[0])
-            scale = rng.uniform(0.42, 0.55)
-            # No mirroring: the door carries brand lettering and flipped text
-            # reads as a glitch, not a parked car.
-            car = car.resize((int(car.width * scale), int(car.height * scale)), Image.LANCZOS)
-            cx = rng.randint(a + 20, b - car.width - 20)
-            img.alpha_composite(car, (cx, ground_y + 16 - car.height))
 
 
 def build(profile, seed):

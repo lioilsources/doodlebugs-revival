@@ -1,441 +1,458 @@
 {
-  "_comment": "Fictional in-game advertising. Every name is invented; do not add real brands, near-miss parodies of real marks, real people, or tobacco/alcohol/gambling (App Store rating). Font is Press Start 2P (OFL).",
-  "signs": [
-    {
-      "id": "doodle_cola",
-      "name": "DOODLE COLA",
-      "slogan": "THE FIZZ OF THE SKIES",
-      "size": [
-        280,
-        170
-      ],
-      "palette": {
-        "bg": "#8C3B2E",
-        "border": "#E8DCC0",
-        "text": "#E8DCC0",
-        "accent": "#C9A227"
-      },
-      "maps": [
-        "central_park",
-        "siera_nevada",
-        "Pulparindo_fg"
-      ]
-    },
-    {
-      "id": "cloud_nine_gum",
-      "name": "CLOUD NINE GUM",
-      "slogan": "CHEW AT ANY ALTITUDE",
-      "size": [
-        280,
-        170
-      ],
-      "palette": {
-        "bg": "#2E4A62",
-        "border": "#E8DCC0",
-        "text": "#E8DCC0",
-        "accent": "#7FB0C8"
-      },
-      "maps": [
-        "central_park",
-        "siera_nevada",
-        "Pulparindo_fg"
-      ]
-    },
-    {
-      "id": "piston_pete",
-      "name": "PISTON PETE'S SPARK PLUGS",
-      "slogan": "NEVER MISS A BANG",
-      "size": [
-        300,
-        190
-      ],
-      "palette": {
-        "bg": "#2A2420",
-        "border": "#C9A227",
-        "text": "#C9A227",
-        "accent": "#8C3B2E"
-      },
-      "maps": [
-        "central_park",
-        "siera_nevada"
-      ]
-    },
-    {
-      "id": "ace_academy",
-      "name": "ACE ACADEMY",
-      "slogan": "LEARN TO FLY IN 10 DAYS",
-      "size": [
-        280,
-        170
-      ],
-      "palette": {
-        "bg": "#6B6B3A",
-        "border": "#E8DCC0",
-        "text": "#E8DCC0",
-        "accent": "#C9A227"
-      },
-      "maps": [
-        "central_park",
-        "siera_nevada",
-        "Pulparindo_fg"
-      ]
-    },
-    {
-      "id": "turbulence_mutual",
-      "name": "TURBULENCE MUTUAL",
-      "slogan": "WE INSURE CRASHES",
-      "size": [
-        280,
-        170
-      ],
-      "palette": {
-        "bg": "#E8DCC0",
-        "border": "#2E4A62",
-        "text": "#2E4A62",
-        "accent": "#8C3B2E"
-      },
-      "maps": [
-        "central_park"
-      ]
-    },
-    {
-      "id": "goggles_sons",
-      "name": "GOGGLES & SONS",
-      "slogan": "SEE THE ENEMY FIRST",
-      "size": [
-        280,
-        170
-      ],
-      "palette": {
-        "bg": "#5C4632",
-        "border": "#E8DCC0",
-        "text": "#E8DCC0",
-        "accent": "#C9A227"
-      },
-      "maps": [
-        "central_park"
-      ]
-    },
-    {
-      "id": "dirigible_express",
-      "name": "DIRIGIBLE EXPRESS",
-      "slogan": "PARCELS BY AIRSHIP",
-      "size": [
-        300,
-        170
-      ],
-      "palette": {
-        "bg": "#2E4A62",
-        "border": "#C9A227",
-        "text": "#E8DCC0",
-        "accent": "#C9A227"
-      },
-      "maps": [
-        "central_park",
-        "Pulparindo_fg"
-      ]
-    },
-    {
-      "id": "hangar_hotel",
-      "name": "HANGAR HOTEL",
-      "slogan": "SLEEP ABOVE THE CLOUDS",
-      "size": [
-        280,
-        170
-      ],
-      "palette": {
-        "bg": "#C9A227",
-        "border": "#2A2420",
-        "text": "#2A2420",
-        "accent": "#8C3B2E"
-      },
-      "maps": [
-        "siera_nevada"
-      ]
-    },
-    {
-      "id": "mountain_mule",
-      "name": "MOUNTAIN MULE BOOTS",
-      "slogan": "STEEP? SO WHAT.",
-      "size": [
-        280,
-        170
-      ],
-      "palette": {
-        "bg": "#5C4632",
-        "border": "#E8DCC0",
-        "text": "#E8DCC0",
-        "accent": "#C9A227"
-      },
-      "maps": [
-        "siera_nevada"
-      ]
-    },
-    {
-      "id": "sierra_sarsaparilla",
-      "name": "SIERRA SARSAPARILLA",
-      "slogan": "COLD AS THE PEAKS",
-      "size": [
-        300,
-        190
-      ],
-      "palette": {
-        "bg": "#2E4A62",
-        "border": "#E8DCC0",
-        "text": "#E8DCC0",
-        "accent": "#7FB0C8"
-      },
-      "maps": [
-        "siera_nevada"
-      ]
-    },
-    {
-      "id": "desert_dew",
-      "name": "DESERT DEW SODA",
-      "slogan": "SWEET AS SUNSET",
-      "size": [
-        280,
-        170
-      ],
-      "palette": {
-        "bg": "#C9A227",
-        "border": "#8C3B2E",
-        "text": "#8C3B2E",
-        "accent": "#E8DCC0"
-      },
-      "maps": [
-        "Pulparindo_fg"
-      ]
-    },
-    {
-      "id": "el_sombrero",
-      "name": "EL SOMBRERO GRANDE",
-      "slogan": "HATS FOR ALL SUNS",
-      "size": [
-        300,
-        180
-      ],
-      "palette": {
-        "bg": "#8C3B2E",
-        "border": "#C9A227",
-        "text": "#E8DCC0",
-        "accent": "#C9A227"
-      },
-      "maps": [
-        "Pulparindo_fg"
-      ]
-    },
-    {
-      "id": "seagull_ice",
-      "name": "SEAGULL ICE CREAM",
-      "slogan": "COLD WAVES DAILY",
-      "size": [
-        300,
-        190
-      ],
-      "palette": {
-        "bg": "#E8DCC0",
-        "border": "#2E4A62",
-        "text": "#2E4A62",
-        "accent": "#8C3B2E"
-      },
-      "maps": []
-    },
-    {
-      "id": "griffon_motors",
-      "name": "GRIFFON MOTORS",
-      "slogan": "EIGHT CYLINDERS OF FURY",
-      "size": [
-        320,
-        200
-      ],
-      "style": "neon",
-      "palette": {
-        "bg": "#16141D",
-        "border": "#2A2833",
-        "text": "#3FE8FF",
-        "accent": "#FF4FA3"
-      },
-      "maps": [
-        "central_park"
-      ]
-    },
-    {
-      "id": "talkbox",
-      "name": "TALKBOX PHONES",
-      "slogan": "HELLO FROM ANYWHERE",
-      "size": [
-        320,
-        200
-      ],
-      "style": "neon",
-      "palette": {
-        "bg": "#16141D",
-        "border": "#2A2833",
-        "text": "#FF4FA3",
-        "accent": "#FFC24A"
-      },
-      "maps": [
-        "central_park"
-      ]
-    },
-    {
-      "id": "glint_diamonds",
-      "name": "GLINT DIAMONDS",
-      "slogan": "SHINE LIKE A TRACER",
-      "size": [
-        320,
-        200
-      ],
-      "style": "neon",
-      "palette": {
-        "bg": "#16141D",
-        "border": "#2A2833",
-        "text": "#B9F1FF",
-        "accent": "#3FE8FF"
-      },
-      "maps": [
-        "central_park"
-      ]
-    },
-    {
-      "id": "punctual_watches",
-      "name": "PUNCTUAL WATCHES",
-      "slogan": "NEVER LATE",
-      "size": [
-        280,
-        170
-      ],
-      "palette": {
-        "bg": "#2A2420",
-        "border": "#C9A227",
-        "text": "#C9A227",
-        "accent": "#E8DCC0"
-      },
-      "maps": [
-        "siera_nevada"
-      ]
-    },
-    {
-      "id": "propwash_flakes",
-      "name": "PROPWASH SOAP FLAKES",
-      "slogan": "WHITER THAN CLOUDS",
-      "size": [
-        300,
-        190
-      ],
-      "palette": {
-        "bg": "#2E4A62",
-        "border": "#E8DCC0",
-        "text": "#E8DCC0",
-        "accent": "#7FB0C8"
-      },
-      "maps": [
-        "siera_nevada"
-      ]
-    }
-  ],
-  "maps": {
-    "central_park": {
-      "count": 5,
-      "seed": 11,
-      "props": 3,
-      "min_gap": 420,
-      "prefer": [
-        "glint_diamonds",
-        "talkbox",
-        "griffon_motors"
-      ],
-      "boards": 0
-    },
-    "siera_nevada": {
-      "count": 4,
-      "seed": 23,
-      "props": 3,
-      "min_gap": 520,
-      "boards": 4
-    },
-    "Sunny_beach_fg": {
-      "count": 0,
-      "seed": 41,
-      "props": 0,
-      "boards": 6
-    },
-    "Pulparindo_fg": {
-      "count": 0,
-      "seed": 37,
-      "props": 0,
-      "boards": 0
-    }
+ "_comment": "Fictional in-game advertising. Every name is invented; do not add real brands, near-miss parodies of real marks, real people, or tobacco/alcohol/gambling (App Store rating). Font is Press Start 2P (OFL).",
+ "signs": [
+  {
+   "id": "doodle_cola",
+   "name": "DOODLE COLA",
+   "slogan": "THE FIZZ OF THE SKIES",
+   "size": [
+    280,
+    170
+   ],
+   "palette": {
+    "bg": "#8C3B2E",
+    "border": "#E8DCC0",
+    "text": "#E8DCC0",
+    "accent": "#C9A227"
+   },
+   "maps": [
+    "central_park",
+    "siera_nevada",
+    "Pulparindo_fg"
+   ]
   },
-  "props": [
-    {
-      "shape": "can",
-      "brand": "doodle_cola",
-      "maps": [
-        "central_park",
-        "siera_nevada"
-      ]
-    },
-    {
-      "shape": "jar",
-      "brand": "cloud_nine_gum",
-      "maps": [
-        "central_park"
-      ]
-    },
-    {
-      "shape": "bottle",
-      "brand": "sierra_sarsaparilla",
-      "maps": [
-        "siera_nevada"
-      ]
-    },
-    {
-      "shape": "can",
-      "brand": "desert_dew",
-      "maps": []
-    },
-    {
-      "shape": "jar",
-      "brand": "seagull_ice",
-      "maps": []
-    },
-    {
-      "shape": "phone",
-      "brand": "talkbox",
-      "maps": [
-        "central_park"
-      ]
-    },
-    {
-      "shape": "diamond",
-      "brand": "glint_diamonds",
-      "maps": [
-        "central_park"
-      ]
-    },
-    {
-      "shape": "box",
-      "brand": "propwash_flakes",
-      "maps": [
-        "central_park",
-        "siera_nevada"
-      ]
-    },
-    {
-      "shape": "watch",
-      "brand": "punctual_watches",
-      "maps": [
-        "siera_nevada"
-      ]
-    },
-    {
-      "shape": "car",
-      "brand": "griffon_motors",
-      "maps": [
-        "siera_nevada"
-      ]
-    }
-  ]
+  {
+   "id": "cloud_nine_gum",
+   "name": "CLOUD NINE GUM",
+   "slogan": "CHEW AT ANY ALTITUDE",
+   "size": [
+    280,
+    170
+   ],
+   "palette": {
+    "bg": "#2E4A62",
+    "border": "#E8DCC0",
+    "text": "#E8DCC0",
+    "accent": "#7FB0C8"
+   },
+   "maps": [
+    "central_park",
+    "siera_nevada",
+    "Pulparindo_fg"
+   ]
+  },
+  {
+   "id": "piston_pete",
+   "name": "PISTON PETE'S SPARK PLUGS",
+   "slogan": "NEVER MISS A BANG",
+   "size": [
+    300,
+    190
+   ],
+   "palette": {
+    "bg": "#2A2420",
+    "border": "#C9A227",
+    "text": "#C9A227",
+    "accent": "#8C3B2E"
+   },
+   "maps": [
+    "central_park",
+    "siera_nevada"
+   ]
+  },
+  {
+   "id": "ace_academy",
+   "name": "ACE ACADEMY",
+   "slogan": "LEARN TO FLY IN 10 DAYS",
+   "size": [
+    280,
+    170
+   ],
+   "palette": {
+    "bg": "#6B6B3A",
+    "border": "#E8DCC0",
+    "text": "#E8DCC0",
+    "accent": "#C9A227"
+   },
+   "maps": [
+    "central_park",
+    "siera_nevada",
+    "Pulparindo_fg"
+   ]
+  },
+  {
+   "id": "turbulence_mutual",
+   "name": "TURBULENCE MUTUAL",
+   "slogan": "WE INSURE CRASHES",
+   "size": [
+    280,
+    170
+   ],
+   "palette": {
+    "bg": "#E8DCC0",
+    "border": "#2E4A62",
+    "text": "#2E4A62",
+    "accent": "#8C3B2E"
+   },
+   "maps": [
+    "central_park"
+   ]
+  },
+  {
+   "id": "goggles_sons",
+   "name": "GOGGLES & SONS",
+   "slogan": "SEE THE ENEMY FIRST",
+   "size": [
+    280,
+    170
+   ],
+   "palette": {
+    "bg": "#5C4632",
+    "border": "#E8DCC0",
+    "text": "#E8DCC0",
+    "accent": "#C9A227"
+   },
+   "maps": [
+    "central_park"
+   ]
+  },
+  {
+   "id": "dirigible_express",
+   "name": "DIRIGIBLE EXPRESS",
+   "slogan": "PARCELS BY AIRSHIP",
+   "size": [
+    300,
+    170
+   ],
+   "palette": {
+    "bg": "#2E4A62",
+    "border": "#C9A227",
+    "text": "#E8DCC0",
+    "accent": "#C9A227"
+   },
+   "maps": [
+    "central_park",
+    "Pulparindo_fg"
+   ]
+  },
+  {
+   "id": "hangar_hotel",
+   "name": "HANGAR HOTEL",
+   "slogan": "SLEEP ABOVE THE CLOUDS",
+   "size": [
+    280,
+    170
+   ],
+   "palette": {
+    "bg": "#C9A227",
+    "border": "#2A2420",
+    "text": "#2A2420",
+    "accent": "#8C3B2E"
+   },
+   "maps": [
+    "siera_nevada"
+   ]
+  },
+  {
+   "id": "mountain_mule",
+   "name": "MOUNTAIN MULE BOOTS",
+   "slogan": "STEEP? SO WHAT.",
+   "size": [
+    280,
+    170
+   ],
+   "palette": {
+    "bg": "#5C4632",
+    "border": "#E8DCC0",
+    "text": "#E8DCC0",
+    "accent": "#C9A227"
+   },
+   "maps": [
+    "siera_nevada"
+   ]
+  },
+  {
+   "id": "sierra_sarsaparilla",
+   "name": "SIERRA SARSAPARILLA",
+   "slogan": "COLD AS THE PEAKS",
+   "size": [
+    300,
+    190
+   ],
+   "palette": {
+    "bg": "#2E4A62",
+    "border": "#E8DCC0",
+    "text": "#E8DCC0",
+    "accent": "#7FB0C8"
+   },
+   "maps": [
+    "siera_nevada"
+   ]
+  },
+  {
+   "id": "desert_dew",
+   "name": "DESERT DEW SODA",
+   "slogan": "SWEET AS SUNSET",
+   "size": [
+    280,
+    170
+   ],
+   "palette": {
+    "bg": "#C9A227",
+    "border": "#8C3B2E",
+    "text": "#8C3B2E",
+    "accent": "#E8DCC0"
+   },
+   "maps": [
+    "Pulparindo_fg"
+   ]
+  },
+  {
+   "id": "el_sombrero",
+   "name": "EL SOMBRERO GRANDE",
+   "slogan": "HATS FOR ALL SUNS",
+   "size": [
+    300,
+    180
+   ],
+   "palette": {
+    "bg": "#8C3B2E",
+    "border": "#C9A227",
+    "text": "#E8DCC0",
+    "accent": "#C9A227"
+   },
+   "maps": [
+    "Pulparindo_fg"
+   ]
+  },
+  {
+   "id": "seagull_ice",
+   "name": "SEAGULL ICE CREAM",
+   "slogan": "COLD WAVES DAILY",
+   "size": [
+    300,
+    190
+   ],
+   "palette": {
+    "bg": "#E8DCC0",
+    "border": "#2E4A62",
+    "text": "#2E4A62",
+    "accent": "#8C3B2E"
+   },
+   "maps": []
+  },
+  {
+   "id": "griffon_motors",
+   "name": "GRIFFON MOTORS",
+   "slogan": "EIGHT CYLINDERS OF FURY",
+   "size": [
+    320,
+    200
+   ],
+   "style": "neon",
+   "palette": {
+    "bg": "#16141D",
+    "border": "#2A2833",
+    "text": "#3FE8FF",
+    "accent": "#FF4FA3"
+   },
+   "maps": [
+    "central_park"
+   ]
+  },
+  {
+   "id": "talkbox",
+   "name": "TALKBOX PHONES",
+   "slogan": "HELLO FROM ANYWHERE",
+   "size": [
+    320,
+    200
+   ],
+   "style": "neon",
+   "palette": {
+    "bg": "#16141D",
+    "border": "#2A2833",
+    "text": "#FF4FA3",
+    "accent": "#FFC24A"
+   },
+   "maps": [
+    "central_park"
+   ]
+  },
+  {
+   "id": "glint_diamonds",
+   "name": "GLINT DIAMONDS",
+   "slogan": "SHINE LIKE A TRACER",
+   "size": [
+    320,
+    200
+   ],
+   "style": "neon",
+   "palette": {
+    "bg": "#16141D",
+    "border": "#2A2833",
+    "text": "#B9F1FF",
+    "accent": "#3FE8FF"
+   },
+   "maps": [
+    "central_park"
+   ]
+  },
+  {
+   "id": "punctual_watches",
+   "name": "PUNCTUAL WATCHES",
+   "slogan": "NEVER LATE",
+   "size": [
+    280,
+    170
+   ],
+   "palette": {
+    "bg": "#2A2420",
+    "border": "#C9A227",
+    "text": "#C9A227",
+    "accent": "#E8DCC0"
+   },
+   "maps": [
+    "siera_nevada"
+   ]
+  },
+  {
+   "id": "propwash_flakes",
+   "name": "PROPWASH SOAP FLAKES",
+   "slogan": "WHITER THAN CLOUDS",
+   "size": [
+    300,
+    190
+   ],
+   "palette": {
+    "bg": "#2E4A62",
+    "border": "#E8DCC0",
+    "text": "#E8DCC0",
+    "accent": "#7FB0C8"
+   },
+   "maps": [
+    "siera_nevada"
+   ]
+  },
+  {
+   "id": "tinbox_toys",
+   "name": "TINBOX TOYS",
+   "slogan": "MIGHTY MACHINES, POCKET SIZE",
+   "size": [
+    320,
+    200
+   ],
+   "style": "board",
+   "palette": {
+    "bg": "#1E4E79",
+    "border": "#163A5B",
+    "text": "#F2EFE6",
+    "accent": "#F2B23A"
+   },
+   "maps": []
+  }
+ ],
+ "maps": {
+  "central_park": {
+   "count": 5,
+   "seed": 11,
+   "props": 3,
+   "min_gap": 420,
+   "prefer": [
+    "glint_diamonds",
+    "talkbox",
+    "griffon_motors"
+   ],
+   "boards": 0
+  },
+  "siera_nevada": {
+   "count": 4,
+   "seed": 23,
+   "props": 3,
+   "min_gap": 520,
+   "boards": 4
+  },
+  "Sunny_beach_fg": {
+   "count": 0,
+   "seed": 41,
+   "props": 0,
+   "boards": 6
+  },
+  "Pulparindo_fg": {
+   "count": 0,
+   "seed": 37,
+   "props": 0,
+   "boards": 0
+  }
+ },
+ "props": [
+  {
+   "shape": "can",
+   "brand": "doodle_cola",
+   "maps": [
+    "central_park",
+    "siera_nevada"
+   ]
+  },
+  {
+   "shape": "jar",
+   "brand": "cloud_nine_gum",
+   "maps": [
+    "central_park"
+   ]
+  },
+  {
+   "shape": "bottle",
+   "brand": "sierra_sarsaparilla",
+   "maps": [
+    "siera_nevada"
+   ]
+  },
+  {
+   "shape": "can",
+   "brand": "desert_dew",
+   "maps": []
+  },
+  {
+   "shape": "jar",
+   "brand": "seagull_ice",
+   "maps": []
+  },
+  {
+   "shape": "phone",
+   "brand": "talkbox",
+   "maps": [
+    "central_park"
+   ]
+  },
+  {
+   "shape": "diamond",
+   "brand": "glint_diamonds",
+   "maps": [
+    "central_park"
+   ]
+  },
+  {
+   "shape": "box",
+   "brand": "propwash_flakes",
+   "maps": [
+    "central_park",
+    "siera_nevada"
+   ]
+  },
+  {
+   "shape": "watch",
+   "brand": "punctual_watches",
+   "maps": [
+    "siera_nevada"
+   ]
+  },
+  {
+   "shape": "car",
+   "brand": "griffon_motors",
+   "maps": [
+    "siera_nevada"
+   ]
+  }
+ ]
 }
