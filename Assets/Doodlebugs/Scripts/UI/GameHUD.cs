@@ -1459,11 +1459,16 @@ public class GameHUD : MonoBehaviour
         bg.color = new Color(0f, 0f, 0f, searching || waiting ? 1f : 0.82f);
 
         string title = searching ? "DOODLEBUGS" : lateJoin ? "BATTLE IN PROGRESS" : "HANGAR";
-        CreateHangarText("Title", title, 28, new Vector2(0, 195), new Color(1f, 0.85f, 0.3f));
+        // The boot screen is the app's face and has the whole panel to itself,
+        // so the title gets poster size there; hangar modes sit above a dense
+        // draft/shop layout on 33px row spacing and stay modest.
+        CreateHangarText("Title", title, searching ? 64 : 34,
+            new Vector2(0, 195), new Color(1f, 0.85f, 0.3f));
 
         // Persistent HOST/CLIENT badge above the title so it's clear which device
         // created the lobby vs. joined it, in every hangar mode.
-        _hangarRoleText = CreateHangarText("RoleBadge", "", 11, new Vector2(0, 228), Color.white);
+        _hangarRoleText = CreateHangarText("RoleBadge", "", 14,
+            new Vector2(0, searching ? 300 : 240), Color.white);
         UpdateHangarRoleBadge(_connectionManager != null
             ? _connectionManager.Role
             : Doodlebugs.Network.LocalRole.None);
@@ -1476,8 +1481,11 @@ public class GameHUD : MonoBehaviour
             lateJoin ? $"DEPLOY IN {seconds}" :
             $"AUTO-START {MatchManager.HangarSeconds}";
         bool hasReadyCheck = preBattle || intermission;
+        // Below the enlarged boot title the status drops to y=110 so the two
+        // never touch (title half-height 32 reaches y=163).
         _hangarCountdownText = CreateHangarText("Countdown", statusInit,
-            12, new Vector2(hasReadyCheck ? -160 : 0, 160), Color.white);
+            searching ? 18 : 14, new Vector2(hasReadyCheck ? -160 : 0, searching ? 110 : 160),
+            Color.white);
         if (hasReadyCheck)
         {
             _hangarReadyCountText = CreateHangarText("ReadyCount", "", 12, new Vector2(160, 160),
@@ -1487,8 +1495,8 @@ public class GameHUD : MonoBehaviour
         if (searching)
         {
             // No plane, no weapons yet - just the boot screen with the version
-            CreateHangarText("Version", Doodlebugs.UI.ConnectionUI.GameVersion, 10,
-                new Vector2(0, -200), new Color(1f, 1f, 1f, 0.35f));
+            CreateHangarText("Version", Doodlebugs.UI.ConnectionUI.GameVersion, 16,
+                new Vector2(0, -200), new Color(1f, 1f, 1f, 0.5f));
             return;
         }
 

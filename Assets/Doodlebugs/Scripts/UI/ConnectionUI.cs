@@ -6,7 +6,10 @@ namespace Doodlebugs.UI
 {
     public class ConnectionUI : MonoBehaviour
     {
-        public const string GameVersion = "v1.0.6";
+        // Derived from PlayerSettings.bundleVersion, which CI stamps from the
+        // release tag (BuildScript.ApplyVersioning) — the label can never lag
+        // the build again the way the old hardcoded const did.
+        public static string GameVersion => "v" + Application.version;
 
         [SerializeField] private Text _statusText;
         [SerializeField] private GameObject _statusPanel;
