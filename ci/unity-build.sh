@@ -113,7 +113,7 @@ set +e
   -executeMethod "Doodlebugs.Editor.BuildScript.$BUILD_METHOD" \
   -buildPath "$OUTPUT" \
   -buildNumber "$BUILD_NUMBER" \
-  "${EXTRA_ARGS[@]}" \
+  ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
   -logFile -
 UNITY_EXIT=$?
 set -e
