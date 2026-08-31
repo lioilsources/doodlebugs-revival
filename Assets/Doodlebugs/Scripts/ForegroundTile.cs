@@ -127,6 +127,7 @@ public class ForegroundTile : MonoBehaviour
         transform.SetParent(null, true);
         var col = GetComponent<Collider2D>();
         if (col != null) col.enabled = false;
+        SfxManager.PlayDebris();
         StartCoroutine(Fall());
     }
 
@@ -164,6 +165,7 @@ public class ForegroundTile : MonoBehaviour
         // Detach from the scrolling parent, keeping current world position
         transform.SetParent(null, true);
         GetComponent<Collider2D>().enabled = false;
+        SfxManager.PlayDebris();
         StartCoroutine(FlyAway());
     }
 

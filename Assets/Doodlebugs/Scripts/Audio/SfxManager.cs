@@ -97,6 +97,18 @@ public class SfxManager : MonoBehaviour
 
     // --- public API (safe when Instance is null, e.g. in tests) ---
 
+    // Terrain debris: up to 80 tiles can be airborne at once (MaxFalling),
+    // so this is heavily rate-limited or destruction turns into white noise.
+    private float _lastDebrisTime;
+    public static void PlayDebris()
+    {
+        var i = Instance;
+        if (i == null) return;
+        if (Time.unscaledTime - i._lastDebrisTime < 0.1f) return;
+        i._lastDebrisTime = Time.unscaledTime;
+        i.Play(i._hitHull, 0.25f, 0.15f);
+    }
+
     public static void PlayShoot() => Instance?.Play(Instance._shoot, ShootVolume, 0.08f);
     public static void PlayShieldHit() => Instance?.Play(Instance._hitShield, HitVolume, 0.05f);
     public static void PlayHullHit() => Instance?.Play(Instance._hitHull, HitVolume, 0.05f);
