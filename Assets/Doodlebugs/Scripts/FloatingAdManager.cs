@@ -15,8 +15,8 @@ public class FloatingAdManager : MonoBehaviour
 
     private const float MinIntervalSeconds = 45f;
     private const float MaxIntervalSeconds = 120f;
-    // Planes render at sortingOrder 100, clouds at 10; ads glide behind both
-    // but in front of the flat background.
+    // Planes render at sortingOrder 100, clouds at 110 (they hide planes);
+    // ads glide behind both but in front of the flat background.
     private const int SortingOrder = 5;
     private const float ArenaHalfWidth = 32f;   // camera shows 54 units; spawn past the edge
 

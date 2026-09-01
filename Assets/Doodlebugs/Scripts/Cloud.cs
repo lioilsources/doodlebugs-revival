@@ -39,6 +39,19 @@ public class Cloud : NetworkBehaviour
         _networkTransform = GetComponent<NetworkTransform>();
     }
 
+    /// <summary>Re-read the sprite's half width after a skin change.
+    /// Awake caches it once, but CloudManager swaps sprites every round and
+    /// the photo clouds are twice the width of the old flat ones — a stale
+    /// value puts the off-screen wrap point several units wrong.</summary>
+    public void RefreshSpriteMetrics()
+    {
+        var sr = GetComponent<SpriteRenderer>();
+        if (sr != null && sr.sprite != null)
+        {
+            _spriteHalfWidth = sr.sprite.bounds.extents.x;
+        }
+    }
+
     void Start()
     {
         Debug.Log($"[Cloud] Start called, IsServer={IsServer}, IsSpawned={IsSpawned}, speed={_speed}, scale={_scale}");

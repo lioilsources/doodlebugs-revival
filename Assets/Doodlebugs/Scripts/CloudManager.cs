@@ -18,7 +18,9 @@ public class CloudManager : MonoBehaviour
     public float maxSpeed = 3f;
 
     [Header("Cloud Scales (one per cloud)")]
-    public float[] cloudScales = new float[] { 2.5f, 5f };
+    // Tuned for the 512px photo sprites (5.1 world units at PPU 100): this
+    // keeps the on-screen size of the old 270px flat clouds, which were 2.5-5x.
+    public float[] cloudScales = new float[] { 1.3f, 2.6f };
 
     [Header("Height Range")]
     public float minHeight = 5f;
@@ -313,14 +315,47 @@ public class CloudManager : MonoBehaviour
         int i = 0;
         foreach (var cloud in _clouds)
         {
-            var sr = cloud != null ? cloud.GetComponent<SpriteRenderer>() : null;
-            if (sr != null) sr.sprite = _cloudSkins[(index + i++) % _cloudSkins.Length];
+            if (cloud == null) continue;
+            if (Wear(cloud.gameObject, _cloudSkins[(index + i) % _cloudSkins.Length]))
+            {
+                cloud.RefreshSpriteMetrics();
+            }
+            i++;
         }
         foreach (var go in _localClouds)
         {
-            var sr = go != null ? go.GetComponent<SpriteRenderer>() : null;
-            if (sr != null) sr.sprite = _cloudSkins[(index + i++) % _cloudSkins.Length];
+            if (go == null) continue;
+            Wear(go, _cloudSkins[(index + i) % _cloudSkins.Length]);
+            i++;
         }
+    }
+
+    /// <summary>Put a sprite on a cloud and reshape its collider to match.
+    ///
+    /// The collider is the cover: bullets stop on clouds (see Bullet.HandleContact)
+    /// and that is the whole point of hiding behind one. It is authored on the
+    /// prefab from the prefab's sprite, so without rebuilding it here every skin
+    /// would fight from the shape of a cloud nobody can see any more.</summary>
+    private static bool Wear(GameObject go, Sprite sprite)
+    {
+        var sr = go.GetComponent<SpriteRenderer>();
+        if (sr == null || sprite == null) return false;
+        sr.sprite = sprite;
+
+        var poly = go.GetComponent<PolygonCollider2D>();
+        int shapes = sprite.GetPhysicsShapeCount();
+        if (poly != null && shapes > 0)
+        {
+            poly.pathCount = shapes;
+            var points = new List<Vector2>();
+            for (int s = 0; s < shapes; s++)
+            {
+                points.Clear();
+                sprite.GetPhysicsShape(s, points);
+                poly.SetPath(s, points);
+            }
+        }
+        return true;
     }
 
     /// <summary>
