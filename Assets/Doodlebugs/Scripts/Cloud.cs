@@ -14,6 +14,15 @@ public class Cloud : NetworkBehaviour
     // Scale - local variable, applied on all clients via RPC
     private float _scale = 1f;
 
+    // Which skin from Resources/Sprites/Clouds this cloud wears (-1 = the
+    // prefab sprite). Server-write and replicated, because CloudManager keeps
+    // its cloud list only on the server: a client skinning from that list
+    // would never touch a single cloud and would keep the prefab sprite for
+    // the whole match.
+    public NetworkVariable<int> NetSkin = new NetworkVariable<int>(-1,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
+
     // Pending initialization (if called before spawn)
     private float _pendingSpeed = 0f;
     private float _pendingScale = 0f;
@@ -34,6 +43,10 @@ public class Cloud : NetworkBehaviour
         {
             _spriteHalfWidth = sr.sprite.bounds.extents.x;
         }
+
+        // The prefab-authored collider path belongs to whatever sprite the
+        // prefab happens to wear - refit it before anyone can hide behind it.
+        CloudManager.FitColliderToSprite(gameObject);
 
         // Cache NetworkTransform for teleport
         _networkTransform = GetComponent<NetworkTransform>();
@@ -69,6 +82,11 @@ public class Cloud : NetworkBehaviour
         base.OnNetworkSpawn();
         Debug.Log($"[Cloud] OnNetworkSpawn called, IsServer={IsServer}, hasPending={_hasPendingInit}");
 
+        // The skin may already ride in the spawn snapshot (no OnValueChanged
+        // then) or arrive as a delta a tick later - handle both.
+        NetSkin.OnValueChanged += OnSkinChanged;
+        ApplySkin(NetSkin.Value);
+
         // Apply pending initialization if any
         if (_hasPendingInit && IsServer)
         {
@@ -77,6 +95,28 @@ public class Cloud : NetworkBehaviour
             transform.localScale = Vector3.one * _scale;
             ApplyScaleClientRpc(_scale);
             Debug.Log($"[Cloud] Applied pending init: speed={_speed}, scale={_scale}");
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        NetSkin.OnValueChanged -= OnSkinChanged;
+        base.OnNetworkDespawn();
+    }
+
+    private void OnSkinChanged(int previousValue, int newValue)
+    {
+        ApplySkin(newValue);
+    }
+
+    /// <summary>Wear the replicated skin. CloudManager owns the sprite set (and
+    /// the collider rebuild), this only keeps the wrap maths in step.</summary>
+    private void ApplySkin(int skinIndex)
+    {
+        if (skinIndex < 0 || CloudManager.Instance == null) return;
+        if (CloudManager.Instance.ApplySkin(gameObject, skinIndex))
+        {
+            RefreshSpriteMetrics();
         }
     }
 

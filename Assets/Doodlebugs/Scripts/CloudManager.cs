@@ -39,7 +39,15 @@ public class CloudManager : MonoBehaviour
     // netcode. Canvases match the original Cloud.png size, keeping collider
     // and spawn maths untouched.
     private Sprite[] _cloudSkins;
-    private int _appliedSkinIndex = -1;
+    private int _appliedLocalSkinIndex = -1;
+
+    /// <summary>Cloud skins, sorted by name: the skin index travels over the
+    /// wire, so host and clients must agree on what index 0 means and
+    /// Resources.LoadAll makes no ordering promise across platforms.</summary>
+    private Sprite[] Skins => _cloudSkins ??= Resources
+        .LoadAll<Sprite>("Sprites/Clouds")
+        .OrderBy(s => s.name, System.StringComparer.Ordinal)
+        .ToArray();
 
     // Respawn queue system - prevents multiple players spawning at same cloud
     private Dictionary<int, float> _cloudCooldowns = new Dictionary<int, float>();
@@ -300,62 +308,100 @@ public class CloudManager : MonoBehaviour
         Debug.Log($"[CloudManager] Spawned networked cloud at ({x}, {y}) with speed={speed}, scale={scale}");
     }
 
-    /// <summary>Re-skin every cloud when the round's background changes.</summary>
+    /// <summary>Hand out this round's skins.
+    ///
+    /// The server owns the mapping and publishes it through Cloud.NetSkin -
+    /// _clouds is filled in SpawnNetworkedCloud and therefore exists only on
+    /// the server, so a client skinning straight from these lists would walk
+    /// two empty lists and keep the prefab sprite forever.</summary>
     private void ApplyRoundSkin()
     {
         var bm = BackgroundManager.Instance;
         if (bm == null) return;
         int index = bm.BackgroundIndex;
-        if (index < 0 || index == _appliedSkinIndex) return;
+        if (index < 0) return;
 
-        _cloudSkins ??= Resources.LoadAll<Sprite>("Sprites/Clouds");
-        if (_cloudSkins == null || _cloudSkins.Length == 0) return;
-        _appliedSkinIndex = index;
+        int skinCount = Skins.Length;
+        if (skinCount == 0) return;
 
-        int i = 0;
-        foreach (var cloud in _clouds)
+        var nm = NetworkManager.Singleton;
+        if (nm != null && nm.IsServer)
         {
-            if (cloud == null) continue;
-            if (Wear(cloud.gameObject, _cloudSkins[(index + i) % _cloudSkins.Length]))
+            // Written every frame rather than once per background: clouds spawn
+            // a fifth of a second after the network starts, and a one-shot
+            // "already applied this index" guard would fire over an empty list
+            // and leave the round's clouds undressed.
+            for (int i = 0; i < _clouds.Count; i++)
             {
-                cloud.RefreshSpriteMetrics();
+                var cloud = _clouds[i];
+                if (cloud == null || !cloud.IsSpawned) continue;
+
+                int skin = (index + i) % skinCount;
+                if (cloud.NetSkin.Value != skin)
+                {
+                    cloud.NetSkin.Value = skin;
+                }
             }
-            i++;
         }
-        foreach (var go in _localClouds)
+
+        // Preview clouds carry no netcode - dress them here, once per
+        // background, or the collider rebuild would run every frame.
+        if (_localClouds.Count > 0 && index != _appliedLocalSkinIndex)
         {
-            if (go == null) continue;
-            Wear(go, _cloudSkins[(index + i) % _cloudSkins.Length]);
-            i++;
+            _appliedLocalSkinIndex = index;
+            for (int i = 0; i < _localClouds.Count; i++)
+            {
+                if (_localClouds[i] == null) continue;
+                ApplySkin(_localClouds[i], (index + i) % skinCount);
+            }
         }
     }
 
-    /// <summary>Put a sprite on a cloud and reshape its collider to match.
-    ///
-    /// The collider is the cover: bullets stop on clouds (see Bullet.HandleContact)
-    /// and that is the whole point of hiding behind one. It is authored on the
-    /// prefab from the prefab's sprite, so without rebuilding it here every skin
-    /// would fight from the shape of a cloud nobody can see any more.</summary>
+    /// <summary>Put skin <paramref name="skinIndex"/> on a cloud. Runs on every
+    /// peer: the server picks the index, clients receive it via Cloud.NetSkin.</summary>
+    public bool ApplySkin(GameObject go, int skinIndex)
+    {
+        var skins = Skins;
+        if (go == null || skinIndex < 0 || skins.Length == 0) return false;
+        return Wear(go, skins[skinIndex % skins.Length]);
+    }
+
+    /// <summary>Put a sprite on a cloud and reshape its collider to match.</summary>
     private static bool Wear(GameObject go, Sprite sprite)
     {
         var sr = go.GetComponent<SpriteRenderer>();
         if (sr == null || sprite == null) return false;
         sr.sprite = sprite;
-
-        var poly = go.GetComponent<PolygonCollider2D>();
-        int shapes = sprite.GetPhysicsShapeCount();
-        if (poly != null && shapes > 0)
-        {
-            poly.pathCount = shapes;
-            var points = new List<Vector2>();
-            for (int s = 0; s < shapes; s++)
-            {
-                points.Clear();
-                sprite.GetPhysicsShape(s, points);
-                poly.SetPath(s, points);
-            }
-        }
+        FitColliderToSprite(go);
         return true;
+    }
+
+    /// <summary>Reshape a cloud's collider to the sprite it currently wears.
+    ///
+    /// The collider is the cover: bullets stop on clouds (see
+    /// Bullet.HandleContact) and that is the whole point of hiding behind one.
+    /// The prefab-authored path belongs to whatever sprite the prefab happens
+    /// to hold, so every cloud refits on Awake and again on each skin change.
+    /// </summary>
+    public static void FitColliderToSprite(GameObject go)
+    {
+        if (go == null) return;
+
+        var sr = go.GetComponent<SpriteRenderer>();
+        var poly = go.GetComponent<PolygonCollider2D>();
+        if (sr == null || sr.sprite == null || poly == null) return;
+
+        int shapes = sr.sprite.GetPhysicsShapeCount();
+        if (shapes <= 0) return;
+
+        poly.pathCount = shapes;
+        var points = new List<Vector2>();
+        for (int s = 0; s < shapes; s++)
+        {
+            points.Clear();
+            sr.sprite.GetPhysicsShape(s, points);
+            poly.SetPath(s, points);
+        }
     }
 
     /// <summary>
