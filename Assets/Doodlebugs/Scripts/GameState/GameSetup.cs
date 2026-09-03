@@ -85,6 +85,10 @@ public class GameSetup : MonoBehaviour
             DontDestroyOnLoad(matchManagerObj);
             Debug.Log("[GameSetup] MatchManager created");
         }
+
+        // Plane skin entitlements (store init is best-effort - IAPManager
+        // falls back to its PlayerPrefs cache if Unity IAP isn't configured yet)
+        IAPManager.GetOrCreate();
     }
 
     private void CreateHUD(Canvas canvas)

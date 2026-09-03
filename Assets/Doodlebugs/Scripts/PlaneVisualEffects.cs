@@ -213,6 +213,24 @@ public class PlaneVisualEffects : NetworkBehaviour
     }
 
     /// <summary>
+    /// PlayerController.SetPlaneColor put a new sprite (shape/skin pick) and
+    /// a fresh ColorReplace material on the plane renderer: the owner glow
+    /// outline must follow the new silhouette, and the cached damage-flash
+    /// material must be the one on the renderer now, not the previous one.
+    /// Also squares away the spawn-order case where this component set up
+    /// its material before PlayerController replaced it.
+    /// </summary>
+    public void OnPlaneSpriteChanged()
+    {
+        if (planeRenderer == null) return;
+        if (glowOutlineRenderer != null && planeRenderer.sprite != null)
+        {
+            glowOutlineRenderer.sprite = planeRenderer.sprite;
+        }
+        SetupDamageFlashMaterial();
+    }
+
+    /// <summary>
     /// Update glow outline visibility. Called on spawn and when local player index changes.
     /// </summary>
     public void UpdateGlowVisibility()

@@ -24,6 +24,18 @@ public static class BackgroundProfileSync
     private const string ForegroundDir = "Assets/Doodlebugs/Sprites/Foreground";
     private const string ProfileDir = "Assets/Doodlebugs/Prefabs/Backgrounds";
 
+    /// <summary>
+    /// Batchmode entry point (-executeMethod BackgroundProfileSync.SyncBatch).
+    /// RegisterProfilesInScene needs the BackgroundManager, which lives in
+    /// Scene01 - in batchmode the open scene is an empty untitled one, so
+    /// open it explicitly first.
+    /// </summary>
+    public static void SyncBatch()
+    {
+        EditorSceneManager.OpenScene(PlaneSkinManagerSetup.GameScenePath, OpenSceneMode.Single);
+        Sync();
+    }
+
     [MenuItem("Doodlebugs/Sync Background Profiles")]
     public static void Sync()
     {

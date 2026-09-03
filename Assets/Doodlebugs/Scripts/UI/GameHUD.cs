@@ -154,6 +154,7 @@ public class GameHUD : MonoBehaviour
     private void OnDestroy()
     {
         if (Instance == this) Instance = null;
+        CloseSkinPicker();
     }
 
     private void Start()
@@ -1328,6 +1329,16 @@ public class GameHUD : MonoBehaviour
     private MatchManager.HangarMode _hangarMode = MatchManager.HangarMode.Intermission;
     private GameObject _hangarCornerButton;
 
+    // --- plane picker (separate overlay reachable from any hangar mode) --------
+    // Shape row (PlaneModelCatalog) above a skin grid (PlaneSkinCatalog);
+    // every card previews the combo with the other half of the current pick.
+    private GameObject _skinPickerOverlay;
+    private RectTransform _skinPickerContent;
+    private RectTransform _shapeRowContent;
+    private readonly List<(GameObject card, Image bg, int skinId)> _skinCards = new();
+    private readonly List<(GameObject card, Image bg, int modelId)> _shapeCards = new();
+    private bool _skinPickerAutoShown;
+
     private void OnHangarOpened(MatchManager.HangarMode mode, int seconds)
     {
         if (_resultsOverlay != null) _resultsOverlay.SetActive(false);
@@ -1423,6 +1434,7 @@ public class GameHUD : MonoBehaviour
         _upgradeCards.Clear();
         _runPointsText = null;
         _localReady = false;
+        CloseSkinPicker();
     }
 
     /// <summary>First PlayerController owned by this device (couch co-op: any of them).</summary>
@@ -1523,6 +1535,21 @@ public class GameHUD : MonoBehaviour
         if (lateJoin)
         {
             BuildJoinButton();
+        }
+
+        // Skin picker: reachable from the hangar every round (change it any
+        // time), and auto-opened the very first time this device ever sees
+        // the Waiting hangar (no claim yet - "intro screen" pick).
+        BuildSkinPickerButton();
+        if (waiting && !_skinPickerAutoShown)
+        {
+            var owned = FindOwnedPlayer();
+            var mgr = PlaneSkinManager.Instance;
+            if (owned != null && mgr != null && !mgr.HasClaim(owned.OwnerClientId, Mathf.Max(owned.LocalPlayerIndex, 0)))
+            {
+                _skinPickerAutoShown = true;
+                OpenSkinPicker();
+            }
         }
     }
 
@@ -1946,6 +1973,380 @@ public class GameHUD : MonoBehaviour
         text.verticalOverflow = VerticalWrapMode.Overflow;
         text.color = color;
         return text;
+    }
+
+    // --- skin picker overlay (plane skin selection, IAP-gated) -----------------
+
+    private void BuildSkinPickerButton()
+    {
+        var buttonObj = new GameObject("SkinButton");
+        buttonObj.transform.SetParent(_hangarOverlay.transform, false);
+        var rect = buttonObj.AddComponent<RectTransform>();
+        // Bottom-left, mirrors BuildHangarActionButton's bottom-right slot.
+        rect.anchorMin = new Vector2(0f, 0f);
+        rect.anchorMax = new Vector2(0f, 0f);
+        rect.pivot = new Vector2(0f, 0f);
+        rect.anchoredPosition = new Vector2(60, 40);
+        rect.sizeDelta = new Vector2(180, 68);
+
+        var bgImage = buttonObj.AddComponent<Image>();
+        bgImage.color = new Color(0.3f, 0.14f, 0.4f, 1f);
+
+        var button = buttonObj.AddComponent<Button>();
+        button.targetGraphic = bgImage;
+        button.onClick.AddListener(OpenSkinPicker);
+
+        CreateTextIn(buttonObj.transform, "Label", "PLANE", 16, Vector2.zero, Color.white);
+    }
+
+    private void OpenSkinPicker()
+    {
+        BuildSkinPickerOverlay();
+        _skinPickerOverlay.SetActive(true);
+        SfxManager.PlayTick();
+
+        if (PlaneSkinManager.Instance != null)
+            PlaneSkinManager.Instance.Claims.OnListChanged += OnSkinClaimsChanged;
+        if (IAPManager.Instance != null)
+            IAPManager.Instance.OnEntitlementsChanged += RefreshSkinPicker;
+    }
+
+    private void CloseSkinPicker()
+    {
+        if (PlaneSkinManager.Instance != null)
+            PlaneSkinManager.Instance.Claims.OnListChanged -= OnSkinClaimsChanged;
+        if (IAPManager.Instance != null)
+            IAPManager.Instance.OnEntitlementsChanged -= RefreshSkinPicker;
+
+        if (_skinPickerOverlay != null)
+        {
+            Destroy(_skinPickerOverlay);
+            _skinPickerOverlay = null;
+        }
+        _skinCards.Clear();
+        _shapeCards.Clear();
+        _shapeRowContent = null;
+    }
+
+    private void OnSkinClaimsChanged(NetworkListEvent<PlaneSkinManager.SkinClaim> _) => RefreshSkinPicker();
+
+    private void BuildSkinPickerOverlay()
+    {
+        if (_skinPickerOverlay != null) Destroy(_skinPickerOverlay);
+
+        _skinPickerOverlay = new GameObject("SkinPickerOverlay");
+        _skinPickerOverlay.transform.SetParent(transform, false);
+        var rootRect = _skinPickerOverlay.AddComponent<RectTransform>();
+        rootRect.anchorMin = Vector2.zero;
+        rootRect.anchorMax = Vector2.one;
+        rootRect.offsetMin = Vector2.zero;
+        rootRect.offsetMax = Vector2.zero;
+
+        var bg = _skinPickerOverlay.AddComponent<Image>();
+        bg.color = new Color(0f, 0f, 0f, 0.94f);
+
+        CreateTextIn(_skinPickerOverlay.transform, "Title", "PICK YOUR PLANE", 26,
+            new Vector2(0, 260), new Color(1f, 0.85f, 0.3f));
+        CreateTextIn(_skinPickerOverlay.transform, "Sub",
+            "shape + skin is one-of-a-kind - once a pilot flies a combo, it's taken", 10,
+            new Vector2(0, 226), new Color(1f, 1f, 1f, 0.55f));
+
+        // Shape row sits where the top of the skin grid used to be; the grid
+        // below shrinks to make room (same bottom edge as before).
+        BuildShapeRow();
+
+        // Minimal ScrollRect: Mask lives directly on the viewport object,
+        // Content is its only child with a GridLayoutGroup laying out cards.
+        var viewportGO = new GameObject("Viewport");
+        viewportGO.transform.SetParent(_skinPickerOverlay.transform, false);
+        var viewportRect = viewportGO.AddComponent<RectTransform>();
+        viewportRect.anchorMin = new Vector2(0.5f, 0.5f);
+        viewportRect.anchorMax = new Vector2(0.5f, 0.5f);
+        viewportRect.anchoredPosition = new Vector2(0, -80);
+        viewportRect.sizeDelta = new Vector2(1020, 330);
+
+        var viewportImg = viewportGO.AddComponent<Image>();
+        viewportImg.color = new Color(1f, 1f, 1f, 0.02f); // Mask needs a graphic; kept near-invisible
+        viewportGO.AddComponent<Mask>().showMaskGraphic = false;
+
+        var scroll = viewportGO.AddComponent<ScrollRect>();
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.viewport = viewportRect;
+
+        var contentGO = new GameObject("Content");
+        contentGO.transform.SetParent(viewportGO.transform, false);
+        _skinPickerContent = contentGO.AddComponent<RectTransform>();
+        _skinPickerContent.anchorMin = new Vector2(0.5f, 1f);
+        _skinPickerContent.anchorMax = new Vector2(0.5f, 1f);
+        _skinPickerContent.pivot = new Vector2(0.5f, 1f);
+        _skinPickerContent.anchoredPosition = Vector2.zero;
+
+        var grid = contentGO.AddComponent<GridLayoutGroup>();
+        grid.cellSize = new Vector2(150, 148);
+        grid.spacing = new Vector2(12, 12);
+        grid.childAlignment = TextAnchor.UpperCenter;
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = 6;
+
+        contentGO.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        scroll.content = _skinPickerContent;
+
+        var (closeButton, _) = BuildHangarActionButtonIn(_skinPickerOverlay, "CloseSkinPicker", "CLOSE",
+            new Color(0.25f, 0.25f, 0.25f, 1f));
+        closeButton.onClick.AddListener(CloseSkinPicker);
+
+        BuildSkinCards();
+    }
+
+    // Same shape as BuildHangarActionButton but parented to an arbitrary
+    // overlay instead of the hardcoded _hangarOverlay.
+    private (Button, Text) BuildHangarActionButtonIn(GameObject overlay, string name, string label, Color color)
+    {
+        var buttonObj = new GameObject(name);
+        buttonObj.transform.SetParent(overlay.transform, false);
+        var rect = buttonObj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(1f, 0f);
+        rect.anchorMax = new Vector2(1f, 0f);
+        rect.pivot = new Vector2(1f, 0f);
+        rect.anchoredPosition = new Vector2(-60, 40);
+        rect.sizeDelta = new Vector2(220, 56);
+
+        var bgImage = buttonObj.AddComponent<Image>();
+        bgImage.color = color;
+
+        var button = buttonObj.AddComponent<Button>();
+        button.targetGraphic = bgImage;
+
+        var text = CreateTextIn(buttonObj.transform, "Label", label, 16, Vector2.zero, Color.white);
+        return (button, text);
+    }
+
+    private void BuildSkinCards()
+    {
+        foreach (var entry in _skinCards)
+        {
+            if (entry.card != null) Destroy(entry.card);
+        }
+        _skinCards.Clear();
+
+        var owned = FindOwnedPlayer();
+        var appearance = owned != null ? owned.GetComponent<PlaneAppearance>() : null;
+        int currentModel = appearance != null ? appearance.NetModelId.Value : PlaneModelCatalog.BaseModelId;
+        int currentSkin = appearance != null ? appearance.NetSkinId.Value : PlaneSkinCatalog.StarterSkinId;
+        int localIdx = owned != null ? Mathf.Max(owned.LocalPlayerIndex, 0) : 0;
+        ulong clientId = owned != null ? owned.OwnerClientId : 0;
+        var skinMgr = PlaneSkinManager.Instance;
+        var iap = IAPManager.Instance;
+
+        for (int i = 0; i < PlaneSkinCatalog.Count; i++)
+        {
+            var def = PlaneSkinCatalog.Get(i);
+            bool isCurrent = i == currentSkin;
+            // Uniqueness is per (shape, skin) combo: this skin is only blocked
+            // if someone else flies it on the shape picked right now.
+            bool taken = !isCurrent && skinMgr != null && skinMgr.IsTaken(currentModel, i, clientId, localIdx);
+            bool unlocked = iap == null || iap.IsSkinUnlocked(i);
+
+            var cardObj = new GameObject($"SkinCard_{def.Key}");
+            cardObj.transform.SetParent(_skinPickerContent, false);
+            cardObj.AddComponent<RectTransform>(); // sized by the parent GridLayoutGroup
+
+            var cardBg = cardObj.AddComponent<Image>();
+            cardBg.color = isCurrent ? CardSelected : CardIdle;
+
+            var button = cardObj.AddComponent<Button>();
+            button.targetGraphic = cardBg;
+
+            var iconGO = new GameObject("Icon");
+            iconGO.transform.SetParent(cardObj.transform, false);
+            var iconRect = iconGO.AddComponent<RectTransform>();
+            iconRect.anchorMin = new Vector2(0.5f, 1f);
+            iconRect.anchorMax = new Vector2(0.5f, 1f);
+            iconRect.pivot = new Vector2(0.5f, 1f);
+            iconRect.anchoredPosition = new Vector2(0, -12);
+            iconRect.sizeDelta = new Vector2(88, 88);
+            var iconImg = iconGO.AddComponent<Image>();
+            iconImg.sprite = PlaneModelCatalog.LoadSprite(currentModel, i); // preview = this skin on the current shape
+            iconImg.preserveAspect = true;
+            iconImg.color = (taken || !unlocked) ? new Color(1f, 1f, 1f, 0.4f) : Color.white;
+
+            // CreateTextIn positions are relative to the card CENTRE (148 px
+            // tall card, icon spans +62..-26): -40/-56 land under the icon.
+            CreateTextIn(cardObj.transform, "Name", def.DisplayName, 8,
+                new Vector2(0, -40), Color.white);
+
+            string status = isCurrent ? "EQUIPPED" : taken ? "TAKEN"
+                : !unlocked ? (iap?.BundleForSkin(i)?.PlaceholderPrice ?? "LOCKED") : "";
+            Color statusColor = isCurrent ? ReadyGreen
+                : taken ? new Color(1f, 0.4f, 0.4f)
+                : !unlocked ? new Color(1f, 0.85f, 0.3f)
+                : new Color(1f, 1f, 1f, 0.4f);
+            CreateTextIn(cardObj.transform, "Status", status, 8, new Vector2(0, -56), statusColor);
+
+            if (!unlocked)
+            {
+                var bundle = iap?.BundleForSkin(i);
+                button.onClick.AddListener(() =>
+                {
+                    if (bundle.HasValue) iap.PurchaseBundle(bundle.Value.StoreId);
+                });
+            }
+            else
+            {
+                button.interactable = !taken;
+                int captured = i;
+                button.onClick.AddListener(() => SelectSkin(captured));
+            }
+
+            _skinCards.Add((cardObj, cardBg, i));
+        }
+    }
+
+    // --- shape row (plane model selection, above the skin grid) -----------------
+
+    private void BuildShapeRow()
+    {
+        var rowGO = new GameObject("ShapeRow");
+        rowGO.transform.SetParent(_skinPickerOverlay.transform, false);
+        var rowRect = rowGO.AddComponent<RectTransform>();
+        rowRect.anchorMin = new Vector2(0.5f, 0.5f);
+        rowRect.anchorMax = new Vector2(0.5f, 0.5f);
+        rowRect.anchoredPosition = new Vector2(0, 150);
+        rowRect.sizeDelta = new Vector2(1020, 110);
+
+        // Horizontal-only ScrollRect: 16 shapes at 96 px don't fit 1020 px,
+        // and the mouse wheel maps to horizontal scrolling on its own when
+        // vertical is off. Same Mask-on-viewport shape as the skin grid.
+        var rowImg = rowGO.AddComponent<Image>();
+        rowImg.color = new Color(1f, 1f, 1f, 0.02f);
+        rowGO.AddComponent<Mask>().showMaskGraphic = false;
+
+        var scroll = rowGO.AddComponent<ScrollRect>();
+        scroll.horizontal = true;
+        scroll.vertical = false;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.viewport = rowRect;
+
+        var contentGO = new GameObject("Content");
+        contentGO.transform.SetParent(rowGO.transform, false);
+        _shapeRowContent = contentGO.AddComponent<RectTransform>();
+        _shapeRowContent.anchorMin = new Vector2(0f, 0.5f);
+        _shapeRowContent.anchorMax = new Vector2(0f, 0.5f);
+        _shapeRowContent.pivot = new Vector2(0f, 0.5f);
+        _shapeRowContent.anchoredPosition = Vector2.zero;
+
+        var grid = contentGO.AddComponent<GridLayoutGroup>();
+        grid.cellSize = new Vector2(96, 104);
+        grid.spacing = new Vector2(10, 0);
+        grid.childAlignment = TextAnchor.MiddleLeft;
+        grid.constraint = GridLayoutGroup.Constraint.FixedRowCount;
+        grid.constraintCount = 1;
+
+        contentGO.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        scroll.content = _shapeRowContent;
+
+        BuildShapeCards();
+    }
+
+    private void BuildShapeCards()
+    {
+        foreach (var entry in _shapeCards)
+        {
+            if (entry.card != null) Destroy(entry.card);
+        }
+        _shapeCards.Clear();
+        if (_shapeRowContent == null) return;
+
+        var owned = FindOwnedPlayer();
+        var appearance = owned != null ? owned.GetComponent<PlaneAppearance>() : null;
+        int currentModel = appearance != null ? appearance.NetModelId.Value : PlaneModelCatalog.BaseModelId;
+        int currentSkin = appearance != null ? appearance.NetSkinId.Value : PlaneSkinCatalog.StarterSkinId;
+        int localIdx = owned != null ? Mathf.Max(owned.LocalPlayerIndex, 0) : 0;
+        ulong clientId = owned != null ? owned.OwnerClientId : 0;
+        var skinMgr = PlaneSkinManager.Instance;
+
+        foreach (int modelId in PlaneModelCatalog.Available)
+        {
+            var def = PlaneModelCatalog.Get(modelId);
+            bool isCurrent = modelId == currentModel;
+            // Combo uniqueness: this shape is only blocked if someone else
+            // flies it in the skin picked right now.
+            bool taken = !isCurrent && skinMgr != null && skinMgr.IsTaken(modelId, currentSkin, clientId, localIdx);
+
+            var cardObj = new GameObject($"ShapeCard_{def.Key}");
+            cardObj.transform.SetParent(_shapeRowContent, false);
+            cardObj.AddComponent<RectTransform>(); // sized by the parent GridLayoutGroup
+
+            var cardBg = cardObj.AddComponent<Image>();
+            cardBg.color = isCurrent ? CardSelected : CardIdle;
+
+            var button = cardObj.AddComponent<Button>();
+            button.targetGraphic = cardBg;
+
+            var iconGO = new GameObject("Icon");
+            iconGO.transform.SetParent(cardObj.transform, false);
+            var iconRect = iconGO.AddComponent<RectTransform>();
+            iconRect.anchorMin = new Vector2(0.5f, 1f);
+            iconRect.anchorMax = new Vector2(0.5f, 1f);
+            iconRect.pivot = new Vector2(0.5f, 1f);
+            iconRect.anchoredPosition = new Vector2(0, -6);
+            iconRect.sizeDelta = new Vector2(64, 64);
+            var iconImg = iconGO.AddComponent<Image>();
+            iconImg.sprite = PlaneModelCatalog.LoadSprite(modelId, currentSkin); // preview = this shape in the current skin
+            iconImg.preserveAspect = true;
+            iconImg.color = taken ? new Color(1f, 1f, 1f, 0.4f) : Color.white;
+
+            // 104 px tall card, icon spans +46..-18 from the centre.
+            CreateTextIn(cardObj.transform, "Name", def.DisplayName, 7, new Vector2(0, -30), Color.white);
+            string status = isCurrent ? "EQUIPPED" : taken ? "TAKEN" : "";
+            Color statusColor = isCurrent ? ReadyGreen
+                : taken ? new Color(1f, 0.4f, 0.4f)
+                : new Color(1f, 1f, 1f, 0.4f);
+            CreateTextIn(cardObj.transform, "Status", status, 7, new Vector2(0, -44), statusColor);
+
+            button.interactable = !taken;
+            int captured = modelId;
+            button.onClick.AddListener(() => SelectModel(captured));
+
+            _shapeCards.Add((cardObj, cardBg, modelId));
+        }
+    }
+
+    private void SelectModel(int modelId)
+    {
+        foreach (var p in FindObjectsOfType<PlayerController>())
+        {
+            if (!p.IsOwner) continue;
+            p.GetComponent<PlaneAppearance>()?.RequestSelectModelServerRpc(modelId);
+        }
+        SfxManager.PlayTick();
+        // Same round-trip wait as SelectSkin: NetModelId/Claims confirm (or
+        // reject) the pick, then both rows re-render their combo previews.
+        Invoke(nameof(RefreshSkinPicker), 0.1f);
+    }
+
+    private void SelectSkin(int skinId)
+    {
+        foreach (var p in FindObjectsOfType<PlayerController>())
+        {
+            if (!p.IsOwner) continue;
+            var appearance = p.GetComponent<PlaneAppearance>();
+            appearance?.RequestSelectSkinServerRpc(skinId);
+        }
+        SfxManager.PlayTick();
+        // The server confirms via NetSkinId/Claims sync; refresh once that
+        // round-trip has had time to land (also re-runs if it was rejected
+        // because someone else grabbed the same skin first).
+        Invoke(nameof(RefreshSkinPicker), 0.1f);
+    }
+
+    private void RefreshSkinPicker()
+    {
+        if (_skinPickerOverlay == null || !_skinPickerOverlay.activeInHierarchy) return;
+        BuildShapeCards();
+        BuildSkinCards();
     }
 
     // --- static factory ----------------------------------------------------------

@@ -144,6 +144,7 @@ GameObject:
   - component: {fileID: 7658229749847302818}
   - component: {fileID: 1299583055293810430}
   - component: {fileID: -1163544380385501550}
+  - component: {fileID: 544820933591097636}
   m_Layer: 0
   m_Name: PlaneHolder
   m_TagString: Player
@@ -515,6 +516,20 @@ MonoBehaviour:
   NetDamageMultiplier:
     m_InternalValue: 1
   NetInvulnerable:
+    m_InternalValue: 0
+--- !u!114 &544820933591097636
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3958523845536406060}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c92c2b813747437982bb6ac67bdc6da0, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::PlaneAppearance
+  NetSkinId:
     m_InternalValue: 0
 --- !u!1 &6352380591613834099
 GameObject:

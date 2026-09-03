@@ -284,7 +284,7 @@ SpriteRenderer:
   m_Size: {x: 40.96, y: 27.32}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_SpriteSortPoint: 0
 --- !u!4 &112089967
 Transform:
@@ -1004,6 +1004,77 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &638471672
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 638471674}
+  - component: {fileID: 638471673}
+  - component: {fileID: 638471675}
+  m_Layer: 0
+  m_Name: PlaneSkinManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &638471673
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 638471672}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 1463786688
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 0
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
+--- !u!4 &638471674
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 638471672}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &638471675
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 638471672}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d8b914808a1744e485a537630fb0da95, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlaneSkinManager
+  ShowTopMostFoldoutHeaderGroup: 1
 --- !u!1 &1154191874
 GameObject:
   m_ObjectHideFlags: 0
@@ -1272,13 +1343,11 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   backgroundRenderer: {fileID: 112089966}
   profiles:
-  - {fileID: 11400000, guid: 026482804247f4389beeaf23432fd354, type: 2}
-  - {fileID: 11400000, guid: 4ff0d28110d694e15afe2c302b3170b7, type: 2}
-  - {fileID: 11400000, guid: 68566ec1da764db9bb140b9c56634dbb, type: 2}
-  - {fileID: 11400000, guid: 075c915196fdd4daaa43c91ccee1fc83, type: 2}
-  - {fileID: 11400000, guid: 5fae625dcbdba489a90c8dc76ce2fa14, type: 2}
-  - {fileID: 11400000, guid: 65efefff1f5b5464ba220f7fd2b0247e, type: 2}
-  - {fileID: 11400000, guid: 2f0a184fe84d540ef800665eb040e4b8, type: 2}
+  - {fileID: 11400000, guid: 705917d90a88b4b0fbb1c0fdd9c939dd, type: 2}
+  - {fileID: 11400000, guid: 0e0a1530294a74f02b96ca3fb8959a02, type: 2}
+  - {fileID: 11400000, guid: b724e0128ba6b40e187acb16c9aa3b18, type: 2}
+  - {fileID: 11400000, guid: caa0f938ec2a2424b9d269bbda62e648, type: 2}
+  - {fileID: 11400000, guid: 465eb099144e84289a897464b606f3bb, type: 2}
   adStrips:
   - {fileID: 2192210793205341756, guid: 3ad28527fcdc4712998a56444252b4c5, type: 3}
   - {fileID: 2192210793205341756, guid: 1dee69a269664aacb18bd3858a551777, type: 3}
@@ -1589,3 +1658,4 @@ SceneRoots:
   - {fileID: 1318002864}
   - {fileID: 1705687248}
   - {fileID: 113670523}
+  - {fileID: 638471674}
