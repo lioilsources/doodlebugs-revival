@@ -109,3 +109,17 @@ tools/ads/sprites/
 tools/ads/art/
 __pycache__/
 tools/clouds/out/
+
+tools/backgrounds/out/
+
+tools/skins/out/
+tools/skins/review/
+tools/skins/masks/
+tools/skins/index.html
+
+# batch logs from the SPARK render pipelines
+tools/*/*.log
+
+tools/planes/out/
+tools/planes/review/
+tools/planes/index.html
