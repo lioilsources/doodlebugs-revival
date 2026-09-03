@@ -172,6 +172,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private Collider2D rightBoundary;
     private BoxCollider2D planeCollider;
 
+    // Skin selection - the sprite side of SetPlaneColor()
+    private PlaneAppearance appearance;
+
     // Start is called before the first frame update
     void Start()
     {
@@ -197,11 +200,19 @@ public class PlayerController : NetworkBehaviour, IDamagable
         // Subscribe to local player index changes to update color when set
         netLocalPlayerIndex.OnValueChanged += OnLocalPlayerIndexChanged;
 
-        // Set initial color (may be updated when LocalPlayerIndex is set)
-        SetPlaneColor();
+        appearance = GetComponent<PlaneAppearance>();
+        if (appearance != null)
+        {
+            appearance.NetSkinId.OnValueChanged += OnSkinChanged;
+            appearance.NetModelId.OnValueChanged += OnModelChanged;
+        }
 
-        // Cache visual effects reference
+        // Cache visual effects reference first - SetPlaneColor tells it
+        // about the sprite it just put on the renderer
         visualEffects = GetComponent<PlaneVisualEffects>();
+
+        // Set initial shape + skin + color (may be updated when LocalPlayerIndex is set)
+        SetPlaneColor();
 
         // Cache plane stats reference
         planeStats = GetComponent<PlaneStats>();
@@ -322,6 +333,17 @@ public class PlayerController : NetworkBehaviour, IDamagable
         var spriteRenderer = plane.GetComponent<SpriteRenderer>();
         if (spriteRenderer == null) return;
 
+        // Shape + skin swap happens first so the ColorReplace material below
+        // reads the chosen sprite's texture, not the default BiPlane1 one.
+        // Every shape passes the same envelope gate (tools/planes/gate.py)
+        // and keeps its tail-fin accent region pure red, so the shader step
+        // further down and the shared BoxCollider2D hitbox need no changes.
+        if (appearance != null)
+        {
+            var lookSprite = PlaneModelCatalog.LoadSprite(appearance.NetModelId.Value, appearance.NetSkinId.Value);
+            if (lookSprite != null) spriteRenderer.sprite = lookSprite;
+        }
+
         // Get color from PlayerColorManager using clientId + localPlayerIndex
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
         Color targetColor;
@@ -356,13 +378,26 @@ public class PlayerController : NetworkBehaviour, IDamagable
         {
             Debug.LogError("[PlayerController] ColorReplace shader not found! Make sure it's in Always Included Shaders.");
         }
+
+        // Owner glow outline + cached damage-flash material follow the sprite
+        if (visualEffects == null) visualEffects = GetComponent<PlaneVisualEffects>();
+        visualEffects?.OnPlaneSpriteChanged();
     }
 
     public override void OnNetworkDespawn()
     {
         base.OnNetworkDespawn();
         netLocalPlayerIndex.OnValueChanged -= OnLocalPlayerIndexChanged;
+        if (appearance != null)
+        {
+            appearance.NetSkinId.OnValueChanged -= OnSkinChanged;
+            appearance.NetModelId.OnValueChanged -= OnModelChanged;
+        }
     }
+
+    /// <summary>Called when the server applies a new hangar skin / shape pick.</summary>
+    private void OnSkinChanged(int previousValue, int newValue) => SetPlaneColor();
+    private void OnModelChanged(int previousValue, int newValue) => SetPlaneColor();
 
     /// <summary>
     /// Called when local player index changes - update plane color and visuals
