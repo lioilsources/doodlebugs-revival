@@ -17,10 +17,17 @@ public class BackgroundManager : NetworkBehaviour
     [SerializeField] private BackgroundProfile[] profiles;
 
     [Header("Advertising Foregrounds")]
-    [Tooltip("Ad-wall strips that rotate independently of the background. When " +
-             "any are assigned they replace the profile's own foreground, so a " +
-             "new background needs no foreground authored for it.")]
+    [Tooltip("Ad-wall strips that rotate independently of the background. They " +
+             "are the exception, not the rule: a round shows one only with " +
+             "adStripChance probability, otherwise the map's own terrain wins. " +
+             "A profile with no foreground of its own always gets an ad wall.")]
     [SerializeField] private Sprite[] adStrips;
+
+    [Tooltip("Probability that a round replaces the map's terrain with an ad " +
+             "wall. The ad art is a treat - at 1.0 it was the only foreground " +
+             "anyone ever saw and the per-map terrain never showed at all.")]
+    [Range(0f, 1f)]
+    [SerializeField] private float adStripChance = 0.1f;
 
     private NetworkVariable<int> _backgroundIndex = new NetworkVariable<int>(-1);
 
@@ -29,8 +36,9 @@ public class BackgroundManager : NetworkBehaviour
     /// client derives the same look with no netcode of their own.</summary>
     public int BackgroundIndex => _backgroundIndex.Value;
 
-    // Separate from the background index on purpose: the same map showing a
-    // different wall of ads each round is most of where the variety comes from.
+    // Separate from the background index on purpose: which ad wall shows is
+    // independent of which map is up. -1 means "no ad wall this round" - the
+    // normal case now that every map has terrain of its own.
     private NetworkVariable<int> _adStripIndex = new NetworkVariable<int>(-1);
 
     private void Awake()
@@ -104,14 +112,20 @@ public class BackgroundManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Picks the advertising wall for this round and syncs it. Runs alongside
-    /// the background selection but keeps its own index, so background and ads
-    /// vary independently.
+    /// Rolls for this round's advertising wall and syncs the result. Most
+    /// rounds come back empty (-1) and the map keeps its own terrain; see
+    /// adStripChance.
     /// </summary>
     public void SelectRandomAdStrip()
     {
-        if (!IsServer || adStrips == null || adStrips.Length == 0)
+        if (!IsServer)
         {
+            return;
+        }
+
+        if (adStrips == null || adStrips.Length == 0 || Random.value > adStripChance)
+        {
+            _adStripIndex.Value = -1;
             return;
         }
 
@@ -162,24 +176,25 @@ public class BackgroundManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// The ad wall to show, or the profile's own foreground when no ad strips
-    /// are assigned (which is how the pre-ads maps keep working unchanged).
+    /// The map's own terrain, or this round's ad wall when the roll came up
+    /// for one. A profile with no foreground authored still falls back to an
+    /// ad strip rather than the runtime placeholder silhouette.
     /// </summary>
     private Sprite ResolveForeground(BackgroundProfile profile)
     {
-        if (adStrips != null && adStrips.Length > 0)
+        int i = _adStripIndex.Value;
+        bool adRoundWon = i >= 0 && adStrips != null && i < adStrips.Length && adStrips[i] != null;
+        if (adRoundWon)
         {
-            int i = _adStripIndex.Value;
-            if (i < 0 || i >= adStrips.Length)
-            {
-                i = 0;
-            }
-            if (adStrips[i] != null)
-            {
-                return adStrips[i];
-            }
+            return adStrips[i];
         }
-        return profile.foregroundSprite;
+
+        if (profile.foregroundSprite != null)
+        {
+            return profile.foregroundSprite;
+        }
+
+        return adStrips != null && adStrips.Length > 0 ? adStrips[0] : null;
     }
 
     private void ApplyBackground(int index)
