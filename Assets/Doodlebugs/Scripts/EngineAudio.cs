@@ -7,6 +7,13 @@ public class EngineAudio : NetworkBehaviour
     public AudioClip engineHost;
     public AudioClip engineClient;
 
+    [Header("Mix")]
+    [Tooltip("Engine loop level. It used to inherit the AudioSource's own 1.0 " +
+             "while MusicManager runs at 0.35, so the engine simply buried the " +
+             "score in both the hangar and the battle. 0 silences it entirely.")]
+    [Range(0f, 1f)]
+    public float volume = 0.12f;
+
     [Header("Pitch Settings")]
     public float engineOffPitch = 0.5f;
     public float minPitch = 0.83f;
@@ -37,10 +44,18 @@ public class EngineAudio : NetworkBehaviour
             _audioSource = gameObject.AddComponent<AudioSource>();
         }
 
+        // Muted: don't spend a voice on a silent looping source.
+        if (volume <= 0f)
+        {
+            _audioSource.enabled = false;
+            return;
+        }
+
         // Select melody based on role (host vs client)
         bool isHost = NetworkManager.Singleton != null &&
                       NetworkManager.Singleton.IsHost;
         _audioSource.clip = isHost ? engineHost : engineClient;
+        _audioSource.volume = volume;
         _audioSource.loop = true;
         _audioSource.playOnAwake = false;
         _audioSource.Play();
@@ -48,7 +63,7 @@ public class EngineAudio : NetworkBehaviour
 
     void Update()
     {
-        if (!IsOwner || _player == null || _audioSource == null) return;
+        if (!IsOwner || _player == null || _audioSource == null || !_audioSource.enabled) return;
 
         bool engineOff = _player.IsEngineOff;
         float speed = _player.Speed;
