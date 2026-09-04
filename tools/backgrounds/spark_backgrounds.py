@@ -60,9 +60,12 @@ ASSETS_FG = ROOT / "Assets/Doodlebugs/Sprites/Foreground"
 
 BG_W, BG_H = 4096, 2732
 FG_W = 4096
-FG_RENDER = (FG_W, 1280)       # strip size delivered by SPARK (2x GEN_FG)
+FG_RENDER = (FG_W, 1920)       # strip size delivered by SPARK (2x GEN_FG)
 GEN_BG = (1536, 1024)           # FLUX native 3:2, same ratio as 4096x2732
-GEN_FG = (2048, 640)            # FLUX native for the terrain strip
+# 960, up from 640: a 3.2:1 frame gave the model no room to draw anything
+# tall, so every strip came back 5..10 world units of terrain against the
+# 14 the ad walls used to fill. Taller frame + a prompt that asks for height.
+GEN_FG = (2048, 960)            # FLUX native for the terrain strip
 SEAM_BAND = 320                 # px repainted across the wrap by FLUX Fill
 SEAM = 256                      # fallback: px cross-faded when --seam blend
 
@@ -745,7 +748,7 @@ def cmd_fg(a):
         else:
             g = {"20": {"class_type": "LoadImage", "inputs": {"image": ref}}}
             img = ["20", 0]
-        upscale_tail(g, img, FG_RENDER if a.seam == "fill" else (FG_W + SEAM, 1280 + 80),
+        upscale_tail(g, img, FG_RENDER if a.seam == "fill" else (FG_W + SEAM, FG_RENDER[1] + 80),
                      f"dbg/fgb_{jid}")
         rmbg_tail(g, ["12", 0], f"dbg/fgb_{jid}")
         stage_b.append((jid, g))

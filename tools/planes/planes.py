@@ -202,6 +202,45 @@ CONCEPTS = {
     "flying_car": dict(id=35, name="Flying Car", concept=(
         "1950s retro-futuristic flying car, a finned automobile body with "
         "whitewall wheels, small wings on the sides and a jet exhaust")),
+
+    # --- Creatures (36-41) ---------------------------------------------------
+    # The red livery is not negotiable even here: G7 wants >=35 % of the body
+    # red because the paint mask every skin composites into is derived from
+    # exactly those pixels. A scarlet wasp is odd zoology and fine arcade art.
+    # Wings are the risk - they are gaps, and gaps in the middle 50x30 box are
+    # what G1 rejects - so every prompt asks for a long body down the centre.
+    # Seeds 7360-7362 came back at fill 0.36 against a 0.42 floor: spread bat
+    # wings put a big empty bbox around a thin animal. Folded wings keep the
+    # mass inside the silhouette.
+    "dragon": dict(id=36, name="Dragon", concept=(
+        "flying dragon with a thick heavy red scaly body stretched "
+        "horizontally, leathery wings FOLDED CLOSE against its flanks rather "
+        "than spread, a horned head at the front, a thick muscular tail "
+        "behind, stocky and compact")),
+    "unicorn": dict(id=37, name="Unicorn", concept=(
+        "flying unicorn with a long horse body stretched horizontally, "
+        "feathered wings swept back along its flanks, a spiral horn on its "
+        "forehead and a flowing mane and tail")),
+    "wasp": dict(id=38, name="Wasp", concept=(
+        "giant wasp with a long segmented red and black striped body, narrow "
+        "transparent wings held back along the body, antennae at the front "
+        "and a pointed sting at the rear")),
+    # Seeds 7390-7392 were 110x86 against a 72 ceiling - the only gate they
+    # missed, with ideal mass otherwise. A fly drawn with its wings up is
+    # tall; flat along the back is what fits.
+    "fly": dict(id=39, name="Fly", concept=(
+        "giant housefly seen from the side, long low fat red body, huge round "
+        "compound eyes at the front, short transparent wings lying FLAT along "
+        "its back rather than raised, tiny stubby legs tucked underneath, "
+        "wide and low rather than tall")),
+    "eagle": dict(id=40, name="Eagle", concept=(
+        "large bird of prey gliding, long red body stretched horizontally, "
+        "broad wings swept back, a hooked beak at the front and a fanned tail "
+        "at the rear")),
+    "goose": dict(id=41, name="Goose", concept=(
+        "goose in level flight with a long stretched red body and outstretched "
+        "neck at the front, wings swept back along its flanks, webbed feet "
+        "tucked up underneath")),
 }
 
 DEFAULT_SEED = 7000

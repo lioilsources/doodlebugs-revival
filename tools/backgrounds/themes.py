@@ -34,13 +34,18 @@ BG_FRAME = (
 # Shared framing for the foreground cutouts. The white ground is what RMBG
 # keys out; "bottom edge" keeps the terrain anchored so the strip has a floor.
 FG_FRAME = (
-    "side view terrain strip for a 2d scrolling game, the ground rises from "
-    "the bottom edge of the image, uneven silhouette skyline, isolated on a "
-    "plain flat pure white background, only the terrain is drawn, "
-    "textless, flat vector cutout with crisp edges"
+    "side view terrain strip for a 2d scrolling game, tall massive terrain "
+    "filling most of the frame from the bottom edge upward, high peaks and "
+    "tall structures reaching towards the top, uneven silhouette skyline, "
+    "isolated on a plain flat pure white background, only the terrain is "
+    "drawn, textless, flat vector cutout with crisp edges"
 )
 
-FG_MAX_HEIGHT = 1280   # px @ PPU 100 = 12.8 wu; ~half the screen on a phone
+# 1920 px @ PPU 100 = 19.2 wu. Was 1280, but the delivered strips were only
+# using 487..1041 of it - the model drew short terrain in a wide frame, so the
+# cap was never what limited them. Raised alongside a taller render frame and
+# a prompt that asks for height, aiming ~1.5x the previous terrain.
+FG_MAX_HEIGHT = 1920
 
 STYLES = {
     # Every entry is a Flux style block. "model" (only on entries that carry
