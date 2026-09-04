@@ -149,6 +149,44 @@ public class PlaneSkinManager : NetworkBehaviour
         return (PlaneModelCatalog.BaseModelId, PlaneSkinCatalog.StarterSkinId);
     }
 
+    /// <summary>
+    /// Server, on spawn: make sure this player OWNS a look rather than merely
+    /// defaulting to one.
+    ///
+    /// GetClaim used to be all a spawning plane called, and it registers
+    /// nothing - so until someone opened the picker they held no claim, every
+    /// pilot flew the same red biplane, and none of them showed as TAKEN to
+    /// anybody. Claiming on spawn is what makes "taken" mean anything.
+    ///
+    /// A player whose default is already worn is walked to the next free
+    /// combination: same shape, next livery, because a different colour reads
+    /// from across the arena far better than a different silhouette.
+    /// </summary>
+    public (int modelId, int skinId) ServerClaimInitialLook(ulong clientId, int localPlayerIndex)
+    {
+        var fallback = (PlaneModelCatalog.BaseModelId, PlaneSkinCatalog.StarterSkinId);
+        if (!IsServer) return fallback;
+
+        foreach (var c in _claims)
+        {
+            if (c.IsPlayer(clientId, localPlayerIndex)) return (c.ModelId, c.SkinId);
+        }
+
+        foreach (int modelId in PlaneModelCatalog.Available)
+        {
+            for (int skinId = 0; skinId < PlaneSkinCatalog.Count; skinId++)
+            {
+                if (IsTaken(modelId, skinId, clientId, localPlayerIndex)) continue;
+                if (TryClaim(clientId, localPlayerIndex, modelId, skinId)) return (modelId, skinId);
+            }
+        }
+
+        // Every combination taken - not reachable with 25 shapes x 50 skins,
+        // but a duplicate look beats no plane at all.
+        Debug.LogWarning("[PlaneSkinManager] No free (shape, skin) combination left");
+        return fallback;
+    }
+
     public void Release(ulong clientId, int localPlayerIndex)
     {
         if (!IsServer) return;
