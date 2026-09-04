@@ -113,6 +113,15 @@ public static class PlaneModelCatalog
         new(33, "heavy_bomber", "Fortress"),
         new(34, "dragonfly",    "Dragonfly"),
         new(35, "flying_car",   "Flying Car"),
+
+        // Creatures. Same envelope, same red paint region, same shared hitbox -
+        // to the game a dragon is a silhouette like any other.
+        new(36, "dragon",       "Dragon"),
+        new(37, "unicorn",      "Unicorn"),
+        new(38, "wasp",         "Wasp"),
+        new(39, "fly",          "Fly"),
+        new(40, "eagle",        "Eagle"),
+        new(41, "goose",        "Goose"),
     };
 
     private static Dictionary<int, PlaneModelDef> _byId;
