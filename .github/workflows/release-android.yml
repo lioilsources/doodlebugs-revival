@@ -18,6 +18,10 @@ jobs:
     runs-on: [self-hosted, macos-unity]
     timeout-minutes: 180
 
+    # gh release upload writes to the repo; the default token is read-only.
+    permissions:
+      contents: write
+
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -111,6 +115,28 @@ jobs:
           path: Builds/Android/doodlebugs-signed.apk
           if-no-files-found: warn
           retention-days: 7
+
+      # Public download. Firebase App Distribution needs testers to install
+      # App Tester and be invited first; a release asset is just a URL, which
+      # is what the download page links to.
+      - name: Attach APK to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          # The literal tag, not "v$VERSION": the version step strips the
+          # prefix and this repo also tags beta/1.2.3 and alpha/1.2.3, which
+          # would not round-trip.
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          NAMED="Builds/Android/doodlebugs-${VERSION}.apk"
+          cp Builds/Android/doodlebugs-signed.apk "$NAMED"
+          # The desktop Release workflow creates the release; on the rare
+          # occasion this job wins the race, make it ourselves.
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --title "Doodlebugs Revival $TAG" --notes ""
+          gh release upload "$TAG" "$NAMED" --clobber
 
       - name: Remove service account key
         if: always()
