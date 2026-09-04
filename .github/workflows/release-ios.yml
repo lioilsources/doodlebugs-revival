@@ -23,7 +23,7 @@ jobs:
   ios:
     name: Build & TestFlight
     runs-on: [self-hosted, macos-unity]
-    timeout-minutes: 90
+    timeout-minutes: 180
 
     env:
       IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
