@@ -40,11 +40,15 @@ public static class PlaneModelCatalog
     private const float LumBase = 0.15f;
     private const float LumWeight = 0.85f;
 
-    // Composites are created on demand (each plane once per change, the
-    // picker once per visible card). Past this many the whole cache is
-    // dropped and rebuilt lazily - keeps a long session with many model
-    // switches from hoarding 64 KB textures.
-    private const int MaxCachedComposites = 160;
+    // Composites are created on demand: each plane once per look change, the
+    // picker once per visible card (29 shapes + 50 skins on open, +50 per
+    // shape switch). They are NEVER evicted on the load path. The first cut
+    // capped the cache at 160 and destroyed everything past it - which
+    // destroyed sprites still bound to a SpriteRenderer (plane goes
+    // invisible, and a respawn does not re-run SetPlaneColor) and to picker
+    // Images (white rectangles). Trimming happens only when the picker
+    // closes, and keeps whatever spawned planes are wearing - see
+    // TrimComposites.
 
     public readonly struct PlaneModelDef
     {
@@ -205,9 +209,37 @@ public static class PlaneModelCatalog
         var sprite = Composite(modelId, skinId, swatch);
         if (sprite == null) return LoadBaseSprite(modelId);
 
-        if (_composites.Count >= MaxCachedComposites) ClearComposites();
         _composites[key] = sprite;
         return sprite;
+    }
+
+    /// <summary>
+    /// Drop every cached composite except the looks in <paramref name="keep"/>.
+    /// Call it when the picker closes, with what spawned planes are wearing:
+    /// the picker is the only thing that composites in bulk, and once its
+    /// Images are gone nothing else references those sprites. A look a plane
+    /// wears must survive - destroying it blanks the plane for the rest of
+    /// the round.
+    /// </summary>
+    public static void TrimComposites(IEnumerable<(int modelId, int skinId)> keep)
+    {
+        var keepKeys = new HashSet<long>();
+        foreach (var (m, s) in keep) keepKeys.Add(CompositeKey(m, s));
+
+        var drop = new List<long>();
+        foreach (var kv in _composites)
+        {
+            if (!keepKeys.Contains(kv.Key)) drop.Add(kv.Key);
+        }
+        foreach (long key in drop)
+        {
+            var sprite = _composites[key];
+            _composites.Remove(key);
+            if (sprite == null) continue;
+            var tex = sprite.texture;
+            Object.Destroy(sprite);
+            if (tex != null) Object.Destroy(tex);
+        }
     }
 
     private static Sprite Composite(int modelId, int skinId, Texture2D swatch)
@@ -288,18 +320,6 @@ public static class PlaneModelCatalog
         }
         _maskTextures[modelId] = tex;
         return tex;
-    }
-
-    private static void ClearComposites()
-    {
-        foreach (var sprite in _composites.Values)
-        {
-            if (sprite == null) continue;
-            var tex = sprite.texture;
-            Object.Destroy(sprite);
-            if (tex != null) Object.Destroy(tex);
-        }
-        _composites.Clear();
     }
 
     private static long CompositeKey(int modelId, int skinId) => ((long)modelId << 32) | (uint)skinId;
