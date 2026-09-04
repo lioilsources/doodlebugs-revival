@@ -2047,9 +2047,27 @@ public class GameHUD : MonoBehaviour
         _skinCards.Clear();
         _shapeCards.Clear();
         _shapeRowContent = null;
+
+        // The picker is the only bulk consumer of composited sprites; once its
+        // cards are gone, drop everything except the looks planes are wearing.
+        // Never trim while it is open, and never trim a worn look - a
+        // destroyed sprite blanks the plane for the rest of the round.
+        var worn = new List<(int, int)>();
+        foreach (var a in FindObjectsByType<PlaneAppearance>(FindObjectsSortMode.None))
+        {
+            worn.Add((a.NetModelId.Value, a.NetSkinId.Value));
+        }
+        PlaneModelCatalog.TrimComposites(worn);
     }
 
-    private void OnSkinClaimsChanged(NetworkListEvent<PlaneSkinManager.SkinClaim> _) => RefreshSkinPicker();
+    // Coalesced: a joining client syncs the claim list one entry at a time
+    // and every entry fired a full rebuild - 79 cards destroyed and recreated
+    // per event, a visible hitch per player on the hangar screen. One rebuild
+    // per burst is plenty.
+    private void OnSkinClaimsChanged(NetworkListEvent<PlaneSkinManager.SkinClaim> _)
+    {
+        if (!IsInvoking(nameof(RefreshSkinPicker))) Invoke(nameof(RefreshSkinPicker), 0.1f);
+    }
 
     // --- scene picker (host only: which arenas the run cycles through) ---------
 
