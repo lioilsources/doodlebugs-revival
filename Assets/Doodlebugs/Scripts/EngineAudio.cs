@@ -10,9 +10,11 @@ public class EngineAudio : NetworkBehaviour
     [Header("Mix")]
     [Tooltip("Engine loop level. It used to inherit the AudioSource's own 1.0 " +
              "while MusicManager runs at 0.35, so the engine simply buried the " +
-             "score in both the hangar and the battle. 0 silences it entirely.")]
+             "score in both the hangar and the battle. 0 disables the source " +
+             "outright (no voice spent) - that is the current setting, by request; " +
+             "0.12 was the level that sat under the music without fighting it.")]
     [Range(0f, 1f)]
-    public float volume = 0.12f;
+    public float volume = 0f;
 
     [Header("Pitch Settings")]
     public float engineOffPitch = 0.5f;
