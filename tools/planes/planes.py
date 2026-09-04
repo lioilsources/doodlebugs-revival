@@ -33,12 +33,23 @@ FRAME = (
 # with a strong silhouette (racer, flying boat). txt2img has no reference to
 # cling to; the post-process normalisation supplies the envelope instead.
 TXT_FRAME = (
-    "flat pixel-art game sprite of a {concept}, side view, facing right with "
-    "the nose pointing right, bright red livery with a grey engine cowling, a "
-    "visible pilot in an open cockpit, crisp clean edges, no outline, centred "
-    "on a plain pure white background, one single aircraft, nothing else, no "
-    "text, in the style of a 1990s 16-bit arcade game"
+    "flat pixel-art game sprite of a {concept}, strict side view profile, "
+    "facing right with the front pointing right, roughly twice as wide as it "
+    "is tall, filling the frame, mostly bright red paintwork with grey metal "
+    "fittings, crisp clean edges, no outline, centred on a plain pure white "
+    "background, one single craft, nothing else, no text, in the style of a "
+    "1990s 16-bit arcade game"
 )
+# "twice as wide as tall" is aimed straight at G1/G2. Without it a strict side
+# view of a monoplane came out 110x16..41 - a correct drawing, but the shared
+# 50x50 hitbox would then be mostly air, which is exactly the unfairness the
+# gate exists to catch. The other half of the batch had the opposite problem
+# (galleon, balloon, lander drawn as tall 110x122 compositions).
+# The red is not decoration: G7 wants >=35 % of the body red, and the paint
+# mask that every skin composites into is derived from exactly those pixels.
+# The pilot used to be mandatory here and in FRAME - dropped, because it means
+# nothing to a galleon or a balloon and it was what dragged Pony into drawing
+# furry characters. Grey "fittings" stay: they become the fixed mask.
 
 NEG = (
     "text, letters, watermark, logo, signature, two aircraft, multiple "
@@ -46,6 +57,28 @@ NEG = (
     "horizon, shadow, ground shadow, drop shadow, reflection, frame, border, "
     "blurry, photograph, 3d render, realistic"
 )
+
+# Pony Diffusion V6 XL + the Spacecraft LoRA, kept for the record: it does not
+# work for this job. Pony reads danbooru tags rather than prose, so the first
+# pass (sentences, "visible pilot") produced painterly 3/4 concept art on warm
+# grey with furry pilots. Tags and a creature negative fixed the subject, but
+# the 3/4 framing is the base model's own habit: 1 of 18 seeds cleared the
+# envelope gate against FLUX's near-100 %. Use --mode txt2img instead.
+PONY_FRAME = (
+    "score_9, score_8_up, score_7_up, {concept}, mecha, science fiction, "
+    "vehicle focus, no humans, from side, side view, facing right, "
+    "simple background, white background, flat color, thick outlines, "
+    "centered, full body"
+)
+PONY_NEG = (
+    "score_6, score_5, score_4, furry, anthro, animal ears, tail, fur, "
+    "dragon, creature, monster, 1girl, 1boy, human, people, face, portrait, "
+    "grey background, gradient background, scenery, landscape, stars, "
+    "shadow, blurry, sketch, painterly, realistic, 3d, text, watermark, "
+    "signature, multiple views"
+)
+PONY_CKPT = "ponyDiffusionV6XL_v6StartWithThisOne.safetensors"
+PONY_LORA = "Spacecraft.safetensors"
 
 # id 0 is BiPlane1 itself - never rendered.
 CONCEPTS = {
@@ -94,6 +127,81 @@ CONCEPTS = {
     "zeppelin": dict(id=15, name="Zeppelin", concept=(
         "small zeppelin airship with a cigar-shaped red envelope, a gondola "
         "underneath with the pilot and a rear propeller")),
+
+    # --- Space (16-21) -------------------------------------------------------
+    # No WWI counterpart for Kontext to hold onto, so these are --mode txt2img:
+    # the reference would only drag them back towards a biplane.
+    "starfighter": dict(id=16, name="Starfighter", concept=(
+        "sleek space starfighter with swept delta wings and glowing engine "
+        "nozzles at the back")),
+    "shuttle": dict(id=17, name="Shuttle", concept=(
+        "small space shuttle orbiter with stubby delta wings, a rounded nose "
+        "and a tall tail fin")),
+    "interceptor": dict(id=18, name="Interceptor", concept=(
+        "needle-nosed space interceptor with a long pointed nose, a bubble "
+        "canopy and thruster pods on the sides")),
+    "saucer": dict(id=19, name="Saucer", concept=(
+        "flying saucer with a wide flat disc hull and a glass bubble cockpit "
+        "dome on top")),
+    "lander": dict(id=20, name="Lander", concept=(
+        "boxy lunar lander spacecraft with landing legs, a descent thruster "
+        "underneath and a small viewport")),
+    "gunship": dict(id=21, name="Gunship", concept=(
+        "armored space gunship with a heavy blocky hull, gun pods under the "
+        "wings and twin rear engines")),
+
+    # --- Ocean (22-24) -------------------------------------------------------
+    "galleon": dict(id=22, name="Galleon", concept=(
+        "flying pirate galleon, a wooden sailing ship hull with a bowsprit at "
+        "the front, two masts with billowing sails and small wings on the sides")),
+    "manta": dict(id=23, name="Manta", concept=(
+        "manta ray shaped glider, one wide flat triangular wing body with "
+        "swept wingtips and a long thin whip tail")),
+    "seaplane": dict(id=24, name="Seaplane", concept=(
+        "floatplane seaplane, a monoplane standing on two long pontoon floats "
+        "under the fuselage instead of wheels")),
+
+    # --- History (25-27) -----------------------------------------------------
+    "wright_flyer": dict(id=25, name="Wright Flyer", concept=(
+        "1903 Wright Flyer style box-kite aeroplane, two thin wooden wings held "
+        "apart by many vertical struts, a small elevator sticking out in front "
+        "on booms, landing skids instead of wheels")),
+    "aerial_screw": dict(id=26, name="Aerial Screw", concept=(
+        "da Vinci aerial screw flying machine, a wooden platform with a large "
+        "helical corkscrew canvas rotor mounted above it")),
+    "balloon": dict(id=27, name="Balloon", concept=(
+        "hot air balloon, a round striped envelope with a wicker basket hanging "
+        "underneath and a small propeller on the back of the basket")),
+
+    # --- Future (28-30) ------------------------------------------------------
+    "stealth": dict(id=28, name="Stealth", concept=(
+        "angular stealth flying wing, one sharp faceted arrowhead wing with no "
+        "fuselage and no tail, flat angular panels")),
+    "hover_pod": dict(id=29, name="Hover Pod", concept=(
+        "futuristic hovering pod with no wings at all, a smooth egg-shaped "
+        "capsule with a glass canopy and glowing antigravity thrusters below")),
+    "tiltrotor": dict(id=30, name="Tiltrotor", concept=(
+        "VTOL tiltrotor aircraft with a stubby fuselage and two big rotors on "
+        "nacelles tilted upward at the wingtips")),
+
+    # --- WWI / WWII (31-33) --------------------------------------------------
+    "gotha_bomber": dict(id=31, name="Gotha", concept=(
+        "large WWI twin-engine biplane bomber with very long wings, two engines "
+        "mounted between the wings and a long slab-sided fuselage")),
+    "elliptical_fighter": dict(id=32, name="Spitfire", concept=(
+        "WWII monoplane fighter with distinctive elliptical rounded wings, a "
+        "long nose with an inline engine and a bubble canopy")),
+    "heavy_bomber": dict(id=33, name="Fortress", concept=(
+        "WWII four-engine heavy bomber with a very wide straight wing, four "
+        "propeller engines along it, a glazed nose and a tall tail fin")),
+
+    # --- Wildcards (34-35) ---------------------------------------------------
+    "dragonfly": dict(id=34, name="Dragonfly", concept=(
+        "mechanical dragonfly aircraft with a long slender segmented body and "
+        "four narrow translucent insect wings, a big round compound-eye canopy")),
+    "flying_car": dict(id=35, name="Flying Car", concept=(
+        "1950s retro-futuristic flying car, a finned automobile body with "
+        "whitewall wheels, small wings on the sides and a jet exhaust")),
 }
 
 DEFAULT_SEED = 7000
@@ -103,8 +211,12 @@ def prompt_for(key, mode="kontext"):
     spec = CONCEPTS[key]
     if spec["concept"] is None:
         return None
-    frame = TXT_FRAME if mode == "txt2img" else FRAME
+    frame = {"txt2img": TXT_FRAME, "pony": PONY_FRAME}.get(mode, FRAME)
     return frame.format(concept=spec["concept"])
+
+
+def negative_for(mode):
+    return PONY_NEG if mode == "pony" else NEG
 
 
 def seed_for(key, i):

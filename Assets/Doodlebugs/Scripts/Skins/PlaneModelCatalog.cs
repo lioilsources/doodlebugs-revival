@@ -88,6 +88,31 @@ public static class PlaneModelCatalog
         new(13, "crop_duster",  "Crop Duster"),
         new(14, "delta_glider", "Delta Glider"),
         new(15, "zeppelin",     "Zeppelin"),
+
+        // Themed batch, 2026-09-04. Ids must match tools/planes/planes.py.
+        // Several are listed but never shipped - the gate rejected every seed
+        // (a balloon or a da Vinci screw simply is not a 110x26..72 shape) -
+        // so IsAvailable reports false and the picker hides them.
+        new(16, "starfighter",  "Starfighter"),
+        new(17, "shuttle",      "Shuttle"),
+        new(18, "interceptor",  "Interceptor"),
+        new(19, "saucer",       "Saucer"),
+        new(20, "lander",       "Lander"),
+        new(21, "gunship",      "Gunship"),
+        new(22, "galleon",      "Galleon"),
+        new(23, "manta",        "Manta"),
+        new(24, "seaplane",     "Seaplane"),
+        new(25, "wright_flyer", "Wright Flyer"),
+        new(26, "aerial_screw", "Aerial Screw"),
+        new(27, "balloon",      "Balloon"),
+        new(28, "stealth",      "Stealth"),
+        new(29, "hover_pod",    "Hover Pod"),
+        new(30, "tiltrotor",    "Tiltrotor"),
+        new(31, "gotha_bomber", "Gotha"),
+        new(32, "elliptical_fighter", "Spitfire"),
+        new(33, "heavy_bomber", "Fortress"),
+        new(34, "dragonfly",    "Dragonfly"),
+        new(35, "flying_car",   "Flying Car"),
     };
 
     private static Dictionary<int, PlaneModelDef> _byId;

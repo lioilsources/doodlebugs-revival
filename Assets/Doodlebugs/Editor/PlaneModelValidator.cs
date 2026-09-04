@@ -19,11 +19,16 @@ using UnityEngine;
 public static class PlaneModelValidator
 {
     private const int Size = 128;
-    private const int CoreMin = 39, CoreMax = 88;        // inclusive - 50x50 px hitbox footprint
-    private const float CoreMinCoverage = 0.55f;         // G1 (BiPlane1 itself: 0.66)
+    // 50x30 px hitbox footprint - PlaneHolder's BoxCollider2D is 0.5 x 0.3
+    // world units against a 1.28 wu sprite. Flattened from square on
+    // 2026-09-04: same box for everyone, so fairness is unchanged, but slim
+    // aircraft whose honest side view is 110x26..41 now fit the envelope.
+    private const int CoreXMin = 39, CoreXMax = 88;
+    private const int CoreYMin = 49, CoreYMax = 78;
+    private const float CoreMinCoverage = 0.70f;         // G1 (BiPlane1 itself: 0.89)
     private const int WidthMin = 96, WidthMax = 118;     // G2
-    private const int HeightMin = 44, HeightMax = 72;
-    private const float FillMin = 0.42f, FillMax = 0.66f; // G3
+    private const int HeightMin = 26, HeightMax = 72;
+    private const float FillMin = 0.42f, FillMax = 0.72f; // G3
     private const float CentroidTol = 8f;                // G4 (mass centroid vs canvas centre; BiPlane1 sits 4.7 px high)
     private const int NoseMin = 108, NoseMax = 122;      // G5
     private const int TailMin = 4, TailMax = 18;
@@ -121,7 +126,7 @@ public static class PlaneModelValidator
                 if (x > maxX) maxX = x;
                 if (yImg < minY) minY = yImg;
                 if (yImg > maxY) maxY = yImg;
-                if (x >= CoreMin && x <= CoreMax && yImg >= CoreMin && yImg <= CoreMax) core++;
+                if (x >= CoreXMin && x <= CoreXMax && yImg >= CoreYMin && yImg <= CoreYMax) core++;
                 if (x < Margin || x >= w - Margin || yImg < Margin || yImg >= h - Margin) marginHit = true;
                 if (IsLiveryRed(c)) red++;
             }
@@ -134,7 +139,7 @@ public static class PlaneModelValidator
         m.nose = maxX;
         m.tail = minX;
         m.fill = opaque / (float)(m.w * m.h);
-        m.core = core / (float)((CoreMax - CoreMin + 1) * (CoreMax - CoreMin + 1));
+        m.core = core / (float)((CoreXMax - CoreXMin + 1) * (CoreYMax - CoreYMin + 1));
         m.cx = sumX / (float)opaque;
         m.cy = sumY / (float)opaque;
         m.red = red / (float)opaque;

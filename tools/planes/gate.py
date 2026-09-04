@@ -25,11 +25,26 @@ from pathlib import Path
 from PIL import Image
 
 SIZE = 128
-CORE = (39, 88)               # inclusive px range of the hitbox footprint, both axes
-CORE_MIN_COVERAGE = 0.55      # G1 - share of core pixels that must be opaque (BiPlane1: 0.66)
+# The hitbox is 50x30 px of the sprite (PlaneHolder's BoxCollider2D, size
+# 0.5 x 0.3 world units against a 1.28 wu sprite), centred. It was square
+# until 2026-09-04; flattening it kept the box identical for everyone - so
+# fairness is untouched - while admitting the whole family of slim aircraft
+# (bombers, monoplane fighters, manta, dragonfly) whose honest side view is
+# 110x17..41 and could never fill a square.
+CORE_X = (39, 88)             # inclusive px range of the hitbox footprint
+CORE_Y = (49, 78)
+# 0.70, not the 0.75 the shipped set would allow: those are all Kontext
+# redesigns of one biplane and share its solid fuselage (0.83-1.00). Designs
+# built around floats, struts and rotors sit lower by nature. Below 0.70 more
+# than a third of the box is gap and a bullet through the hole still scores,
+# which is the "invisible hitbox" the gate exists to prevent.
+CORE_MIN_COVERAGE = 0.70      # G1 (BiPlane1: 0.89)
 WIDTH = (96, 118)             # G2 - alpha bbox width band
-HEIGHT = (44, 72)             #      height band (triplane yes, blimp no) - plan D3
-FILL = (0.42, 0.66)           # G3 - opaque / bbox area
+HEIGHT = (26, 72)             #      height band - slim monoplanes in, blimps out
+# Upper bound relaxed 0.66 -> 0.72: a chunky solid hull (gunship, 0.69) is not
+# unfair, it just looks stocky. The bound that matters is the lower one, which
+# keeps wispy outlines from reading as smaller targets than they are.
+FILL = (0.42, 0.72)           # G3 - opaque / bbox area
 CENTROID_TOL = 8              # G4 - mass centroid within +-8 px of (64,64) (BiPlane1 sits 4.7 px high)
 NOSE = (108, 122)             # G5 - rightmost opaque column
 TAIL = (4, 18)                #      leftmost opaque column
@@ -59,7 +74,8 @@ def measure(im):
     sum_x = sum_y = 0
     opaque = core = red = 0
     margin_hit = False
-    c0, c1 = CORE
+    cx0, cx1 = CORE_X
+    cy0, cy1 = CORE_Y
     for y in range(h):
         for x in range(w):
             p = px[x, y]
@@ -72,7 +88,7 @@ def measure(im):
             if x > max_x: max_x = x
             if y < min_y: min_y = y
             if y > max_y: max_y = y
-            if c0 <= x <= c1 and c0 <= y <= c1:
+            if cx0 <= x <= cx1 and cy0 <= y <= cy1:
                 core += 1
             if x < MARGIN or x >= w - MARGIN or y < MARGIN or y >= h - MARGIN:
                 margin_hit = True
@@ -85,7 +101,7 @@ def measure(im):
     return dict(
         size=(w, h), w=bw, h=bh,
         fill=opaque / (bw * bh),
-        core=core / ((c1 - c0 + 1) ** 2),
+        core=core / ((cx1 - cx0 + 1) * (cy1 - cy0 + 1)),
         cx=sum_x / opaque, cy=sum_y / opaque,
         nose=max_x, tail=min_x,
         margin_hit=margin_hit,
