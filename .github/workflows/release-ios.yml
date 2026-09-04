@@ -8,12 +8,17 @@ on:
     tags: ['v*.*.*']
   workflow_dispatch:
 
-# Both mobile workflows share this group on purpose. They run on the same machine
-# against the same Unity install, and two editors writing one Library/ folder is
-# how you get a corrupted project lock. A per-workflow group would let iOS and
-# Android start simultaneously and defeat the point.
+# One group PER platform, not one shared "unity-build". GitHub keeps at most
+# one *pending* run per group, so when a tag push queued both mobile jobs
+# while the previous tag's iOS job still held the shared group, one of the
+# two new runs was cancelled after 1 s (v2.6.2 iOS, 2026-09-04).
+#
+# The shared group used to exist so two editors never wrote the one Library/
+# folder at once. That is still guaranteed: the Mac Mini has a single runner
+# registration, and a runner executes one job at a time, so iOS and Android
+# serialize on the runner instead of on a group that also cancels runs.
 concurrency:
-  group: unity-build
+  group: unity-build-ios
   cancel-in-progress: false
 
 env:
