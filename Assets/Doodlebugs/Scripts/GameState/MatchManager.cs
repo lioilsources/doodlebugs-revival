@@ -22,7 +22,11 @@ public class MatchManager : MonoBehaviour
     // The next round starts when every connected client is ready, or after
     // the auto-start timeout - nobody can block the lobby.
     public const int ResultsSeconds = 4;
-    public const int HangarSeconds = 30;
+    // Safety net, not the normal path: the round starts when everyone has
+    // pressed READY. 30 s was fine when the hangar held one row of weapons;
+    // with 25 airframes x 50 liveries to browse it fired while people were
+    // still in the picker, which read as the game ignoring READY entirely.
+    public const int HangarSeconds = 120;
 
     // Run = best-of-5: first client to win this many rounds takes the run,
     // then the podium shows and everything (upgrades, weapons, wins) resets.
@@ -33,7 +37,7 @@ public class MatchManager : MonoBehaviour
     // WaitingForPlayers; the 2nd connect starts a short pre-battle countdown
     // (READY skips it early); a client joining a running battle gets a
     // personal hangar and deploys after LateJoinSeconds at the latest.
-    public const int PreBattleSeconds = 10;
+    public const int PreBattleSeconds = 120;
     public const int LateJoinSeconds = 10;
 
     /// <summary>Server-authoritative game phase, mirrored to clients.</summary>
