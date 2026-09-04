@@ -2175,8 +2175,8 @@ public class GameHUD : MonoBehaviour
         var viewportRect = viewportGO.AddComponent<RectTransform>();
         viewportRect.anchorMin = new Vector2(0.5f, 0.5f);
         viewportRect.anchorMax = new Vector2(0.5f, 0.5f);
-        viewportRect.anchoredPosition = new Vector2(0, -20);
-        viewportRect.sizeDelta = new Vector2(760, 400);
+        viewportRect.anchoredPosition = new Vector2(0, -80);
+        viewportRect.sizeDelta = new Vector2(780, 540);
 
         var viewportImg = viewportGO.AddComponent<Image>();
         viewportImg.color = new Color(1f, 1f, 1f, 0.02f);
@@ -2233,8 +2233,8 @@ public class GameHUD : MonoBehaviour
             var row = new GameObject($"Scene_{profileIdx}");
             row.transform.SetParent(_scenePickerContent, false);
             var rowRect = row.AddComponent<RectTransform>();
-            rowRect.sizeDelta = new Vector2(740, 56);
-            row.AddComponent<LayoutElement>().preferredHeight = 56;
+            rowRect.sizeDelta = new Vector2(740, 120);
+            row.AddComponent<LayoutElement>().preferredHeight = 120;
 
             var rowBg = row.AddComponent<Image>();
             rowBg.color = on ? CardSelected : CardIdle;
@@ -2251,17 +2251,19 @@ public class GameHUD : MonoBehaviour
             });
 
             CreateTextIn(row.transform, "Tick", on ? "[X]" : "[  ]", 14,
-                new Vector2(-330, 0), on ? ReadyGreen : new Color(1f, 1f, 1f, 0.35f));
+                new Vector2(-344, 0), on ? ReadyGreen : new Color(1f, 1f, 1f, 0.35f));
             CreateTextIn(row.transform, "Order", on ? slot.ToString() : "-", 14,
-                new Vector2(-278, 0), new Color(1f, 1f, 1f, 0.7f));
+                new Vector2(-302, 0), new Color(1f, 1f, 1f, 0.7f));
+
+            BuildScenePreview(row, profile, on, new Vector2(-186, 0), new Vector2(168, 112));
 
             string mapName = profile.backgroundSprite != null ? profile.backgroundSprite.name : profile.name;
-            CreateTextIn(row.transform, "Name", mapName, 13, new Vector2(-120, 0),
+            CreateTextIn(row.transform, "Name", mapName, 13, new Vector2(70, 16),
                 on ? Color.white : new Color(1f, 1f, 1f, 0.4f));
 
             if (profile.isPremium)
             {
-                CreateTextIn(row.transform, "Premium", "PREMIUM", 8, new Vector2(60, 0),
+                CreateTextIn(row.transform, "Premium", "PREMIUM", 8, new Vector2(70, -18),
                     new Color(1f, 0.85f, 0.3f));
             }
 
@@ -2276,6 +2278,68 @@ public class GameHUD : MonoBehaviour
             down.interactable = pos < _sceneDraftOrder.Count - 1;
             down.onClick.AddListener(() => MoveScene(capturedPos, +1));
         }
+    }
+
+    /// <summary>
+    /// Arena thumbnail for one picker row: the sky stretched to fill the frame
+    /// exactly as ScreenSetup stretches it over the camera, with the terrain
+    /// strip lying along the bottom edge. Both sprites come off the profile
+    /// itself, which the scene already holds, so the preview loads nothing new.
+    /// </summary>
+    private void BuildScenePreview(GameObject row, BackgroundProfile profile, bool on,
+        Vector2 pos, Vector2 size)
+    {
+        var frame = new GameObject("Preview");
+        frame.transform.SetParent(row.transform, false);
+        var frameRect = frame.AddComponent<RectTransform>();
+        frameRect.anchorMin = new Vector2(0.5f, 0.5f);
+        frameRect.anchorMax = new Vector2(0.5f, 0.5f);
+        frameRect.anchoredPosition = pos;
+        frameRect.sizeDelta = size;
+
+        // Dropped arenas grey out rather than vanish - the row still has to be
+        // findable to tick it back on.
+        Color tint = on ? Color.white : new Color(0.5f, 0.5f, 0.5f, 0.55f);
+
+        var sky = frame.AddComponent<Image>();
+        sky.sprite = profile.backgroundSprite;
+        sky.preserveAspect = false;
+        sky.raycastTarget = false;
+        sky.color = profile.backgroundSprite != null ? tint : new Color(0.1f, 0.12f, 0.16f, 1f);
+
+        // A terrain strip taller than the frame must not spill over the row.
+        frame.AddComponent<RectMask2D>();
+
+        if (profile.foregroundSprite == null) return;
+
+        // Height is the honest one - the fraction of the visible world height
+        // the strip really covers. Width is stretched to the frame because in
+        // game the strip tiles across the whole screen anyway.
+        Sprite fgSprite = profile.foregroundSprite;
+        float ppu = fgSprite.pixelsPerUnit > 0.01f ? fgSprite.pixelsPerUnit : 100f;
+        float worldHeight = (fgSprite.rect.height / ppu) * Mathf.Max(0.01f, profile.foregroundScale);
+
+        Camera cam = Camera.main;
+        float visibleHeight = cam != null && cam.orthographic ? cam.orthographicSize * 2f : 30f;
+        if (visibleHeight <= 0.01f) visibleHeight = 30f;
+
+        float heightPx = size.y * Mathf.Clamp01(worldHeight / visibleHeight);
+        float bottomPx = size.y * Mathf.Clamp01(profile.foregroundBottomOffset / visibleHeight);
+
+        var terrain = new GameObject("Terrain");
+        terrain.transform.SetParent(frame.transform, false);
+        var terrainRect = terrain.AddComponent<RectTransform>();
+        terrainRect.anchorMin = new Vector2(0f, 0f);
+        terrainRect.anchorMax = new Vector2(1f, 0f);
+        terrainRect.pivot = new Vector2(0.5f, 0f);
+        terrainRect.offsetMin = new Vector2(0f, bottomPx);
+        terrainRect.offsetMax = new Vector2(0f, bottomPx + heightPx);
+
+        var terrainImg = terrain.AddComponent<Image>();
+        terrainImg.sprite = fgSprite;
+        terrainImg.preserveAspect = false;
+        terrainImg.raycastTarget = false;
+        terrainImg.color = tint;
     }
 
     private Button BuildSmallButton(GameObject parent, string name, string label, Vector2 pos)
