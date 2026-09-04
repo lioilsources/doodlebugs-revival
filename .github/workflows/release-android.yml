@@ -16,7 +16,7 @@ jobs:
   android:
     name: Build & Firebase App Distribution
     runs-on: [self-hosted, macos-unity]
-    timeout-minutes: 90
+    timeout-minutes: 180
 
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
