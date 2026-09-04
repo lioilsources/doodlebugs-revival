@@ -39,8 +39,21 @@ public class PlaneSkinManager : NetworkBehaviour
             serializer.SerializeValue(ref SkinId);
         }
 
+        // NetworkList.Set() silently drops a write whose value Equals() the
+        // old one, so "equal" has to mean the whole claim, not just whose it
+        // is. With only the player compared, a re-pick by the same player
+        // (the _claims[i] = claim path in TryClaim) never reached the list:
+        // the plane still changed, because NetModelId/NetSkinId are separate
+        // variables, but the registry - and every TAKEN badge on every
+        // client - stayed on that player's first look for good. Player
+        // identity checks use IsPlayer().
         public bool Equals(SkinClaim other) =>
-            ClientId == other.ClientId && LocalPlayerIndex == other.LocalPlayerIndex;
+            ClientId == other.ClientId && LocalPlayerIndex == other.LocalPlayerIndex &&
+            ModelId == other.ModelId && SkinId == other.SkinId;
+
+        public override bool Equals(object obj) => obj is SkinClaim other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(ClientId, LocalPlayerIndex, ModelId, SkinId);
 
         public bool IsPlayer(ulong clientId, int localPlayerIndex) =>
             ClientId == clientId && LocalPlayerIndex == localPlayerIndex;

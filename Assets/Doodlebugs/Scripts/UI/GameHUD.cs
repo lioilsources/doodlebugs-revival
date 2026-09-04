@@ -154,6 +154,7 @@ public class GameHUD : MonoBehaviour
 
     private void OnDestroy()
     {
+        UnhookRosterLooks();
         if (Instance == this) Instance = null;
         CloseSkinPicker();
         // Not CloseScenePicker(): that commits over an RPC, and by teardown
@@ -1424,6 +1425,7 @@ public class GameHUD : MonoBehaviour
     {
         if (_hangarOverlay != null)
         {
+            UnhookRosterLooks();
             Destroy(_hangarOverlay); // rebuilt fresh each round (offers change)
             _hangarOverlay = null;
         }
@@ -1458,6 +1460,7 @@ public class GameHUD : MonoBehaviour
     {
         CloseHangar();
 
+        UnhookRosterLooks();
         _hangarOverlay = new GameObject("HangarOverlay");
         _hangarOverlay.transform.SetParent(transform, false);
         var overlayRect = _hangarOverlay.AddComponent<RectTransform>();
@@ -1853,8 +1856,16 @@ public class GameHUD : MonoBehaviour
 
     // --- ready list + button ----------------------------------------------------
 
+    // Everything the roster draws, so a look change can redraw it in place.
+    private readonly List<GameObject> _rosterObjects = new();
+    private bool _rosterHooked;
+
     private void BuildReadyList()
     {
+        foreach (var go in _rosterObjects) if (go != null) Destroy(go);
+        _rosterObjects.Clear();
+        _hangarReadyRows.Clear();
+
         // One row per device (clientId); couch co-op pilots share one READY.
         // Anchored bottom-left so it never collides with the cards.
         var seen = new HashSet<ulong>();
@@ -1862,6 +1873,9 @@ public class GameHUD : MonoBehaviour
         // same corner. It used to start at 46 and the buttons - added later,
         // so drawn on top - hid the whole roster.
         float y = 200f;
+        const float rowStep = 40f;
+        const float thumb = 36f;
+        const int maxThumbs = 3;
         foreach (var entry in _playerEntries)
         {
             if (!seen.Add(entry.clientId)) continue;
@@ -1871,17 +1885,114 @@ public class GameHUD : MonoBehaviour
                 ? PlayerColorManager.Instance.GetColor(entry.clientId, 0)
                 : PlayerColorManager.GetColorByIndex((int)entry.clientId);
 
-            CreateCornerText($"Name_{entry.clientId}", name, 10, new Vector2(0, 0),
-                new Vector2(60, y), color);
+            // What this device's pilots are flying, read off the claim
+            // registry - the same list the picker's TAKEN badges use - so a
+            // pick lands here the moment the server accepts it. Planes are
+            // parked invisible in the hangar, which makes this the only place
+            // a pick can be seen before the round starts.
+            float x = 60f;
+            int shown = 0;
+            foreach (var (modelId, skinId) in LooksOf(entry.clientId))
+            {
+                if (shown >= maxThumbs) break;
+                var sprite = PlaneModelCatalog.LoadSprite(modelId, skinId);
+                if (sprite == null) continue;
+                var img = CreateCornerImage($"Look_{entry.clientId}_{shown}", sprite,
+                    new Vector2(x, y - 8f), new Vector2(thumb, thumb));
+                _rosterObjects.Add(img.gameObject);
+                x += thumb + 4f;
+                shown++;
+            }
+
+            _rosterObjects.Add(CreateCornerText($"Name_{entry.clientId}", name, 10, new Vector2(0, 0),
+                new Vector2(190, y), color).gameObject);
             bool alreadyReady = _readyClients.Contains(entry.clientId);
             var status = CreateCornerText($"Status_{entry.clientId}",
                 alreadyReady ? "READY" : "PICKING...", 10,
-                new Vector2(0, 0), new Vector2(300, y),
+                new Vector2(0, 0), new Vector2(400, y),
                 alreadyReady ? ReadyGreen : new Color(1f, 0.8f, 0.35f));
+            _rosterObjects.Add(status.gameObject);
 
             _hangarReadyRows[entry.clientId] = status;
-            y += 24f;
+            y += rowStep;
         }
+
+        HookRosterLooks();
+    }
+
+    /// <summary>The (shape, skin) of every pilot on a device, couch index
+    /// order. Claims first; a plane whose claim has not synced yet falls
+    /// back to what its PlaneAppearance currently says.</summary>
+    private IEnumerable<(int modelId, int skinId)> LooksOf(ulong clientId)
+    {
+        var looks = new List<(int idx, int modelId, int skinId)>();
+        var mgr = PlaneSkinManager.Instance;
+        if (mgr != null && mgr.IsSpawned)
+        {
+            foreach (var c in mgr.Claims)
+            {
+                if (c.ClientId == clientId) looks.Add((c.LocalPlayerIndex, c.ModelId, c.SkinId));
+            }
+        }
+        if (looks.Count == 0)
+        {
+            foreach (var a in FindObjectsByType<PlaneAppearance>(FindObjectsSortMode.None))
+            {
+                if (a.OwnerClientId == clientId) looks.Add((looks.Count, a.NetModelId.Value, a.NetSkinId.Value));
+            }
+        }
+        looks.Sort((p, q) => p.idx.CompareTo(q.idx));
+        foreach (var l in looks) yield return (l.modelId, l.skinId);
+    }
+
+    private Image CreateCornerImage(string name, Sprite sprite, Vector2 pos, Vector2 size)
+    {
+        var obj = new GameObject(name);
+        obj.transform.SetParent(_hangarOverlay.transform, false);
+        var rect = obj.AddComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.zero;
+        rect.pivot = Vector2.zero;
+        rect.anchoredPosition = pos;
+        rect.sizeDelta = size;
+
+        var img = obj.AddComponent<Image>();
+        img.sprite = sprite;
+        img.preserveAspect = true;
+        img.raycastTarget = false;
+        return img;
+    }
+
+    private void HookRosterLooks()
+    {
+        var mgr = PlaneSkinManager.Instance;
+        if (mgr == null || _rosterHooked) return;
+        mgr.Claims.OnListChanged += OnRosterClaimsChanged;
+        _rosterHooked = true;
+    }
+
+    private void UnhookRosterLooks()
+    {
+        if (!_rosterHooked) return;
+        _rosterHooked = false;
+        if (PlaneSkinManager.Instance != null)
+        {
+            PlaneSkinManager.Instance.Claims.OnListChanged -= OnRosterClaimsChanged;
+        }
+        CancelInvoke(nameof(RefreshReadyList));
+    }
+
+    // Coalesced like OnSkinClaimsChanged: a joining client streams the list
+    // one entry at a time.
+    private void OnRosterClaimsChanged(NetworkListEvent<PlaneSkinManager.SkinClaim> _)
+    {
+        if (!IsInvoking(nameof(RefreshReadyList))) Invoke(nameof(RefreshReadyList), 0.1f);
+    }
+
+    private void RefreshReadyList()
+    {
+        if (_hangarOverlay == null || !_hangarOverlay.activeInHierarchy || !_rosterHooked) return;
+        BuildReadyList();
     }
 
     private Text CreateCornerText(string name, string content, int fontSize,
@@ -2117,6 +2228,10 @@ public class GameHUD : MonoBehaviour
             _sceneDraftOff.Add(i);
         }
 
+        // Rows and draft entries have to line up 1:1 - a drag reports sibling
+        // indices, and those are only meaningful if nothing was skipped.
+        _sceneDraftOrder.RemoveAll(i => mgr.GetProfile(i) == null);
+
         BuildScenePickerOverlay();
         _scenePickerOverlay.SetActive(true);
         SfxManager.PlayTick();
@@ -2167,7 +2282,7 @@ public class GameHUD : MonoBehaviour
         CreateTextIn(_scenePickerOverlay.transform, "Title", "ARENA ROTATION", 26,
             new Vector2(0, 250), new Color(1f, 0.85f, 0.3f));
         CreateTextIn(_scenePickerOverlay.transform, "Sub",
-            "the run cycles through these in order - untick to drop one", 10,
+            "drag the grip to reorder - tap a row to drop or restore it", 10,
             new Vector2(0, 216), new Color(1f, 1f, 1f, 0.55f));
 
         var viewportGO = new GameObject("Viewport");
@@ -2175,8 +2290,8 @@ public class GameHUD : MonoBehaviour
         var viewportRect = viewportGO.AddComponent<RectTransform>();
         viewportRect.anchorMin = new Vector2(0.5f, 0.5f);
         viewportRect.anchorMax = new Vector2(0.5f, 0.5f);
-        viewportRect.anchoredPosition = new Vector2(0, -20);
-        viewportRect.sizeDelta = new Vector2(760, 400);
+        viewportRect.anchoredPosition = new Vector2(0, -80);
+        viewportRect.sizeDelta = new Vector2(780, 540);
 
         var viewportImg = viewportGO.AddComponent<Image>();
         viewportImg.color = new Color(1f, 1f, 1f, 0.02f);
@@ -2213,6 +2328,10 @@ public class GameHUD : MonoBehaviour
         BuildSceneRows();
     }
 
+    // Off rows go plain grey; on rows keep the warm card colour. The colour
+    // IS the state - there is no separate tick to read.
+    private static readonly Color SceneRowOff = new Color(0.27f, 0.27f, 0.29f, 0.95f);
+
     private void BuildSceneRows()
     {
         if (_scenePickerContent == null) return;
@@ -2220,6 +2339,9 @@ public class GameHUD : MonoBehaviour
 
         var mgr = BackgroundManager.Instance;
         if (mgr == null) return;
+
+        var overlayRect = _scenePickerOverlay != null ? _scenePickerOverlay.GetComponent<RectTransform>() : null;
+        var scroll = _scenePickerContent.GetComponentInParent<ScrollRect>();
 
         int slot = 0;
         for (int pos = 0; pos < _sceneDraftOrder.Count; pos++)
@@ -2233,13 +2355,14 @@ public class GameHUD : MonoBehaviour
             var row = new GameObject($"Scene_{profileIdx}");
             row.transform.SetParent(_scenePickerContent, false);
             var rowRect = row.AddComponent<RectTransform>();
-            rowRect.sizeDelta = new Vector2(740, 56);
-            row.AddComponent<LayoutElement>().preferredHeight = 56;
+            rowRect.sizeDelta = new Vector2(740, 120);
+            row.AddComponent<LayoutElement>().preferredHeight = 120;
 
             var rowBg = row.AddComponent<Image>();
-            rowBg.color = on ? CardSelected : CardIdle;
+            rowBg.color = on ? CardSelected : SceneRowOff;
 
-            // Tick + name toggles selection
+            // Tap anywhere on the row (bar the grip) to drop it from the
+            // rotation or put it back.
             var toggle = row.AddComponent<Button>();
             toggle.targetGraphic = rowBg;
             int capturedIdx = profileIdx;
@@ -2250,58 +2373,145 @@ public class GameHUD : MonoBehaviour
                 BuildSceneRows();
             });
 
-            CreateTextIn(row.transform, "Tick", on ? "[X]" : "[  ]", 14,
-                new Vector2(-330, 0), on ? ReadyGreen : new Color(1f, 1f, 1f, 0.35f));
-            CreateTextIn(row.transform, "Order", on ? slot.ToString() : "-", 14,
-                new Vector2(-278, 0), new Color(1f, 1f, 1f, 0.7f));
+            // Position in the rotation - only rows that are in it get one.
+            if (on)
+            {
+                CreateTextIn(row.transform, "Order", slot.ToString(), 16,
+                    new Vector2(-336, 0), new Color(1f, 1f, 1f, 0.8f));
+            }
+
+            BuildScenePreview(row, profile, on, new Vector2(-212, 0), new Vector2(168, 112));
 
             string mapName = profile.backgroundSprite != null ? profile.backgroundSprite.name : profile.name;
-            CreateTextIn(row.transform, "Name", mapName, 13, new Vector2(-120, 0),
+            CreateTextIn(row.transform, "Name", mapName, 13, new Vector2(60, 16),
                 on ? Color.white : new Color(1f, 1f, 1f, 0.4f));
 
             if (profile.isPremium)
             {
-                CreateTextIn(row.transform, "Premium", "PREMIUM", 8, new Vector2(60, 0),
+                CreateTextIn(row.transform, "Premium", "PREMIUM", 8, new Vector2(60, -18),
                     new Color(1f, 0.85f, 0.3f));
             }
 
-            // Reorder. Arrows rather than drag: this has to work under a
-            // thumb on a phone as well as a mouse.
-            int capturedPos = pos;
-            var up = BuildSmallButton(row, "Up", "^", new Vector2(268, 0));
-            up.interactable = pos > 0;
-            up.onClick.AddListener(() => MoveScene(capturedPos, -1));
-
-            var down = BuildSmallButton(row, "Down", "v", new Vector2(322, 0));
-            down.interactable = pos < _sceneDraftOrder.Count - 1;
-            down.onClick.AddListener(() => MoveScene(capturedPos, +1));
+            // Reorder by dragging the grip on the right. A dedicated zone
+            // rather than the whole row, because the list scrolls: dragging
+            // anywhere else still scrolls it.
+            var grip = BuildDragGrip(row, new Vector2(306, 0), new Vector2(64, 108));
+            var handle = grip.AddComponent<ListRowDragHandle>();
+            handle.Row = rowRect;
+            handle.Content = _scenePickerContent;
+            handle.DragLayer = overlayRect;
+            handle.Scroll = scroll;
+            handle.OnReordered = ReorderScene;
         }
     }
 
-    private Button BuildSmallButton(GameObject parent, string name, string label, Vector2 pos)
+    /// <summary>Three bars on a raised pad - the universal "drag me" glyph,
+    /// drawn as images because the pixel font has no such character.</summary>
+    private GameObject BuildDragGrip(GameObject parent, Vector2 pos, Vector2 size)
     {
-        var obj = new GameObject(name);
+        var obj = new GameObject("Grip");
         obj.transform.SetParent(parent.transform, false);
         var rect = obj.AddComponent<RectTransform>();
         rect.anchorMin = new Vector2(0.5f, 0.5f);
         rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.anchoredPosition = pos;
-        rect.sizeDelta = new Vector2(44, 40);
+        rect.sizeDelta = size;
 
-        var img = obj.AddComponent<Image>();
-        img.color = new Color(0.22f, 0.24f, 0.3f, 1f);
-        var button = obj.AddComponent<Button>();
-        button.targetGraphic = img;
-        CreateTextIn(obj.transform, "Label", label, 14, Vector2.zero, Color.white);
-        return button;
+        var pad = obj.AddComponent<Image>();
+        pad.color = new Color(1f, 1f, 1f, 0.08f);
+
+        for (int i = -1; i <= 1; i++)
+        {
+            var bar = new GameObject("Bar");
+            bar.transform.SetParent(obj.transform, false);
+            var barRect = bar.AddComponent<RectTransform>();
+            barRect.anchorMin = new Vector2(0.5f, 0.5f);
+            barRect.anchorMax = new Vector2(0.5f, 0.5f);
+            barRect.anchoredPosition = new Vector2(0, i * 12f);
+            barRect.sizeDelta = new Vector2(30, 4);
+            var barImg = bar.AddComponent<Image>();
+            barImg.color = new Color(1f, 1f, 1f, 0.6f);
+            barImg.raycastTarget = false;
+        }
+        return obj;
     }
 
-    private void MoveScene(int pos, int delta)
+    /// <summary>
+    /// Arena thumbnail for one picker row: the sky stretched to fill the frame
+    /// exactly as ScreenSetup stretches it over the camera, with the terrain
+    /// strip lying along the bottom edge. Both sprites come off the profile
+    /// itself, which the scene already holds, so the preview loads nothing new.
+    /// </summary>
+    private void BuildScenePreview(GameObject row, BackgroundProfile profile, bool on,
+        Vector2 pos, Vector2 size)
     {
-        int target = pos + delta;
-        if (pos < 0 || pos >= _sceneDraftOrder.Count || target < 0 || target >= _sceneDraftOrder.Count) return;
-        (_sceneDraftOrder[pos], _sceneDraftOrder[target]) = (_sceneDraftOrder[target], _sceneDraftOrder[pos]);
-        SfxManager.PlayTick();
+        var frame = new GameObject("Preview");
+        frame.transform.SetParent(row.transform, false);
+        var frameRect = frame.AddComponent<RectTransform>();
+        frameRect.anchorMin = new Vector2(0.5f, 0.5f);
+        frameRect.anchorMax = new Vector2(0.5f, 0.5f);
+        frameRect.anchoredPosition = pos;
+        frameRect.sizeDelta = size;
+
+        // Dropped arenas grey out rather than vanish - the row still has to be
+        // findable to tick it back on.
+        Color tint = on ? Color.white : new Color(0.5f, 0.5f, 0.5f, 0.55f);
+
+        var sky = frame.AddComponent<Image>();
+        sky.sprite = profile.backgroundSprite;
+        sky.preserveAspect = false;
+        sky.raycastTarget = false;
+        sky.color = profile.backgroundSprite != null ? tint : new Color(0.1f, 0.12f, 0.16f, 1f);
+
+        // A terrain strip taller than the frame must not spill over the row.
+        frame.AddComponent<RectMask2D>();
+
+        if (profile.foregroundSprite == null) return;
+
+        // Height is the honest one - the fraction of the visible world height
+        // the strip really covers. Width is stretched to the frame because in
+        // game the strip tiles across the whole screen anyway.
+        Sprite fgSprite = profile.foregroundSprite;
+        float ppu = fgSprite.pixelsPerUnit > 0.01f ? fgSprite.pixelsPerUnit : 100f;
+        float worldHeight = (fgSprite.rect.height / ppu) * Mathf.Max(0.01f, profile.foregroundScale);
+
+        Camera cam = Camera.main;
+        float visibleHeight = cam != null && cam.orthographic ? cam.orthographicSize * 2f : 30f;
+        if (visibleHeight <= 0.01f) visibleHeight = 30f;
+
+        float heightPx = size.y * Mathf.Clamp01(worldHeight / visibleHeight);
+        float bottomPx = size.y * Mathf.Clamp01(profile.foregroundBottomOffset / visibleHeight);
+
+        var terrain = new GameObject("Terrain");
+        terrain.transform.SetParent(frame.transform, false);
+        var terrainRect = terrain.AddComponent<RectTransform>();
+        terrainRect.anchorMin = new Vector2(0f, 0f);
+        terrainRect.anchorMax = new Vector2(1f, 0f);
+        terrainRect.pivot = new Vector2(0.5f, 0f);
+        terrainRect.offsetMin = new Vector2(0f, bottomPx);
+        terrainRect.offsetMax = new Vector2(0f, bottomPx + heightPx);
+
+        var terrainImg = terrain.AddComponent<Image>();
+        terrainImg.sprite = fgSprite;
+        terrainImg.preserveAspect = false;
+        terrainImg.raycastTarget = false;
+        terrainImg.color = tint;
+    }
+
+    private void ReorderScene(int from, int to)
+    {
+        bool moved = from != to
+            && from >= 0 && from < _sceneDraftOrder.Count
+            && to >= 0 && to < _sceneDraftOrder.Count;
+        if (moved)
+        {
+            int idx = _sceneDraftOrder[from];
+            _sceneDraftOrder.RemoveAt(from);
+            _sceneDraftOrder.Insert(to, idx);
+            SfxManager.PlayTick();
+        }
+        // Rebuild either way: the dragged row was lifted out of the layout
+        // and the rebuild is what puts every row back where the draft says.
         BuildSceneRows();
     }
 
