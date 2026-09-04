@@ -2320,11 +2320,13 @@ public class GameHUD : MonoBehaviour
         var bg = _skinPickerOverlay.AddComponent<Image>();
         bg.color = new Color(0f, 0f, 0f, 0.94f);
 
+        // Vertical budget (relative to screen centre): title +300, sub +268,
+        // shape row +25..+255, skin grid -305..-5, CLOSE in the corner.
         CreateTextIn(_skinPickerOverlay.transform, "Title", "PICK YOUR PLANE", 26,
-            new Vector2(0, 260), new Color(1f, 0.85f, 0.3f));
+            new Vector2(0, 300), new Color(1f, 0.85f, 0.3f));
         CreateTextIn(_skinPickerOverlay.transform, "Sub",
             "shape + skin is one-of-a-kind - once a pilot flies a combo, it's taken", 10,
-            new Vector2(0, 226), new Color(1f, 1f, 1f, 0.55f));
+            new Vector2(0, 268), new Color(1f, 1f, 1f, 0.55f));
 
         // Shape row sits where the top of the skin grid used to be; the grid
         // below shrinks to make room (same bottom edge as before).
@@ -2337,8 +2339,8 @@ public class GameHUD : MonoBehaviour
         var viewportRect = viewportGO.AddComponent<RectTransform>();
         viewportRect.anchorMin = new Vector2(0.5f, 0.5f);
         viewportRect.anchorMax = new Vector2(0.5f, 0.5f);
-        viewportRect.anchoredPosition = new Vector2(0, -80);
-        viewportRect.sizeDelta = new Vector2(1020, 330);
+        viewportRect.anchoredPosition = new Vector2(0, -155);
+        viewportRect.sizeDelta = new Vector2(1020, 300);
 
         var viewportImg = viewportGO.AddComponent<Image>();
         viewportImg.color = new Color(1f, 1f, 1f, 0.02f); // Mask needs a graphic; kept near-invisible
@@ -2488,8 +2490,11 @@ public class GameHUD : MonoBehaviour
         var rowRect = rowGO.AddComponent<RectTransform>();
         rowRect.anchorMin = new Vector2(0.5f, 0.5f);
         rowRect.anchorMax = new Vector2(0.5f, 0.5f);
-        rowRect.anchoredPosition = new Vector2(0, 150);
-        rowRect.sizeDelta = new Vector2(1020, 110);
+        // Doubled from 96x104 cells / 64 px icons: at 64 px a silhouette is
+        // the one thing you cannot judge, and telling shapes apart is the
+        // whole point of the row.
+        rowRect.anchoredPosition = new Vector2(0, 140);
+        rowRect.sizeDelta = new Vector2(1020, 230);
 
         // Horizontal-only ScrollRect: 16 shapes at 96 px don't fit 1020 px,
         // and the mouse wheel maps to horizontal scrolling on its own when
@@ -2513,8 +2518,8 @@ public class GameHUD : MonoBehaviour
         _shapeRowContent.anchoredPosition = Vector2.zero;
 
         var grid = contentGO.AddComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(96, 104);
-        grid.spacing = new Vector2(10, 0);
+        grid.cellSize = new Vector2(192, 220);
+        grid.spacing = new Vector2(12, 0);
         grid.childAlignment = TextAnchor.MiddleLeft;
         grid.constraint = GridLayoutGroup.Constraint.FixedRowCount;
         grid.constraintCount = 1;
@@ -2566,20 +2571,20 @@ public class GameHUD : MonoBehaviour
             iconRect.anchorMin = new Vector2(0.5f, 1f);
             iconRect.anchorMax = new Vector2(0.5f, 1f);
             iconRect.pivot = new Vector2(0.5f, 1f);
-            iconRect.anchoredPosition = new Vector2(0, -6);
-            iconRect.sizeDelta = new Vector2(64, 64);
+            iconRect.anchoredPosition = new Vector2(0, -8);
+            iconRect.sizeDelta = new Vector2(128, 128);
             var iconImg = iconGO.AddComponent<Image>();
             iconImg.sprite = PlaneModelCatalog.LoadSprite(modelId, currentSkin); // preview = this shape in the current skin
             iconImg.preserveAspect = true;
             iconImg.color = taken ? new Color(1f, 1f, 1f, 0.4f) : Color.white;
 
-            // 104 px tall card, icon spans +46..-18 from the centre.
-            CreateTextIn(cardObj.transform, "Name", def.DisplayName, 7, new Vector2(0, -30), Color.white);
+            // 220 px tall card, icon spans +102..-26 from the centre.
+            CreateTextIn(cardObj.transform, "Name", def.DisplayName, 10, new Vector2(0, -46), Color.white);
             string status = isCurrent ? "EQUIPPED" : taken ? "TAKEN" : "";
             Color statusColor = isCurrent ? ReadyGreen
                 : taken ? new Color(1f, 0.4f, 0.4f)
                 : new Color(1f, 1f, 1f, 0.4f);
-            CreateTextIn(cardObj.transform, "Status", status, 7, new Vector2(0, -44), statusColor);
+            CreateTextIn(cardObj.transform, "Status", status, 9, new Vector2(0, -68), statusColor);
 
             button.interactable = !taken;
             int captured = modelId;

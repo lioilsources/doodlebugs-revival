@@ -6,10 +6,10 @@ on:
     tags: ['v*.*.*']
   workflow_dispatch:
 
-# Shared with release-ios.yml — see the comment there. Both run on the same Mac
-# Mini against the same Unity install and must not overlap.
+# Per-platform group — release-ios.yml explains why the shared one bit us and
+# why the single runner still keeps the two Unity editors from overlapping.
 concurrency:
-  group: unity-build
+  group: unity-build-android
   cancel-in-progress: false
 
 jobs:
