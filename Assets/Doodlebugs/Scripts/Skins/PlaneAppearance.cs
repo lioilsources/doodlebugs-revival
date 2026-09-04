@@ -1,3 +1,4 @@
+using System.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -20,28 +21,57 @@ public class PlaneAppearance : NetworkBehaviour
 
     private PlayerController _playerController;
 
+    // Effective couch-co-op index this plane currently holds a claim under;
+    // -1 = none yet. Kept so a later index change releases the right key.
+    private int _claimedIndex = -1;
+
     private int LocalIndex => _playerController != null ? Mathf.Max(_playerController.LocalPlayerIndex, 0) : 0;
 
     public override void OnNetworkSpawn()
     {
         _playerController = GetComponent<PlayerController>();
 
-        if (IsServer && PlaneSkinManager.Instance != null)
+        if (IsServer)
         {
-            // Reconnecting mid-session client (or a fresh one with no claim
-            // yet) starts from whatever it already holds in the registry so
-            // a late-join snapshot and a fresh spawn agree.
-            var (modelId, skinId) = PlaneSkinManager.Instance.GetClaim(OwnerClientId, LocalIndex);
-            NetModelId.Value = modelId;
-            NetSkinId.Value = skinId;
+            StartCoroutine(ServerClaimNextFrame());
         }
+    }
+
+    private IEnumerator ServerClaimNextFrame()
+    {
+        // LocalPlayerManager calls SetLocalPlayerIndex immediately AFTER
+        // spawning the object, so during OnNetworkSpawn a second couch pilot
+        // still reads -1 and would claim under the first one's key, evicting
+        // them. One frame is all it takes for the real index to land.
+        yield return null;
+        ServerEnsureClaim();
+    }
+
+    /// <summary>
+    /// Server: hold a claim on this plane's look, moving it if the couch
+    /// co-op index changed under us. Idempotent - re-entry with the same
+    /// index does nothing.
+    /// </summary>
+    public void ServerEnsureClaim()
+    {
+        if (!IsServer || PlaneSkinManager.Instance == null) return;
+
+        int idx = LocalIndex;
+        if (_claimedIndex == idx) return;
+        if (_claimedIndex >= 0) PlaneSkinManager.Instance.Release(OwnerClientId, _claimedIndex);
+
+        var (modelId, skinId) = PlaneSkinManager.Instance.ServerClaimInitialLook(OwnerClientId, idx);
+        _claimedIndex = idx;
+        NetModelId.Value = modelId;
+        NetSkinId.Value = skinId;
     }
 
     public override void OnNetworkDespawn()
     {
-        if (IsServer && PlaneSkinManager.Instance != null && _playerController != null)
+        if (IsServer && PlaneSkinManager.Instance != null && _claimedIndex >= 0)
         {
-            PlaneSkinManager.Instance.Release(OwnerClientId, LocalIndex);
+            PlaneSkinManager.Instance.Release(OwnerClientId, _claimedIndex);
+            _claimedIndex = -1;
         }
         base.OnNetworkDespawn();
     }

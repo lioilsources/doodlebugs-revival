@@ -1858,7 +1858,10 @@ public class GameHUD : MonoBehaviour
         // One row per device (clientId); couch co-op pilots share one READY.
         // Anchored bottom-left so it never collides with the cards.
         var seen = new HashSet<ulong>();
-        float y = 46f;
+        // Above the PLANE (y 40..108) and SCENES (y 116..184) buttons in the
+        // same corner. It used to start at 46 and the buttons - added later,
+        // so drawn on top - hid the whole roster.
+        float y = 200f;
         foreach (var entry in _playerEntries)
         {
             if (!seen.Add(entry.clientId)) continue;
@@ -1870,8 +1873,11 @@ public class GameHUD : MonoBehaviour
 
             CreateCornerText($"Name_{entry.clientId}", name, 10, new Vector2(0, 0),
                 new Vector2(60, y), color);
-            var status = CreateCornerText($"Status_{entry.clientId}", "PICKING...", 10,
-                new Vector2(0, 0), new Vector2(300, y), new Color(1f, 1f, 1f, 0.5f));
+            bool alreadyReady = _readyClients.Contains(entry.clientId);
+            var status = CreateCornerText($"Status_{entry.clientId}",
+                alreadyReady ? "READY" : "PICKING...", 10,
+                new Vector2(0, 0), new Vector2(300, y),
+                alreadyReady ? ReadyGreen : new Color(1f, 0.8f, 0.35f));
 
             _hangarReadyRows[entry.clientId] = status;
             y += 24f;

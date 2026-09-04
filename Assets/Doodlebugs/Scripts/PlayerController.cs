@@ -405,6 +405,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     private void OnLocalPlayerIndexChanged(int previousValue, int newValue)
     {
         Debug.Log($"[PlayerController] LocalPlayerIndex changed from {previousValue} to {newValue}");
+        // The skin claim is keyed by (client, local index), so a couch pilot
+        // whose index just landed has to move its claim with it.
+        if (IsServer) appearance?.ServerEnsureClaim();
         SetPlaneColor();
 
         // Update glow visibility (local players don't get outline)
