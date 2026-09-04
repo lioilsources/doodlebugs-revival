@@ -54,6 +54,23 @@ namespace Doodlebugs.Network
         private int _connectAttempts;
         private int _beginToken; // invalidates a pending EnsurePermissions callback
 
+        // The lobby we most recently failed to join, and until when to ignore it.
+        // Without this the client loops forever against a host that has gone
+        // quiet but is still advertised: 3 retries x 5 s -> "join failed" ->
+        // Begin() -> browser finds the same peer -> "Joining lobby..." again. A
+        // suspended iOS host is exactly that (see OnApplicationPause below), and
+        // Bonjour can keep a killed one visible for a while too. Ignoring the
+        // dead peer lets the browse window elapse, and BecomeHost() takes over.
+        private string _ignoredPeerId;
+        private float _ignoredPeerUntil;
+        private const float FAILED_PEER_COOLDOWN_SECONDS = 45f;
+
+        // Host side of the same problem: nothing used to stop advertising when
+        // the app went to the background, so a host that was "closed" by going
+        // Home kept its lobby visible to every browser on the network while
+        // being unable to accept anyone.
+        private bool _advertisingPausedByBackground;
+
         private void Awake()
         {
             Transport = GetComponent<NativeLocalTransport>();
@@ -106,10 +123,22 @@ namespace Doodlebugs.Network
         }
 
         /// <summary>Stop accepting new players (lobby full). Called by ConnectionManager.</summary>
-        public void StopAdvertisingLobby() => _backend?.StopAdvertising();
+        public void StopAdvertisingLobby()
+        {
+            _lobbyClosedAsFull = true;
+            _backend?.StopAdvertising();
+        }
 
         /// <summary>Reopen the lobby for new players (a player left). Called by ConnectionManager.</summary>
-        public void StartAdvertisingLobby() => _backend?.StartAdvertising(MAX_PLAYERS);
+        public void StartAdvertisingLobby()
+        {
+            _lobbyClosedAsFull = false;
+            _backend?.StartAdvertising(MAX_PLAYERS);
+        }
+
+        // Whether ConnectionManager deliberately closed the lobby (full), so a
+        // resume from the background knows not to reopen it.
+        private bool _lobbyClosedAsFull;
 
         public void Stop()
         {
@@ -153,6 +182,14 @@ namespace Doodlebugs.Network
         private void HandlePeerFound(string peerId)
         {
             Debug.Log($"[NativeLocalCoop] Lobby found: peer={peerId}");
+
+            // A lobby we just gave up on is not a lobby - let the window run out.
+            if (peerId == _ignoredPeerId && Time.realtimeSinceStartup < _ignoredPeerUntil)
+            {
+                Debug.Log($"[NativeLocalCoop] Ignoring peer={peerId} - join failed " +
+                          $"{FAILED_PEER_COOLDOWN_SECONDS - (_ignoredPeerUntil - Time.realtimeSinceStartup):0}s ago");
+                return;
+            }
 
             // While still deciding, the first discovered lobby wins -> we join it.
             if (!_roleDecided)
@@ -286,8 +323,11 @@ namespace Doodlebugs.Network
                 return;
             }
 
-            // Out of retries - the host may be gone; start the whole flow over.
-            Debug.LogWarning("[NativeLocalCoop] Could not join lobby - restarting discovery");
+            // Out of retries - the host may be gone; start the whole flow over,
+            // but not straight back into the same lobby.
+            Debug.LogWarning($"[NativeLocalCoop] Could not join lobby host={_clientHostPeerId} - restarting discovery");
+            _ignoredPeerId = _clientHostPeerId;
+            _ignoredPeerUntil = Time.realtimeSinceStartup + FAILED_PEER_COOLDOWN_SECONDS;
             OnStatus?.Invoke("Join failed - searching again...");
             OnResetNetworking?.Invoke(); // NGO client shuts down asynchronously
             Stop();
@@ -295,5 +335,32 @@ namespace Doodlebugs.Network
         }
 
         private void RestartDiscoveryFlow() => Begin();
+
+        // A host that goes to the background can neither accept invites nor
+        // run the game, yet its Multipeer advertisement stayed up - every
+        // browser nearby kept "finding" it and trying to join. Pull the lobby
+        // while suspended; put it back on resume if we are still the host and
+        // the lobby is still open (StopAdvertisingLobby, for a full lobby, is
+        // remembered by not having set the flag).
+        private void OnApplicationPause(bool paused)
+        {
+            if (_backend == null || !_isHost) return;
+
+            if (paused)
+            {
+                _backend.StopAdvertising();
+                _advertisingPausedByBackground = true;
+                Debug.Log("[NativeLocalCoop] Host backgrounded - lobby withdrawn");
+            }
+            else if (_advertisingPausedByBackground)
+            {
+                _advertisingPausedByBackground = false;
+                if (!_lobbyClosedAsFull)
+                {
+                    _backend.StartAdvertising(MAX_PLAYERS);
+                    Debug.Log("[NativeLocalCoop] Host resumed - lobby re-advertised");
+                }
+            }
+        }
     }
 }
