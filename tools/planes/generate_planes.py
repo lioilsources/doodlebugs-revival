@@ -99,18 +99,51 @@ def reference_png():
     return p
 
 
-def render_graph(key, seed, ref, steps, guidance, mode="kontext"):
-    """Kontext img2img off the reference, or plain FLUX.1-dev txt2img when
-    mode == "txt2img" (ref ignored). RMBG keys the white ground in-job."""
+def pony_graph(prompt, seed, steps, guidance, lora_strength):
+    """Pony Diffusion V6 XL + the Spacecraft LoRA. Plain SDXL topology (real
+    negative prompt at cfg > 1, no NAG needed), with a LoraLoader spliced
+    between the checkpoint and everything downstream. Node 9 is the decoded
+    image so the shared RMBG tail hangs off it unchanged."""
+    w, h = GEN
+    return {
+        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": P.PONY_CKPT}},
+        "2": {"class_type": "LoraLoader",
+              "inputs": {"model": ["1", 0], "clip": ["1", 1], "lora_name": P.PONY_LORA,
+                         "strength_model": lora_strength, "strength_clip": lora_strength}},
+        "4": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["2", 1], "text": prompt}},
+        "5": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["2", 1], "text": P.PONY_NEG}},
+        "7": {"class_type": "EmptyLatentImage", "inputs": {"width": w, "height": h, "batch_size": 1}},
+        "8": {"class_type": "KSampler",
+              "inputs": {"model": ["2", 0], "positive": ["4", 0], "negative": ["5", 0],
+                         "latent_image": ["7", 0], "seed": seed, "steps": steps,
+                         "cfg": guidance, "sampler_name": "dpmpp_2m", "scheduler": "karras",
+                         "denoise": 1.0}},
+        "9": {"class_type": "VAEDecode", "inputs": {"samples": ["8", 0], "vae": ["1", 2]}},
+    }
+
+
+def render_graph(key, seed, ref, steps, guidance, mode="kontext", lora_strength=0.8):
+    """Kontext img2img off the reference, FLUX.1-dev txt2img, or Pony + the
+    Spacecraft LoRA. RMBG keys the white ground in-job for all three."""
     prompt = P.prompt_for(key, mode)
-    g = backend.flux_graph(prompt, GEN, seed, steps, guidance,
-                           ref=ref if mode == "kontext" else None, negative=P.NEG)
+    if mode == "pony":
+        # Pony wants SDXL-ish cfg, not FLUX's 3.5 guidance.
+        g = pony_graph(prompt, seed, max(steps, 26), 7.0 if guidance <= 4 else guidance,
+                       lora_strength)
+    else:
+        g = backend.flux_graph(prompt, GEN, seed, steps, guidance,
+                               ref=ref if mode == "kontext" else None,
+                               negative=P.negative_for(mode))
     backend.rmbg_tail(g, ["9", 0], f"dbg/plane_{key}_{mode}_s{seed}")
     return g
 
 
+MODE_TAG = {"kontext": "", "txt2img": "txt", "pony": "pony"}
+
+
 def job_id(key, seed, mode):
-    return f"{key}__s{seed}" if mode == "kontext" else f"{key}__txt__s{seed}"
+    tag = MODE_TAG[mode]
+    return f"{key}__s{seed}" if not tag else f"{key}__{tag}__s{seed}"
 
 
 def parse_job_id(jid):
@@ -280,16 +313,33 @@ def split_body(q, alpha, outline=False):
     return base, mask
 
 
-def post(rgba_bytes, rgb_bytes, outline=False):
+def post(rgba_bytes, rgb_bytes, outline=False, flip=False, white_key=True):
     rgba = Image.open(io.BytesIO(rgba_bytes)).convert("RGBA")
     rgb = Image.open(io.BytesIO(rgb_bytes)).convert("RGB")
     if rgb.size != rgba.size:
         rgb = rgb.resize(rgba.size, Image.LANCZOS)
-    keyed = backend.white_key(rgb)
-    alpha = ImageChops.lighter(rgba.getchannel("A"), keyed)
-    colour = backend.unmatte_white(rgb, alpha)
-    src = colour.convert("RGBA")
-    src.putalpha(alpha)
+    if flip:
+        # The model drew it nose-left. No geometric test tells nose from tail
+        # reliably across gliders, saucers and airships (measured: every
+        # candidate feature scatters around zero on the known-good set), so
+        # this is a manual call after looking at the sheet - and a mirror is
+        # the whole fix, the sprite is otherwise fine.
+        rgba = rgba.transpose(Image.FLIP_LEFT_RIGHT)
+        rgb = rgb.transpose(Image.FLIP_LEFT_RIGHT)
+    if white_key:
+        # FLUX renders on a genuinely white ground, where RMBG alone drops
+        # thin struts and the white key recovers them.
+        keyed = backend.white_key(rgb)
+        alpha = ImageChops.lighter(rgba.getchannel("A"), keyed)
+        colour = backend.unmatte_white(rgb, alpha)
+        src = colour.convert("RGBA")
+        src.putalpha(alpha)
+    else:
+        # Pony ignores "white background" and lays the craft on warm grey
+        # (223,207,197). white_key calls anything below 215 solid, so the
+        # union marked the WHOLE backdrop as object - every seed came back a
+        # filled 110x110 square. RMBG segments it fine on its own.
+        src = rgba
 
     canvas = normalise(src)
     q, hard = quantise(canvas)
@@ -306,8 +356,9 @@ def review_jpg(base, m, ok, out_path):
     im = Image.new("RGBA", (SIZE * s, SIZE * s), (140, 190, 225, 255))
     im.alpha_composite(base.resize((SIZE * s, SIZE * s), Image.NEAREST))
     d = ImageDraw.Draw(im)
-    c0, c1 = G.CORE
-    d.rectangle((c0 * s, c0 * s, (c1 + 1) * s - 1, (c1 + 1) * s - 1),
+    cx0, cx1 = G.CORE_X
+    cy0, cy1 = G.CORE_Y
+    d.rectangle((cx0 * s, cy0 * s, (cx1 + 1) * s - 1, (cy1 + 1) * s - 1),
                 outline=(255, 220, 0, 255) if ok else (255, 60, 60, 255), width=2)
     if m["opaque"]:
         d.rectangle((m["tail"] * s, 0, (m["nose"] + 1) * s - 1, SIZE * s - 1),
@@ -316,8 +367,9 @@ def review_jpg(base, m, ok, out_path):
     im.convert("RGB").save(out_path, quality=88)
 
 
-def finish(jid, rgba_bytes, rgb_bytes, outline):
-    base, mask, m, checks, ok = post(rgba_bytes, rgb_bytes, outline=outline)
+def finish(jid, rgba_bytes, rgb_bytes, outline, flip=False, white_key=True):
+    base, mask, m, checks, ok = post(rgba_bytes, rgb_bytes, outline=outline, flip=flip,
+                                     white_key=white_key)
     MODELS.mkdir(parents=True, exist_ok=True)
     base.save(MODELS / f"{jid}.png")
     mask.save(MODELS / f"{jid}_mask.png")
@@ -358,14 +410,15 @@ def cmd_render(a):
     ref = backend.upload(reference_png()) if a.mode == "kontext" else None
     if not a.no_free:
         backend.free_models()
-    jobs = [(jid, render_graph(key, seed, ref, a.steps, a.guidance, a.mode)) for key, seed, jid in wanted]
+    jobs = [(jid, render_graph(key, seed, ref, a.steps, a.guidance, a.mode, a.lora))
+            for key, seed, jid in wanted]
 
     def handler(jid, outputs):
         rgba = backend.fetch(outputs["31"]["images"][0])
         rgb = backend.fetch(outputs["34"]["images"][0])
         (RAW / f"{jid}_rgba.png").write_bytes(rgba)
         (RAW / f"{jid}_rgb.png").write_bytes(rgb)
-        m, checks, ok = finish(jid, rgba, rgb, a.outline)
+        m, checks, ok = finish(jid, rgba, rgb, a.outline, a.flip, a.mode != "pony")
         print("   " + G.fmt_row(jid, m, checks, ok))
 
     backend.run_jobs(jobs, handler, "plane")
@@ -382,7 +435,8 @@ def cmd_post(a):
         if not rgb_path.exists():
             print(f"[SKIP] {jid}: no _rgb.png")
             continue
-        m, checks, ok = finish(jid, rgba_path.read_bytes(), rgb_path.read_bytes(), a.outline)
+        m, checks, ok = finish(jid, rgba_path.read_bytes(), rgb_path.read_bytes(), a.outline,
+                               a.flip, "__pony__" not in jid)
         print(G.fmt_row(jid, m, checks, ok))
         n += 1
     print(f"post: {n} render(s)")
@@ -492,8 +546,12 @@ def main():
 
     p = sub.add_parser("render")
     p.add_argument("--keys", help="comma list (default: every concept)")
-    p.add_argument("--mode", choices=["kontext", "txt2img"], default="kontext",
-                   help="kontext = redesign the BiPlane1 reference; txt2img = from the prompt alone")
+    p.add_argument("--mode", choices=["kontext", "txt2img", "pony"], default="kontext",
+                   help="kontext = redesign the BiPlane1 reference; txt2img = FLUX from the "
+                        "prompt alone; pony = Pony Diffusion V6 XL + the Spacecraft LoRA")
+    p.add_argument("--lora", type=float, default=0.8, help="pony mode: LoRA strength")
+    p.add_argument("--flip", action="store_true",
+                   help="mirror the render horizontally - use when the model drew it nose-left")
     p.add_argument("--seeds", type=int, default=2, help="seeds per concept")
     p.add_argument("--steps", type=int, default=20)
     p.add_argument("--guidance", type=float, default=3.5)
@@ -507,6 +565,7 @@ def main():
     p = sub.add_parser("post", help="re-run the local pipeline over out/raw (no GPU)")
     p.add_argument("--keys")
     p.add_argument("--outline", action="store_true")
+    p.add_argument("--flip", action="store_true", help="mirror horizontally (drawn nose-left)")
     p.set_defaults(fn=cmd_post)
 
     p = sub.add_parser("sheet"); p.set_defaults(fn=cmd_sheet)
