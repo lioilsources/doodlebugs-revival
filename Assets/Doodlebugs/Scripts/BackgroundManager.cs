@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -28,6 +29,16 @@ public class BackgroundManager : NetworkBehaviour
              "anyone ever saw and the per-map terrain never showed at all.")]
     [Range(0f, 1f)]
     [SerializeField] private float adStripChance = 0.1f;
+
+    // The host's arena playlist: profile indices, in the order the run cycles
+    // through them. Absent = deselected. Server-write like every other synced
+    // choice; the host edits it from the hangar.
+    private readonly NetworkList<int> _sceneOrder = new();
+
+    /// <summary>Read-only view for the hangar's scene picker.</summary>
+    public NetworkList<int> SceneOrder => _sceneOrder;
+
+    private int _sceneCursor = -1;
 
     private NetworkVariable<int> _backgroundIndex = new NetworkVariable<int>(-1);
 
@@ -66,8 +77,57 @@ public class BackgroundManager : NetworkBehaviour
 
         if (IsServer)
         {
+            if (_sceneOrder.Count == 0) ResetSceneOrderToDefault();
             SelectRandomBackground();
         }
+    }
+
+    /// <summary>Every map enabled, premium ones first - they are the reason
+    /// someone paid, so they lead the rotation until the host says otherwise.</summary>
+    private void ResetSceneOrderToDefault()
+    {
+        _sceneOrder.Clear();
+        if (profiles == null) return;
+        for (int i = 0; i < profiles.Length; i++)
+        {
+            if (profiles[i] != null && profiles[i].isPremium) _sceneOrder.Add(i);
+        }
+        for (int i = 0; i < profiles.Length; i++)
+        {
+            if (profiles[i] != null && !profiles[i].isPremium) _sceneOrder.Add(i);
+        }
+    }
+
+    /// <summary>
+    /// Host-only: replace the arena playlist. Indices not present are
+    /// deselected. An empty list would leave the round with no arena at all,
+    /// so it is refused rather than honoured.
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestSetSceneOrderServerRpc(int[] order, ServerRpcParams rpcParams = default)
+    {
+        if (rpcParams.Receive.SenderClientId != NetworkManager.ServerClientId)
+        {
+            Debug.LogWarning("[BackgroundManager] Scene playlist is the host's to set - ignoring client request");
+            return;
+        }
+        if (order == null || order.Length == 0 || profiles == null) return;
+
+        var seen = new HashSet<int>();
+        var clean = new List<int>(order.Length);
+        foreach (int i in order)
+        {
+            if (i >= 0 && i < profiles.Length && profiles[i] != null && seen.Add(i)) clean.Add(i);
+        }
+        if (clean.Count == 0) return;
+
+        _sceneOrder.Clear();
+        foreach (int i in clean) _sceneOrder.Add(i);
+
+        // Keep playing whatever is up if it survived the edit; otherwise the
+        // next round starts the new playlist from the top.
+        _sceneCursor = clean.IndexOf(_backgroundIndex.Value);
+        Debug.Log($"[BackgroundManager] Host set the arena playlist: {clean.Count} of {profiles.Length} maps");
     }
 
     public override void OnNetworkDespawn()
@@ -78,8 +138,13 @@ public class BackgroundManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Selects a random background and syncs to all clients.
-    /// Call this from server when starting a new game.
+    /// Advances to the next arena in the host's playlist and syncs it.
+    /// Call this from the server when a round starts.
+    ///
+    /// This used to draw at random; it now walks the playlist in order,
+    /// because the host's ordering IS the intended sequence for the run.
+    /// The name is kept because four call sites use it and "the next arena"
+    /// is what they all actually mean.
     /// </summary>
     public void SelectRandomBackground()
     {
@@ -95,11 +160,17 @@ public class BackgroundManager : NetworkBehaviour
             return;
         }
 
-        int newIndex = Random.Range(0, profiles.Length);
+        if (_sceneOrder.Count == 0) ResetSceneOrderToDefault();
 
-        if (profiles.Length > 1 && newIndex == _backgroundIndex.Value)
+        int newIndex;
+        if (_sceneOrder.Count > 0)
         {
-            newIndex = (newIndex + 1) % profiles.Length;
+            _sceneCursor = (_sceneCursor + 1) % _sceneOrder.Count;
+            newIndex = _sceneOrder[_sceneCursor];
+        }
+        else
+        {
+            newIndex = Mathf.Max(0, _backgroundIndex.Value);
         }
 
         // Ad strip first: both indices trigger a foreground rebuild, and
@@ -107,7 +178,7 @@ public class BackgroundManager : NetworkBehaviour
         // twice.
         SelectRandomAdStrip();
 
-        Debug.Log($"[BackgroundManager] Server selected background index: {newIndex}");
+        Debug.Log($"[BackgroundManager] Arena {_sceneCursor + 1}/{_sceneOrder.Count} -> profile index {newIndex}");
         _backgroundIndex.Value = newIndex;
     }
 
@@ -237,4 +308,8 @@ public class BackgroundManager : NetworkBehaviour
     /// Gets the total number of available backgrounds.
     /// </summary>
     public int BackgroundCount => profiles?.Length ?? 0;
+
+    /// <summary>Profile at an index, for the hangar's scene picker.</summary>
+    public BackgroundProfile GetProfile(int index) =>
+        profiles != null && index >= 0 && index < profiles.Length ? profiles[index] : null;
 }

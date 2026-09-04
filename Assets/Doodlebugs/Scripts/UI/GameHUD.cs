@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using Unity.Netcode;
@@ -155,6 +156,9 @@ public class GameHUD : MonoBehaviour
     {
         if (Instance == this) Instance = null;
         CloseSkinPicker();
+        // Not CloseScenePicker(): that commits over an RPC, and by teardown
+        // the NetworkObject may already be gone.
+        if (_scenePickerOverlay != null) Destroy(_scenePickerOverlay);
     }
 
     private void Start()
@@ -1435,6 +1439,9 @@ public class GameHUD : MonoBehaviour
         _runPointsText = null;
         _localReady = false;
         CloseSkinPicker();
+        // Leaving the hangar with the picker open still commits the playlist -
+        // the host edited it, they meant it.
+        if (_scenePickerOverlay != null) CloseScenePicker();
     }
 
     /// <summary>First PlayerController owned by this device (couch co-op: any of them).</summary>
@@ -1541,6 +1548,14 @@ public class GameHUD : MonoBehaviour
         // time), and auto-opened the very first time this device ever sees
         // the Waiting hangar (no claim yet - "intro screen" pick).
         BuildSkinPickerButton();
+
+        // Arena playlist is the host's call - it is the host's purchase that
+        // put the premium maps in the rotation, and the server owns the
+        // sequence anyway.
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost)
+        {
+            BuildScenePickerButton();
+        }
         if (waiting && !_skinPickerAutoShown)
         {
             var owned = FindOwnedPlayer();
@@ -2029,6 +2044,242 @@ public class GameHUD : MonoBehaviour
     }
 
     private void OnSkinClaimsChanged(NetworkListEvent<PlaneSkinManager.SkinClaim> _) => RefreshSkinPicker();
+
+    // --- scene picker (host only: which arenas the run cycles through) ---------
+
+    private GameObject _scenePickerOverlay;
+    private RectTransform _scenePickerContent;
+    // Working copy the host edits; committed to the server on CLOSE so a
+    // reorder is one RPC rather than one per arrow tap.
+    private readonly List<int> _sceneDraftOrder = new();
+    private readonly HashSet<int> _sceneDraftOff = new();
+
+    private void BuildScenePickerButton()
+    {
+        var buttonObj = new GameObject("SceneButton");
+        buttonObj.transform.SetParent(_hangarOverlay.transform, false);
+        var rect = buttonObj.AddComponent<RectTransform>();
+        // Bottom-left, stacked above the PLANE button.
+        rect.anchorMin = new Vector2(0f, 0f);
+        rect.anchorMax = new Vector2(0f, 0f);
+        rect.pivot = new Vector2(0f, 0f);
+        rect.anchoredPosition = new Vector2(60, 116);
+        rect.sizeDelta = new Vector2(180, 68);
+
+        var bgImage = buttonObj.AddComponent<Image>();
+        bgImage.color = new Color(0.14f, 0.3f, 0.4f, 1f);
+
+        var button = buttonObj.AddComponent<Button>();
+        button.targetGraphic = bgImage;
+        button.onClick.AddListener(OpenScenePicker);
+
+        CreateTextIn(buttonObj.transform, "Label", "SCENES", 16, Vector2.zero, Color.white);
+    }
+
+    private void OpenScenePicker()
+    {
+        var mgr = BackgroundManager.Instance;
+        if (mgr == null) return;
+
+        // Draft = the live playlist, then everything deselected underneath so
+        // the host can see and re-enable what is currently switched off.
+        _sceneDraftOrder.Clear();
+        _sceneDraftOff.Clear();
+        foreach (int i in mgr.SceneOrder) _sceneDraftOrder.Add(i);
+        for (int i = 0; i < mgr.BackgroundCount; i++)
+        {
+            if (mgr.GetProfile(i) == null || _sceneDraftOrder.Contains(i)) continue;
+            _sceneDraftOrder.Add(i);
+            _sceneDraftOff.Add(i);
+        }
+
+        BuildScenePickerOverlay();
+        _scenePickerOverlay.SetActive(true);
+        SfxManager.PlayTick();
+    }
+
+    private void CloseScenePicker()
+    {
+        CommitSceneOrder();
+        if (_scenePickerOverlay != null)
+        {
+            Destroy(_scenePickerOverlay);
+            _scenePickerOverlay = null;
+        }
+        _scenePickerContent = null;
+    }
+
+    private void CommitSceneOrder()
+    {
+        var mgr = BackgroundManager.Instance;
+        if (mgr == null) return;
+
+        var enabled = _sceneDraftOrder.Where(i => !_sceneDraftOff.Contains(i)).ToArray();
+        if (enabled.Length == 0)
+        {
+            // Everything off would leave the round with no arena; the server
+            // refuses it too, this just avoids a pointless round trip.
+            Debug.LogWarning("[GameHUD] At least one arena has to stay selected - keeping the previous playlist");
+            return;
+        }
+        mgr.RequestSetSceneOrderServerRpc(enabled);
+    }
+
+    private void BuildScenePickerOverlay()
+    {
+        if (_scenePickerOverlay != null) Destroy(_scenePickerOverlay);
+
+        _scenePickerOverlay = new GameObject("ScenePickerOverlay");
+        _scenePickerOverlay.transform.SetParent(transform, false);
+        var rootRect = _scenePickerOverlay.AddComponent<RectTransform>();
+        rootRect.anchorMin = Vector2.zero;
+        rootRect.anchorMax = Vector2.one;
+        rootRect.offsetMin = Vector2.zero;
+        rootRect.offsetMax = Vector2.zero;
+
+        var bg = _scenePickerOverlay.AddComponent<Image>();
+        bg.color = new Color(0f, 0f, 0f, 0.94f);
+
+        CreateTextIn(_scenePickerOverlay.transform, "Title", "ARENA ROTATION", 26,
+            new Vector2(0, 250), new Color(1f, 0.85f, 0.3f));
+        CreateTextIn(_scenePickerOverlay.transform, "Sub",
+            "the run cycles through these in order - untick to drop one", 10,
+            new Vector2(0, 216), new Color(1f, 1f, 1f, 0.55f));
+
+        var viewportGO = new GameObject("Viewport");
+        viewportGO.transform.SetParent(_scenePickerOverlay.transform, false);
+        var viewportRect = viewportGO.AddComponent<RectTransform>();
+        viewportRect.anchorMin = new Vector2(0.5f, 0.5f);
+        viewportRect.anchorMax = new Vector2(0.5f, 0.5f);
+        viewportRect.anchoredPosition = new Vector2(0, -20);
+        viewportRect.sizeDelta = new Vector2(760, 400);
+
+        var viewportImg = viewportGO.AddComponent<Image>();
+        viewportImg.color = new Color(1f, 1f, 1f, 0.02f);
+        viewportGO.AddComponent<Mask>().showMaskGraphic = false;
+
+        var scroll = viewportGO.AddComponent<ScrollRect>();
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.viewport = viewportRect;
+
+        var contentGO = new GameObject("Content");
+        contentGO.transform.SetParent(viewportGO.transform, false);
+        _scenePickerContent = contentGO.AddComponent<RectTransform>();
+        _scenePickerContent.anchorMin = new Vector2(0.5f, 1f);
+        _scenePickerContent.anchorMax = new Vector2(0.5f, 1f);
+        _scenePickerContent.pivot = new Vector2(0.5f, 1f);
+        _scenePickerContent.anchoredPosition = Vector2.zero;
+
+        var layout = contentGO.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 6;
+        layout.childForceExpandHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childControlHeight = false;
+        layout.childControlWidth = true;
+
+        contentGO.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        scroll.content = _scenePickerContent;
+
+        var (closeButton, _) = BuildHangarActionButtonIn(_scenePickerOverlay, "CloseScenePicker", "DONE",
+            new Color(0.25f, 0.45f, 0.3f, 1f));
+        closeButton.onClick.AddListener(CloseScenePicker);
+
+        BuildSceneRows();
+    }
+
+    private void BuildSceneRows()
+    {
+        if (_scenePickerContent == null) return;
+        foreach (Transform child in _scenePickerContent) Destroy(child.gameObject);
+
+        var mgr = BackgroundManager.Instance;
+        if (mgr == null) return;
+
+        int slot = 0;
+        for (int pos = 0; pos < _sceneDraftOrder.Count; pos++)
+        {
+            int profileIdx = _sceneDraftOrder[pos];
+            var profile = mgr.GetProfile(profileIdx);
+            if (profile == null) continue;
+            bool on = !_sceneDraftOff.Contains(profileIdx);
+            if (on) slot++;
+
+            var row = new GameObject($"Scene_{profileIdx}");
+            row.transform.SetParent(_scenePickerContent, false);
+            var rowRect = row.AddComponent<RectTransform>();
+            rowRect.sizeDelta = new Vector2(740, 56);
+            row.AddComponent<LayoutElement>().preferredHeight = 56;
+
+            var rowBg = row.AddComponent<Image>();
+            rowBg.color = on ? CardSelected : CardIdle;
+
+            // Tick + name toggles selection
+            var toggle = row.AddComponent<Button>();
+            toggle.targetGraphic = rowBg;
+            int capturedIdx = profileIdx;
+            toggle.onClick.AddListener(() =>
+            {
+                if (!_sceneDraftOff.Remove(capturedIdx)) _sceneDraftOff.Add(capturedIdx);
+                SfxManager.PlayTick();
+                BuildSceneRows();
+            });
+
+            CreateTextIn(row.transform, "Tick", on ? "[X]" : "[  ]", 14,
+                new Vector2(-330, 0), on ? ReadyGreen : new Color(1f, 1f, 1f, 0.35f));
+            CreateTextIn(row.transform, "Order", on ? slot.ToString() : "-", 14,
+                new Vector2(-278, 0), new Color(1f, 1f, 1f, 0.7f));
+
+            string mapName = profile.backgroundSprite != null ? profile.backgroundSprite.name : profile.name;
+            CreateTextIn(row.transform, "Name", mapName, 13, new Vector2(-120, 0),
+                on ? Color.white : new Color(1f, 1f, 1f, 0.4f));
+
+            if (profile.isPremium)
+            {
+                CreateTextIn(row.transform, "Premium", "PREMIUM", 8, new Vector2(60, 0),
+                    new Color(1f, 0.85f, 0.3f));
+            }
+
+            // Reorder. Arrows rather than drag: this has to work under a
+            // thumb on a phone as well as a mouse.
+            int capturedPos = pos;
+            var up = BuildSmallButton(row, "Up", "^", new Vector2(268, 0));
+            up.interactable = pos > 0;
+            up.onClick.AddListener(() => MoveScene(capturedPos, -1));
+
+            var down = BuildSmallButton(row, "Down", "v", new Vector2(322, 0));
+            down.interactable = pos < _sceneDraftOrder.Count - 1;
+            down.onClick.AddListener(() => MoveScene(capturedPos, +1));
+        }
+    }
+
+    private Button BuildSmallButton(GameObject parent, string name, string label, Vector2 pos)
+    {
+        var obj = new GameObject(name);
+        obj.transform.SetParent(parent.transform, false);
+        var rect = obj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = pos;
+        rect.sizeDelta = new Vector2(44, 40);
+
+        var img = obj.AddComponent<Image>();
+        img.color = new Color(0.22f, 0.24f, 0.3f, 1f);
+        var button = obj.AddComponent<Button>();
+        button.targetGraphic = img;
+        CreateTextIn(obj.transform, "Label", label, 14, Vector2.zero, Color.white);
+        return button;
+    }
+
+    private void MoveScene(int pos, int delta)
+    {
+        int target = pos + delta;
+        if (pos < 0 || pos >= _sceneDraftOrder.Count || target < 0 || target >= _sceneDraftOrder.Count) return;
+        (_sceneDraftOrder[pos], _sceneDraftOrder[target]) = (_sceneDraftOrder[target], _sceneDraftOrder[pos]);
+        SfxManager.PlayTick();
+        BuildSceneRows();
+    }
 
     private void BuildSkinPickerOverlay()
     {
