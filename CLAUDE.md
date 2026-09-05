@@ -232,6 +232,51 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   mask split, gate). Keys/ids in `skins.py` / `planes.py` must match the C#
   catalogs; `apply` writes the `.meta` files (`tools/planes/unity_meta.py`).
 
+## Projectile Elements
+
+- A plane's **shape** decides what its projectiles are made of
+  (`PlaneModelDef.Element`, plan 24 decision D1): dragon = Fire, unicorn =
+  Lightning, wasp/fly = Venom, spacecraft + Rocket = Plasma,
+  goose/ornithopter/paper plane/delta glider = Air, everything else = Metal.
+  Skins stay pure liveries. Registry: `Scripts/Weapons/ProjectileElement.cs`
+  (ids go over the network - stable once shipped, like `WeaponType`).
+- **Presentation only** (D5). No element changes damage, cooldown or range;
+  the weapon draft stays the only place balance lives. Elements change the
+  projectile sprite, its trail, the impact/explosion visuals and the sounds.
+- `Bullet` syncs a server-write `_elementId` next to `_weaponId`;
+  `Shooting.SpawnBullet` resolves it from the shooter's
+  `PlaneAppearance.NetModelId`. Both impact and explosion ClientRpcs carry
+  the element, so a late joiner and every spectator see the same splash.
+- **Everything degrades to the old look.** Sprite lookup order is
+  `Sprites/Projectiles/<element>/<form>` → the same under `metal` →
+  `WeaponProfile.ProjectileSpriteName` → the shared tracer tinted with the
+  element colour. Flipbooks fall back `Effects/<element>/<kind>` →
+  `Effects/metal/<kind>` → the legacy `explosion.prefab`. Sounds fall back to
+  the generic procedural clips. A build with no generated art still runs.
+- Eight weapons draw as **six forms** (`ElementProfile.SpriteForm`): tracer
+  (MG, Twin MG), pellet (Flak, Heavy Flak), bomb, bolt (Sniper), rocket,
+  mine. Sounds collapse further into two groups, `gun` and `heavy` (D6) -
+  under the shot pitch jitter per-weapon clips are inaudible.
+- Trails and bursts are **runtime ParticleSystems**, not assets:
+  `EffectAssets.CreateTrailSystem` / `CreateBurst` with per-element presets
+  and five generated 32x32 particle shapes (soft circle, spark, droplet,
+  square, feather). The trail is **detached on despawn** (`Bullet.ReleaseTrail`)
+  or its last puffs would vanish with the bullet.
+- Flipbooks are numbered PNGs (`<kind>_00.png`...) played by
+  `FlipbookEffect` via `EffectLibrary` - no Animator controller per element.
+  Impact = 6 frames 64x64, explosion = 8 frames 96x96 scaled by blast radius.
+- **Art assets:** `Resources/Sprites/Projectiles/<element>/<form>.png`
+  (point filter, PPU 100), `Resources/Sprites/Effects/<element>/<kind>_NN.png`,
+  `Resources/Sfx/Elements/<element>/sfx_{shoot_gun,shoot_heavy,impact,explosion}.wav`
+  (mono 44.1 kHz 16-bit, matching the procedural set).
+- **Pipeline:** `tools/weapons/` - `generate_projectiles.py` (FLUX on SPARK),
+  `generate_effects.py` (FLUX contact sheet, or `--procedural` Pillow
+  flipbooks that need no GPU), `generate_sfx.py` (ElevenLabs sound-generation
+  API, key in `ELEVENLABS_API_KEY`). Same render/post/sheet/apply shape as
+  `tools/planes/`. Keys and ids in `elements.py` / `forms.py` must match
+  `ProjectileElement.cs`. Design notes:
+  `Prompts/24-CLAUDE-PLAN-projectile-elements.md`.
+
 ## Backgrounds / Parallax Profiles
 
 - A map = `BackgroundProfile` ScriptableObject (`Prefabs/Backgrounds/Profile_*.asset`):

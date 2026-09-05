@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -93,6 +94,52 @@ public class SfxManager : MonoBehaviour
         if (clip == null || _source == null) return;
         _source.pitch = pitchJitter > 0f ? 1f + Random.Range(-pitchJitter, pitchJitter) : 1f;
         _source.PlayOneShot(clip, volume);
+    }
+
+    // --- element sounds (plan 24) ---
+    //
+    // Loaded lazily and cached by path, missing entries included: a project
+    // with no generated element audio at all falls back to the procedural
+    // clips above and sounds exactly like it did before.
+    private readonly Dictionary<string, AudioClip> _elementClips = new();
+
+    private AudioClip ElementClip(ProjectileElement element, string file, AudioClip fallback)
+    {
+        string path = $"Sfx/Elements/{ElementProfile.Get(element).Key}/{file}";
+        if (!_elementClips.TryGetValue(path, out var clip))
+        {
+            clip = Resources.Load<AudioClip>(path);
+            _elementClips[path] = clip;
+        }
+        return clip != null ? clip : fallback;
+    }
+
+    /// <summary>Shot sound for an element. Light guns and heavy ordnance get
+    /// their own clip; per-weapon clips would not survive the pitch jitter
+    /// (plan 24, D6).</summary>
+    public static void PlayShoot(ProjectileElement element, WeaponType weapon)
+    {
+        var i = Instance;
+        if (i == null) return;
+        var clip = i.ElementClip(element, $"sfx_shoot_{ElementProfile.SfxGroup(weapon)}", i._shoot);
+        i.Play(clip, ShootVolume, 0.08f);
+    }
+
+    /// <summary>Projectile splash on a plane, wall or terrain tile. Distinct
+    /// from the victim-side shield/hull hit, which says WHAT was hit rather
+    /// than by what.</summary>
+    public static void PlayImpact(ProjectileElement element)
+    {
+        var i = Instance;
+        if (i == null) return;
+        i.Play(i.ElementClip(element, "sfx_impact", i._hitHull), HitVolume, 0.06f);
+    }
+
+    public static void PlayExplosion(ProjectileElement element)
+    {
+        var i = Instance;
+        if (i == null) return;
+        i.Play(i.ElementClip(element, "sfx_explosion", i._explosion), ExplosionVolume, 0.06f);
     }
 
     // --- public API (safe when Instance is null, e.g. in tests) ---

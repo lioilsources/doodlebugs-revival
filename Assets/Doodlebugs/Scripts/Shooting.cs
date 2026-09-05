@@ -159,6 +159,10 @@ public class Shooting : NetworkBehaviour
             bulletScript.SetShooter(shooterClientId, localPlayerIndex);
             bulletScript.SetDamage(damage);
             bulletScript.SetWeapon((int)weapon.Type);
+            // The shape decides what the projectile is made of (plan 24, D1).
+            // Resolved here on the server so every client - and any late
+            // joiner - reads the same element off the bullet.
+            bulletScript.SetElement((int)ShooterElement());
             if (weapon.BulletLifetime > 0f)
             {
                 bulletScript.SetLifetime(weapon.BulletLifetime);
@@ -176,6 +180,16 @@ public class Shooting : NetworkBehaviour
                                + planeSpeed;
             rb.AddForce((rotation * Vector3.right) * totalForce, ForceMode2D.Impulse);
         }
+    }
+
+    /// <summary>This plane's projectile element, from its current shape.
+    /// Falls back to Metal when the appearance is missing (a plane spawned
+    /// before PlaneAppearance claimed a look).</summary>
+    private ProjectileElement ShooterElement()
+    {
+        var appearance = GetComponent<PlaneAppearance>();
+        if (appearance == null) return ProjectileElement.Metal;
+        return PlaneModelCatalog.ElementOf(appearance.NetModelId.Value);
     }
 
     // --- Weapon management (server-side) ---

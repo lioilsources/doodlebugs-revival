@@ -58,11 +58,19 @@ public static class PlaneModelCatalog
         public readonly bool IsPremium;      // all free for now (plan decision D4); IAP hook kept
         public readonly string BundleId;
 
-        public PlaneModelDef(int id, string key, string displayName, bool isPremium = false, string bundleId = "")
+        /// <summary>What this shape's projectiles are made of - a dragon
+        /// breathes fire, a biplane fires brass (plan 24, decision D1).
+        /// Presentation only; the weapon still decides every number.</summary>
+        public readonly ProjectileElement Element;
+
+        public PlaneModelDef(int id, string key, string displayName,
+            ProjectileElement element = ProjectileElement.Metal,
+            bool isPremium = false, string bundleId = "")
         {
             Id = id;
             Key = key;
             DisplayName = displayName;
+            Element = element;
             IsPremium = isPremium;
             BundleId = bundleId;
         }
@@ -84,23 +92,23 @@ public static class PlaneModelCatalog
         new(5,  "twin_boom",    "Twin Boom"),
         new(6,  "gull_wing",    "Gull Wing"),
         new(7,  "barnstormer",  "Barnstormer"),
-        new(8,  "rocket",       "Rocket"),
+        new(8,  "rocket",       "Rocket", ProjectileElement.Plasma),
         new(9,  "gyrocopter",   "Gyrocopter"),
-        new(10, "ornithopter",  "Ornithopter"),
-        new(11, "paper_plane",  "Paper Plane"),
+        new(10, "ornithopter",  "Ornithopter", ProjectileElement.Air),
+        new(11, "paper_plane",  "Paper Plane", ProjectileElement.Air),
         new(12, "bathtub",      "Bathtub"),
         new(13, "crop_duster",  "Crop Duster"),
-        new(14, "delta_glider", "Delta Glider"),
+        new(14, "delta_glider", "Delta Glider", ProjectileElement.Air),
         new(15, "zeppelin",     "Zeppelin"),
 
         // Themed batch, 2026-09-04. Ids must match tools/planes/planes.py.
         // Several are listed but never shipped - the gate rejected every seed
         // (a balloon or a da Vinci screw simply is not a 110x26..72 shape) -
         // so IsAvailable reports false and the picker hides them.
-        new(16, "starfighter",  "Starfighter"),
-        new(17, "shuttle",      "Shuttle"),
-        new(18, "interceptor",  "Interceptor"),
-        new(19, "saucer",       "Saucer"),
+        new(16, "starfighter",  "Starfighter", ProjectileElement.Plasma),
+        new(17, "shuttle",      "Shuttle", ProjectileElement.Plasma),
+        new(18, "interceptor",  "Interceptor", ProjectileElement.Plasma),
+        new(19, "saucer",       "Saucer", ProjectileElement.Plasma),
         new(20, "lander",       "Lander"),
         new(21, "gunship",      "Gunship"),
         new(22, "galleon",      "Galleon"),
@@ -109,8 +117,8 @@ public static class PlaneModelCatalog
         new(25, "wright_flyer", "Wright Flyer"),
         new(26, "aerial_screw", "Aerial Screw"),
         new(27, "balloon",      "Balloon"),
-        new(28, "stealth",      "Stealth"),
-        new(29, "hover_pod",    "Hover Pod"),
+        new(28, "stealth",      "Stealth", ProjectileElement.Plasma),
+        new(29, "hover_pod",    "Hover Pod", ProjectileElement.Plasma),
         new(30, "tiltrotor",    "Tiltrotor"),
         new(31, "gotha_bomber", "Gotha"),
         new(32, "elliptical_fighter", "Spitfire"),
@@ -120,12 +128,12 @@ public static class PlaneModelCatalog
 
         // Creatures. Same envelope, same red paint region, same shared hitbox -
         // to the game a dragon is a silhouette like any other.
-        new(36, "dragon",       "Dragon"),
-        new(37, "unicorn",      "Unicorn"),
-        new(38, "wasp",         "Wasp"),
-        new(39, "fly",          "Fly"),
-        new(40, "eagle",        "Eagle"),
-        new(41, "goose",        "Goose"),
+        new(36, "dragon",       "Dragon", ProjectileElement.Fire),
+        new(37, "unicorn",      "Unicorn", ProjectileElement.Lightning),
+        new(38, "wasp",         "Wasp", ProjectileElement.Venom),
+        new(39, "fly",          "Fly", ProjectileElement.Venom),
+        new(40, "eagle",        "Eagle", ProjectileElement.Air),
+        new(41, "goose",        "Goose", ProjectileElement.Air),
     };
 
     private static Dictionary<int, PlaneModelDef> _byId;
@@ -147,6 +155,10 @@ public static class PlaneModelCatalog
 
     /// <summary>Valid AND its sprites are actually in the build - the only
     /// ids the picker offers and the server accepts.</summary>
+    /// <summary>What this shape shoots. Unknown/unlisted shapes are Metal,
+    /// so a model added without an element still works (plan 24, D2).</summary>
+    public static ProjectileElement ElementOf(int modelId) => Get(modelId).Element;
+
     public static bool IsAvailable(int id)
     {
         if (!IsValidId(id)) return false;

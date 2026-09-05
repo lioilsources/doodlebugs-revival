@@ -27,7 +27,23 @@ public class Bullet : NetworkBehaviour
     private NetworkVariable<int> _weaponId = new NetworkVariable<int>((int)WeaponType.MG,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    // What the projectile is MADE of - comes from the shooter's plane shape
+    // (PlaneModelCatalog.ElementOf). Synced for the same reason the weapon
+    // is: a client that joins mid-flight has to draw the right thing, and
+    // the impact/explosion RPCs carry it so the splash matches the shot.
+    private NetworkVariable<int> _elementId = new NetworkVariable<int>((int)ProjectileElement.Metal,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     private WeaponProfile Profile => WeaponProfile.Get(_weaponId.Value);
+    private ProjectileElement Element => (ProjectileElement)_elementId.Value;
+
+    // Sprites are shared and immutable - loading per shot would allocate on
+    // every trigger pull. Key is the full Resources path.
+    private static readonly Dictionary<string, Sprite> _spriteCache = new();
+
+    // The trail is detached on despawn and left to finish, so it needs to
+    // outlive this component.
+    private ParticleSystem _trail;
 
     /// <summary>False while a mine is still arming - it hits nothing yet.
     /// Runs on every client (ForegroundTile checks it locally).</summary>
@@ -51,16 +67,20 @@ public class Bullet : NetworkBehaviour
         _spawnTime = Time.time;
 
         _weaponId.OnValueChanged += OnWeaponChanged;
+        _elementId.OnValueChanged += OnElementChanged;
         ApplyVisual();
+        ApplyTrail();
 
         // Bullet replicates to every client - this doubles as the shot sound
-        SfxManager.PlayShoot();
+        SfxManager.PlayShoot(Element, Profile.Type);
     }
 
     public override void OnNetworkDespawn()
     {
         base.OnNetworkDespawn();
         _weaponId.OnValueChanged -= OnWeaponChanged;
+        _elementId.OnValueChanged -= OnElementChanged;
+        ReleaseTrail();
     }
 
     /// <summary>Assign the weapon profile driving this projectile. Server-only.</summary>
@@ -73,7 +93,51 @@ public class Bullet : NetworkBehaviour
         }
     }
 
+    /// <summary>Assign the projectile element (shooter's plane shape). Server-only.</summary>
+    public void SetElement(int elementId)
+    {
+        if (IsServer)
+        {
+            _elementId.Value = elementId;
+            ApplyVisual();
+            ApplyTrail();
+        }
+    }
+
     private void OnWeaponChanged(int prev, int next) => ApplyVisual();
+
+    private void OnElementChanged(int prev, int next)
+    {
+        ApplyVisual();
+        ApplyTrail();
+    }
+
+    /// <summary>Hang the element's trail off the projectile. Runs on every
+    /// client; re-entrant because the element can land after the spawn.</summary>
+    private void ApplyTrail()
+    {
+        if (_trail != null) Destroy(_trail.gameObject);
+        var sr = GetComponent<SpriteRenderer>();
+        int order = sr != null ? sr.sortingOrder - 1 : 0;   // behind the projectile
+        _trail = EffectAssets.CreateTrailSystem(transform, ElementProfile.Get(Element).Trail, order);
+    }
+
+    /// <summary>
+    /// Let the trail finish on its own. Parented to the bullet it would be
+    /// destroyed with it, and the last half-second of puffs would pop out of
+    /// existence mid-air.
+    /// </summary>
+    private void ReleaseTrail()
+    {
+        if (_trail == null) return;
+
+        var go = _trail.gameObject;
+        go.transform.SetParent(null, true);
+        var emission = _trail.emission;
+        emission.rateOverTime = 0f;
+        Destroy(go, _trail.main.startLifetime.constantMax + 0.1f);
+        _trail = null;
+    }
 
     private void ApplyVisual()
     {
@@ -83,28 +147,48 @@ public class Bullet : NetworkBehaviour
         var sr = GetComponent<SpriteRenderer>();
         if (sr != null)
         {
-            if (!string.IsNullOrEmpty(profile.ProjectileSpriteName))
+            // Element art first, then the Metal set, then the weapon's own
+            // override, then the shared tracer tinted. Every step is optional
+            // so the game runs with no generated art at all.
+            var element = ElementProfile.Get(Element);
+            var sprite = CachedSprite(element.ProjectilePath(profile.Type));
+
+            if (sprite == null && Element != ProjectileElement.Metal)
             {
-                var overrideSprite = Resources.Load<Sprite>(
-                    "Sprites/Projectiles/" + profile.ProjectileSpriteName);
-                if (overrideSprite != null)
-                {
-                    sr.sprite = overrideSprite;
-                    sr.color = Color.white; // the art carries its own colours
-                }
-                else
-                {
-                    sr.color = profile.ProjectileTint;
-                }
+                sprite = CachedSprite(
+                    ElementProfile.Get(ProjectileElement.Metal).ProjectilePath(profile.Type));
+            }
+            if (sprite == null && !string.IsNullOrEmpty(profile.ProjectileSpriteName))
+            {
+                sprite = CachedSprite("Sprites/Projectiles/" + profile.ProjectileSpriteName);
+            }
+
+            if (sprite != null)
+            {
+                sr.sprite = sprite;
+                sr.color = Color.white;   // the art carries its own colours
             }
             else
             {
                 if (_defaultSprite != null) sr.sprite = _defaultSprite;
-                sr.color = profile.ProjectileTint;
+                // No art for this pair - the element still shows as a tint.
+                sr.color = Element == ProjectileElement.Metal
+                    ? profile.ProjectileTint
+                    : element.Tint;
             }
             // Bullets render below clouds (order 10), so a lurking mine is
             // naturally hidden while it drifts inside one.
         }
+    }
+
+    private static Sprite CachedSprite(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return null;
+        if (_spriteCache.TryGetValue(path, out var cached)) return cached;
+
+        var sprite = Resources.Load<Sprite>(path);
+        _spriteCache[path] = sprite;   // null is cached too - a miss is permanent
+        return sprite;
     }
 
     /// <summary>Despawn the bullet after this many seconds (short-range weapons). Server-only.</summary>
@@ -237,6 +321,9 @@ public class Bullet : NetworkBehaviour
                     targetPlayer.SetLastAttacker(_shooterClientId.Value, _shooterLocalPlayerIndex.Value);
                 }
                 damagable.Hit(_damage.Value);
+                // A plain hit on a plane used to draw nothing - the victim's
+                // own shield/hull flash said something was hit, never by what.
+                PlayHitFxClientRpc(transform.position, _elementId.Value);
             }
         }
         else
@@ -248,7 +335,7 @@ public class Bullet : NetworkBehaviour
             }
             else
             {
-                PlayHitFxClientRpc(transform.position);
+                PlayHitFxClientRpc(transform.position, _elementId.Value);
             }
         }
 
@@ -294,32 +381,29 @@ public class Bullet : NetworkBehaviour
             player.Hit(_damage.Value);
         }
 
-        ExplodeClientRpc(pos, radius);
+        ExplodeClientRpc(pos, radius, _elementId.Value);
     }
 
     [ClientRpc]
-    private void ExplodeClientRpc(Vector3 position, float radius)
+    private void ExplodeClientRpc(Vector3 position, float radius, int elementId)
     {
-        SfxManager.PlayExplosion();
+        var element = (ProjectileElement)elementId;
+        SfxManager.PlayExplosion(element);
 
         // Terrain destruction is local-visual, same as single-tile bullet hits;
         // position+radius come from the server, so every client digs the
         // same crater.
         ForegroundScroller.Instance?.DestroyTilesInRadius(position, radius);
 
-        if (hitEffect != null)
-        {
-            var effect = Instantiate(hitEffect, position, Quaternion.identity);
-            effect.transform.localScale *= Mathf.Max(1f, radius);
-            Destroy(effect, 0.8f);
-        }
+        // Element art if it exists, the old explosion prefab if it does not.
+        EffectLibrary.SpawnExplosion(element, position, radius, hitEffect);
     }
 
     [ClientRpc]
-    private void PlayHitFxClientRpc(Vector3 position)
+    private void PlayHitFxClientRpc(Vector3 position, int elementId)
     {
-        if (hitEffect == null) return;
-        var effect = Instantiate(hitEffect, position, Quaternion.identity);
-        Destroy(effect, 0.8f);
+        var element = (ProjectileElement)elementId;
+        SfxManager.PlayImpact(element);
+        EffectLibrary.SpawnImpact(element, position, hitEffect);
     }
 }
