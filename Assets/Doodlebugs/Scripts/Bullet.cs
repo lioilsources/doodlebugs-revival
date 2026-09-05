@@ -142,6 +142,9 @@ public class Bullet : NetworkBehaviour
     private void ApplyVisual()
     {
         var profile = Profile;
+        // Legacy default: the prefab's own scale, which exists to shrink the
+        // 1289x974 shared tracer texture. Authored art overrides this below -
+        // inheriting it would render a 32 px sprite at 0.03 world units.
         transform.localScale = _baseScale * profile.ProjectileScale;
 
         var sr = GetComponent<SpriteRenderer>();
@@ -167,6 +170,7 @@ public class Bullet : NetworkBehaviour
             {
                 sr.sprite = sprite;
                 sr.color = Color.white;   // the art carries its own colours
+                ApplyArtScale(sprite, profile);
             }
             else
             {
@@ -179,6 +183,26 @@ public class Bullet : NetworkBehaviour
             // Bullets render below clouds (order 10), so a lurking mine is
             // naturally hidden while it drifts inside one.
         }
+    }
+
+    /// <summary>
+    /// Size authored art by MEASURING it: scale the sprite so its long axis
+    /// lands on ElementProfile.WorldLength for this weapon. The prefab's
+    /// localScale is calibrated for one specific legacy texture and means
+    /// nothing to a sprite drawn at its own pixel size, so art that opts in
+    /// here must not inherit it. Uniform, so nothing is stretched - the
+    /// legacy scale is non-uniform (0.094 x 0.111) to correct that one
+    /// texture's aspect.
+    /// </summary>
+    private void ApplyArtScale(Sprite sprite, WeaponProfile profile)
+    {
+        float ppu = sprite.pixelsPerUnit > 0.01f ? sprite.pixelsPerUnit : 100f;
+        float spriteLong = Mathf.Max(sprite.rect.width, sprite.rect.height) / ppu;
+        if (spriteLong <= 0.0001f) return;
+
+        float target = ElementProfile.WorldLength(profile.Type) * profile.ProjectileScale;
+        float scale = target / spriteLong;
+        transform.localScale = new Vector3(scale, scale, _baseScale.z);
     }
 
     private static Sprite CachedSprite(string path)
