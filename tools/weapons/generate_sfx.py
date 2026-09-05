@@ -47,6 +47,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 ASSETS_DIR = ROOT / "Assets/Doodlebugs/Resources/Sfx/Elements"
+# The procedural clips the element set has to sit next to, not on top of.
+GENERIC_SFX_DIR = ROOT / "Assets/Doodlebugs/Resources/Sfx"
 GENERIC_SFX = ROOT / "Assets/Doodlebugs/Resources/Sfx"
 OUT = HERE / "out"
 RAW = OUT / "sfx_raw"
@@ -213,17 +215,46 @@ TRIM = (f"silenceremove=start_periods=1:start_threshold={TRIM_DB}dB:"
         f"start_silence=0:detection=peak,areverse")
 
 
-def post_one(src, dst, cap, bitcrush=False):
-    """mp3 -> mono 44.1 kHz 16-bit WAV, trimmed, peak-normalised, capped.
+_REF_RMS_CACHE = {}
 
-    Two ffmpeg passes because peak normalisation needs the peak first:
-    volumedetect on the trimmed signal, then a fixed `volume` gain. loudnorm
-    would be the LUFS answer and it is the wrong one here - these are 200 ms
-    transients, and loudnorm's gating would pump them."""
+
+def reference_rms(event):
+    """RMS of the generic clip this event falls back to, measured from the
+    clip actually in Resources/Sfx.
+
+    Peak normalising alone is not enough: peak says nothing about how loud a
+    thing SOUNDS, and the ElevenLabs renders are far denser than the
+    procedural blips. Peak-normalised, the new explosions measured -10 dBFS
+    against the existing -18.6 - eight decibels louder, on the event that
+    already plays at 0.9 volume. So the target is the reference clip's RMS,
+    and the peak ceiling only ever pulls it further down."""
+    if event in _REF_RMS_CACHE:
+        return _REF_RMS_CACHE[event]
+    ref = GENERIC_SFX_DIR / REFERENCE[event]
+    rms = wav_stats(ref)[1] if ref.exists() else None
+    _REF_RMS_CACHE[event] = rms
+    return rms
+
+
+def post_one(src, dst, cap, bitcrush=False, event=None):
+    """mp3 -> mono 44.1 kHz 16-bit WAV, trimmed, loudness-matched, capped.
+
+    Two ffmpeg passes because the gain needs the measurement first:
+    volumedetect + an RMS pass on the trimmed signal, then a fixed `volume`
+    gain. loudnorm would be the LUFS answer and it is the wrong one here -
+    these are 200 ms transients, and loudnorm's gating would pump them."""
     tmp = dst.with_suffix(".trim.wav")
     ffmpeg(["-i", str(src), "-ac", "1", "-ar", str(RATE), "-c:a", "pcm_s16le",
             "-af", f"{TRIM},atrim=0:{cap}", str(tmp)])
-    gain = PEAK_DB - peak_db(tmp)
+
+    headroom = PEAK_DB - peak_db(tmp)          # never clip
+    target = reference_rms(event) if event else None
+    if target is None:
+        gain = headroom
+    else:
+        # Match the generic clip's loudness, but never push past the ceiling.
+        gain = min(headroom, target - wav_stats(tmp)[1])
+
     chain = f"volume={gain:.2f}dB"
     if bitcrush:
         # 8-bit at 11 kHz and back: what makes an ElevenLabs render sit next to
@@ -270,7 +301,7 @@ def cmd_post(a):
         _element, event = parse_key(key)
         dst = WAVS / f"{key}_{cand}.wav"
         try:
-            gain = post_one(src, dst, EVENTS[event]["cap"], a.bitcrush)
+            gain = post_one(src, dst, EVENTS[event]["cap"], a.bitcrush, event)
         except RuntimeError as exc:
             print(f"[FAIL] {src.name}: {exc}")
             continue
