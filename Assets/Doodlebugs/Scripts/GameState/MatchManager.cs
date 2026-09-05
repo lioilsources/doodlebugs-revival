@@ -194,6 +194,7 @@ public class MatchManager : MonoBehaviour
     {
         if (!IsServer()) return;
         Phase = GamePhase.WaitingForPlayers;
+        BackgroundManager.Instance?.ServerResetWarmUpRotation();
         Debug.Log("[MatchManager] Phase -> WaitingForPlayers (host started)");
         StartCoroutine(OpenWaitingHangarDelayed());
     }
@@ -360,6 +361,7 @@ public class MatchManager : MonoBehaviour
         _roundEnding = false;
         IsIntermission = false;
         Phase = GamePhase.WaitingForPlayers;
+        BackgroundManager.Instance?.ServerResetWarmUpRotation();
 
         float frozenTime = ScoreManager.Instance != null ? ScoreManager.Instance.MatchTime : 0f;
         BroadcastThroughServerPlayer(p =>
@@ -373,6 +375,7 @@ public class MatchManager : MonoBehaviour
     private void HandleLocalSessionEnded()
     {
         Phase = GamePhase.WaitingForPlayers;
+        BackgroundManager.Instance?.ServerResetWarmUpRotation();
         IsIntermission = false;
         IsRunOver = false;
         _clientRoundWins.Clear();
@@ -405,6 +408,13 @@ public class MatchManager : MonoBehaviour
             {
                 ServerDeploy(clientId);
             }
+        }
+
+        // Waiting lobby: rotate the arena so the FLY warm-up does not sit on
+        // one map for the whole wait.
+        if (Phase == GamePhase.WaitingForPlayers)
+        {
+            BackgroundManager.Instance?.ServerTickWarmUpRotation();
         }
 
         // Time-limit check (server decides)
