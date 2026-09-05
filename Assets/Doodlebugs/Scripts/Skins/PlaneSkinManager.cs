@@ -11,9 +11,12 @@ using UnityEngine;
 /// pick the same combo need one winner, everyone else needs to see it as
 /// taken immediately.
 ///
-/// Uniqueness is per combo (plan 23, decision D1a): two players may fly the
-/// same shape in different skins, or the same skin on different shapes -
-/// with 16 shapes x 50 skins nobody is ever blocked in a 6-player lobby.
+/// Uniqueness is per SHAPE (2026-09-06, superseding plan 23 decision D1a):
+/// no two players fly the same silhouette, whatever it is painted. Skins are
+/// free to repeat, because two identical liveries on different shapes still
+/// read apart at a glance while two identical shapes in different colours do
+/// not - and telling aircraft apart mid-dogfight is what the rule is for.
+/// 29 shipped shapes against an 8-player cap, so nobody is ever blocked.
 ///
 /// Scene singleton, same shape as BackgroundManager (NetworkObject placed in
 /// Scene01 by the "Doodlebugs -> Setup Plane Skin Manager" editor menu - see
@@ -113,7 +116,7 @@ public class PlaneSkinManager : NetworkBehaviour
                 if (c.SameLook(modelId, skinId)) return true; // no-op re-pick
                 continue; // this player's own old claim - overwritten below
             }
-            if (c.SameLook(modelId, skinId)) return false; // taken by someone else
+            if (c.ModelId == modelId) return false; // that shape is someone else's
         }
 
         var claim = new SkinClaim
@@ -133,11 +136,13 @@ public class PlaneSkinManager : NetworkBehaviour
         return true;
     }
 
-    public bool IsTaken(int modelId, int skinId, ulong byClientId, int byLocalPlayerIndex)
+    /// <summary>Is this SHAPE flown by somebody other than the given player?
+    /// Skin is deliberately not part of the question - see the class note.</summary>
+    public bool IsModelTaken(int modelId, ulong byClientId, int byLocalPlayerIndex)
     {
         foreach (var c in _claims)
         {
-            if (c.SameLook(modelId, skinId) && !c.IsPlayer(byClientId, byLocalPlayerIndex)) return true;
+            if (c.ModelId == modelId && !c.IsPlayer(byClientId, byLocalPlayerIndex)) return true;
         }
         return false;
     }
@@ -171,9 +176,9 @@ public class PlaneSkinManager : NetworkBehaviour
     /// pilot flew the same red biplane, and none of them showed as TAKEN to
     /// anybody. Claiming on spawn is what makes "taken" mean anything.
     ///
-    /// A player whose default is already worn is walked to the next free
-    /// combination: same shape, next livery, because a different colour reads
-    /// from across the arena far better than a different silhouette.
+    /// A player whose default shape is already flown is walked to the next
+    /// free silhouette; the livery stays the starter one, since skins no
+    /// longer have to be unique.
     /// </summary>
     public (int modelId, int skinId) ServerClaimInitialLook(ulong clientId, int localPlayerIndex)
     {
@@ -187,16 +192,16 @@ public class PlaneSkinManager : NetworkBehaviour
 
         foreach (int modelId in PlaneModelCatalog.Available)
         {
-            for (int skinId = 0; skinId < PlaneSkinCatalog.Count; skinId++)
+            if (IsModelTaken(modelId, clientId, localPlayerIndex)) continue;
+            if (TryClaim(clientId, localPlayerIndex, modelId, PlaneSkinCatalog.StarterSkinId))
             {
-                if (IsTaken(modelId, skinId, clientId, localPlayerIndex)) continue;
-                if (TryClaim(clientId, localPlayerIndex, modelId, skinId)) return (modelId, skinId);
+                return (modelId, PlaneSkinCatalog.StarterSkinId);
             }
         }
 
-        // Every combination taken - not reachable with 25 shapes x 50 skins,
+        // Every shape flown - needs more pilots than the 8-player cap allows,
         // but a duplicate look beats no plane at all.
-        Debug.LogWarning("[PlaneSkinManager] No free (shape, skin) combination left");
+        Debug.LogWarning("[PlaneSkinManager] No free shape left");
         return fallback;
     }
 

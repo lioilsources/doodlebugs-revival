@@ -2622,18 +2622,15 @@ public class GameHUD : MonoBehaviour
         var appearance = owned != null ? owned.GetComponent<PlaneAppearance>() : null;
         int currentModel = appearance != null ? appearance.NetModelId.Value : PlaneModelCatalog.BaseModelId;
         int currentSkin = appearance != null ? appearance.NetSkinId.Value : PlaneSkinCatalog.StarterSkinId;
-        int localIdx = owned != null ? Mathf.Max(owned.LocalPlayerIndex, 0) : 0;
-        ulong clientId = owned != null ? owned.OwnerClientId : 0;
-        var skinMgr = PlaneSkinManager.Instance;
         var iap = IAPManager.Instance;
 
         for (int i = 0; i < PlaneSkinCatalog.Count; i++)
         {
             var def = PlaneSkinCatalog.Get(i);
             bool isCurrent = i == currentSkin;
-            // Uniqueness is per (shape, skin) combo: this skin is only blocked
-            // if someone else flies it on the shape picked right now.
-            bool taken = !isCurrent && skinMgr != null && skinMgr.IsTaken(currentModel, i, clientId, localIdx);
+            // Uniqueness lives on the SHAPE now, so no livery is ever blocked
+            // - two pilots may wear the same paint on different silhouettes.
+            // Only the store can still grey a skin out.
             bool unlocked = iap == null || iap.IsSkinUnlocked(i);
 
             var cardObj = new GameObject($"SkinCard_{def.Key}");
@@ -2657,17 +2654,16 @@ public class GameHUD : MonoBehaviour
             var iconImg = iconGO.AddComponent<Image>();
             iconImg.sprite = PlaneModelCatalog.LoadSprite(currentModel, i); // preview = this skin on the current shape
             iconImg.preserveAspect = true;
-            iconImg.color = (taken || !unlocked) ? new Color(1f, 1f, 1f, 0.4f) : Color.white;
+            iconImg.color = unlocked ? Color.white : new Color(1f, 1f, 1f, 0.4f);
 
             // CreateTextIn positions are relative to the card CENTRE (148 px
             // tall card, icon spans +62..-26): -40/-56 land under the icon.
             CreateTextIn(cardObj.transform, "Name", def.DisplayName, 8,
                 new Vector2(0, -40), Color.white);
 
-            string status = isCurrent ? "EQUIPPED" : taken ? "TAKEN"
+            string status = isCurrent ? "EQUIPPED"
                 : !unlocked ? (iap?.BundleForSkin(i)?.PlaceholderPrice ?? "LOCKED") : "";
             Color statusColor = isCurrent ? ReadyGreen
-                : taken ? new Color(1f, 0.4f, 0.4f)
                 : !unlocked ? new Color(1f, 0.85f, 0.3f)
                 : new Color(1f, 1f, 1f, 0.4f);
             CreateTextIn(cardObj.transform, "Status", status, 8, new Vector2(0, -56), statusColor);
@@ -2682,7 +2678,6 @@ public class GameHUD : MonoBehaviour
             }
             else
             {
-                button.interactable = !taken;
                 int captured = i;
                 button.onClick.AddListener(() => SelectSkin(captured));
             }
@@ -2763,7 +2758,7 @@ public class GameHUD : MonoBehaviour
             bool isCurrent = modelId == currentModel;
             // Combo uniqueness: this shape is only blocked if someone else
             // flies it in the skin picked right now.
-            bool taken = !isCurrent && skinMgr != null && skinMgr.IsTaken(modelId, currentSkin, clientId, localIdx);
+            bool taken = !isCurrent && skinMgr != null && skinMgr.IsModelTaken(modelId, clientId, localIdx);
 
             var cardObj = new GameObject($"ShapeCard_{def.Key}");
             cardObj.transform.SetParent(_shapeRowContent, false);
