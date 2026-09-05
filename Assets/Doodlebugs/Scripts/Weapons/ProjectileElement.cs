@@ -140,17 +140,22 @@ public class ElementProfile
     /// So sized art is measured, not scaled: Bullet derives localScale from
     /// the sprite's own pixel size to hit this number. For reference a plane
     /// is about 2.2 world units across and the legacy tracer drew at 0.8.
+    ///
+    /// Doubled on 2026-09-06, by request - the first pass undershot on a
+    /// phone screen. Note this multiplies with WeaponProfile.ProjectileScale,
+    /// so the heavy end runs close to plane-sized: rocket 1.20 x 1.7 = 2.04
+    /// and mine 1.10 x 2.0 = 2.20, against a plane's ~2.2.
     /// </summary>
     public static float WorldLength(WeaponType weapon)
     {
         switch (SpriteForm(weapon))
         {
-            case "pellet": return 0.28f;   // 5-7 on screen at once, keep them small
-            case "bomb":   return 0.70f;
-            case "bolt":   return 0.60f;
-            case "rocket": return 0.60f;
-            case "mine":   return 0.55f;
-            default:       return 0.55f;   // tracer
+            case "pellet": return 0.56f;   // 5-7 on screen at once, keep them small
+            case "bomb":   return 1.40f;
+            case "bolt":   return 1.20f;
+            case "rocket": return 1.20f;
+            case "mine":   return 1.10f;
+            default:       return 1.10f;   // tracer
         }
     }
 
