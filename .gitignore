@@ -123,3 +123,9 @@ tools/*/*.log
 tools/planes/out/
 tools/planes/review/
 tools/planes/index.html
+
+tools/weapons/out/
+tools/weapons/review/
+tools/weapons/index.html
+tools/weapons/effects.html
+tools/weapons/sfx.html

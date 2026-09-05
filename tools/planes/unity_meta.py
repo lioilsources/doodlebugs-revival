@@ -9,7 +9,12 @@ kinds:
   sprite   Sprite (2D and UI), PPU 100, pivot centre, readable
   texture  Default texture, readable, sRGB (skin swatches - colour data)
   mask     Default texture, readable, linear, alpha not transparency (data)
+  audio    AudioClip, 44.1 kHz, decompress on load (the Resources/Sfx one-shots)
   folder   folder asset
+
+write_meta(path, "sprite", pivot=(0.6, 0.5)) switches the importer to a custom
+pivot (alignment 9); omitting `pivot` keeps the centred default byte for byte,
+which is what tools/planes and tools/skins already ship.
 """
 import uuid
 from pathlib import Path
@@ -59,8 +64,8 @@ TextureImporter:
   spriteMode: {sprite_mode}
   spriteExtrude: 1
   spriteMeshType: 1
-  alignment: 0
-  spritePivot: {{x: 0.5, y: 0.5}}
+  alignment: {alignment}
+  spritePivot: {{x: {pivot_x}, y: {pivot_y}}}
   spritePixelsToUnits: 100
   spriteBorder: {{x: 0, y: 0, z: 0, w: 0}}
   spriteGenerateFallbackPhysicsShape: {fallback_physics}
@@ -108,6 +113,31 @@ TextureImporter:
   assetBundleVariant:
 """
 
+_AUDIO = """fileFormatVersion: 2
+guid: {guid}
+AudioImporter:
+  externalObjects: {{}}
+  serializedVersion: 8
+  defaultSettings:
+    serializedVersion: 2
+    loadType: 0
+    sampleRateSetting: 0
+    sampleRateOverride: 44100
+    compressionFormat: 1
+    quality: 1
+    conversionMode: 0
+    preloadAudioData: 0
+  platformSettingOverrides: {{}}
+  forceToMono: 0
+  normalize: 1
+  loadInBackground: 0
+  ambisonic: 0
+  3D: 0
+  userData:
+  assetBundleName:
+  assetBundleVariant:
+"""
+
 _FOLDER = """fileFormatVersion: 2
 guid: {guid}
 folderAsset: yes
@@ -129,8 +159,13 @@ def _guid():
     return uuid.uuid4().hex
 
 
-def write_meta(asset_path, kind):
-    """Create <asset>.meta if missing. Returns True when a file was written."""
+def write_meta(asset_path, kind, pivot=None):
+    """Create <asset>.meta if missing. Returns True when a file was written.
+
+    pivot: None (default) keeps the centred pivot / alignment 0 that every
+    existing caller ships; a (x, y) pair in 0..1 sprite space switches the
+    importer to Custom alignment - projectile bombs want the pivot near the
+    nose so Bullet's tumble rotates around the fuse, not the middle."""
     asset_path = Path(asset_path)
     meta = asset_path.with_name(asset_path.name + ".meta")
     if meta.exists():
@@ -138,7 +173,12 @@ def write_meta(asset_path, kind):
     if kind == "folder":
         meta.write_text(_FOLDER.format(guid=_guid()))
         return True
-    spec = KINDS[kind]
+    if kind == "audio":
+        meta.write_text(_AUDIO.format(guid=_guid()))
+        return True
+    spec = dict(KINDS[kind])
+    px, py = (0.5, 0.5) if pivot is None else pivot
+    spec.update(alignment=0 if pivot is None else 9, pivot_x=px, pivot_y=py)
     meta.write_text(_TEXTURE.format(guid=_guid(), sprite_id=_guid(), **spec))
     return True
 

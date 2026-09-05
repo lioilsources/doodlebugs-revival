@@ -2790,6 +2790,16 @@ public class GameHUD : MonoBehaviour
 
             // 220 px tall card, icon spans +102..-26 from the centre.
             CreateTextIn(cardObj.transform, "Name", def.DisplayName, 10, new Vector2(0, -46), Color.white);
+
+            // What this shape shoots (plan 24) - the element is a property of
+            // the silhouette, so it has to be readable BEFORE the first shot.
+            var element = ElementProfile.Get(def.Element);
+            var badgeColor = taken
+                ? new Color(element.Tint.r, element.Tint.g, element.Tint.b, 0.4f)
+                : element.Tint;
+            CreateTextIn(cardObj.transform, "Element", element.DisplayName, 8,
+                new Vector2(0, -88), badgeColor);
+
             string status = isCurrent ? "EQUIPPED" : taken ? "TAKEN" : "";
             Color statusColor = isCurrent ? ReadyGreen
                 : taken ? new Color(1f, 0.4f, 0.4f)

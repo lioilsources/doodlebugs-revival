@@ -203,7 +203,18 @@ def drop_ground_shadow(mask):
     if not shadows:
         return None
     drop = set(shadows)
-    keep_small = labels.point(lambda v: 0 if v in drop else 255, "L")
+    # Painted pixel by pixel, not `labels.point(lambda ..., "L")`: since Pillow
+    # 11, point() on an I/F image hands back an ImagePointTransform instead of
+    # evaluating the lambda per value, so that call silently returned the
+    # untouched I image and the ImageChops.multiply below died with "images do
+    # not match" - i.e. every seed that actually HAD a detached ground shadow,
+    # the only case this function exists for, crashed on Pillow >= 11.
+    keep_small = Image.new("L", labels.size, 255)
+    lp, kp = labels.load(), keep_small.load()
+    for y in range(labels.height):
+        for x in range(labels.width):
+            if lp[x, y] in drop:
+                kp[x, y] = 0
     return keep_small.resize(mask.size, Image.NEAREST).filter(ImageFilter.MaxFilter(3))
 
 
