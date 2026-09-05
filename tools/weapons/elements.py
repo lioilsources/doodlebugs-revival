@@ -58,8 +58,14 @@ ELEMENTS = {
         id=3, name="Venom",
         tint=(120, 230, 90),
         material=(
-            "made of thick acid venom, a glossy toxic green blob with a pale "
-            "lime highlight and dark green drips"),
+            # A material describes the SUBSTANCE, never the outline. "a glossy
+            # toxic green blob" cost venom every bomb seed it ever rendered:
+            # the form asks for a long aerial bomb, the material said blob, and
+            # FLUX drew the blob - 8/8 failed the extent gate while venom's
+            # naturally round forms passed. core/highlight/seam are fine, they
+            # describe the inside.
+            "made of thick acid venom, glossy toxic green with a pale lime "
+            "highlight and dark green slime drips running off its underside"),
         burst="a splattering green acid splash with flying droplets and hissing vapour",
         sfx="a wet acidic splat, bubbling hiss and dripping slime",
         motif="droplets"),

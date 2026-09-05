@@ -38,24 +38,33 @@ FORMS = {
         # Pivot 40 % back from the nose: Bullet tumbles the bomb about its
         # fuse, not its middle, so the sprite has to rotate around the fat end.
         pivot=(0.60, 0.5),
-        shape=("a single aerial bomb seen from the side, a fat teardrop body "
-               "with a rounded nose pointing right and four small fins at the "
-               "tail on the left, twice as wide as it is tall"),
+        shape=("a single long aerial bomb seen from the side, an elongated "
+               "torpedo-shaped body with a rounded nose pointing right and "
+               "four small fins at the tail on the left, twice as wide as it "
+               "is tall, lying horizontally and spanning the full width of the "
+               "frame from edge to edge"),
         note="replaces bomb_littleboy per element; metal keeps Little Boy"),
     "bolt": dict(
         canvas=(48, 12), facing="right", group="gun",
         weapons=("Sniper",),
         shape=("a single long thin needle bolt, a very slim horizontal spike "
                "with a bright glowing core running down its length, a sharp "
-               "point at the right and a tapering trail at the left, six "
-               "times as wide as it is tall"),
+               "point at the right and a tapering trail at the left, four "
+               "times as wide as it is tall, lying horizontally and spanning "
+               "the full width of the frame from edge to edge"),
         note="fastest thing on screen - needs a bright core to read at all"),
     "rocket": dict(
         canvas=(48, 20), facing="right", group="heavy",
         weapons=("Rocket",),
-        shape=("a single small rocket missile seen from the side, a cylinder "
-               "body with a pointed nose cone at the right, two small fins at "
-               "the left and a short exhaust flare behind it"),
+        # Every seed of the first batch failed P2extent: the phrase never said
+        # how LONG the thing is, so FLUX drew a compact missile floating in a
+        # wide frame. tracer passed 12/12 with an explicit ratio - so say it.
+        shape=("a single long slim rocket missile seen from the side, a "
+               "stretched narrow cylinder body with a pointed nose cone at the "
+               "right, two small fins at the left and a short exhaust flare "
+               "streaming out behind it, two and a half times as wide as it is "
+               "tall, lying horizontally and spanning the full width of the "
+               "frame from edge to edge"),
         note="body + exhaust; the runtime trail does the rest"),
     "mine": dict(
         canvas=(32, 32), facing="any", group="heavy",
