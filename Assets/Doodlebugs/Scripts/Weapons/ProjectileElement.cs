@@ -126,6 +126,34 @@ public class ElementProfile
         }
     }
 
+    /// <summary>
+    /// How long a projectile of this weapon should be ON SCREEN, in world
+    /// units along its long axis, at ProjectileScale 1.
+    ///
+    /// Authored art cannot inherit the bullet prefab's localScale: that scale
+    /// (0.094, 0.111) exists only to shrink the legacy 1289x974 tracer
+    /// texture down to something bullet-sized. Applied to a 32x16 element
+    /// sprite it yields 0.03 x 0.018 world units - roughly 27 times too small
+    /// to see. Same trap bit the Little Boy bomb (70x43 -> 0.066 units), which
+    /// is why it has been all but invisible since its scale went 2.2 -> 1.
+    ///
+    /// So sized art is measured, not scaled: Bullet derives localScale from
+    /// the sprite's own pixel size to hit this number. For reference a plane
+    /// is about 2.2 world units across and the legacy tracer drew at 0.8.
+    /// </summary>
+    public static float WorldLength(WeaponType weapon)
+    {
+        switch (SpriteForm(weapon))
+        {
+            case "pellet": return 0.28f;   // 5-7 on screen at once, keep them small
+            case "bomb":   return 0.70f;
+            case "bolt":   return 0.60f;
+            case "rocket": return 0.60f;
+            case "mine":   return 0.55f;
+            default:       return 0.55f;   // tracer
+        }
+    }
+
     private static readonly ElementProfile[] Profiles =
     {
         new ElementProfile
