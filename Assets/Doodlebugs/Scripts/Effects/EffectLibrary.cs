@@ -19,7 +19,7 @@ public static class EffectLibrary
     public const int SortingOrder = 12;   // above bullets (10), below the HUD
 
     private const float ImpactFps = 24f;
-    private const float ExplosionFps = 22f;
+    private const float ExplosionFps = 20f;   // matches tools/weapons/gate.py KINDS
 
     // Folder path -> frames. Empty array = checked, missing (never re-probed:
     // Resources.LoadAll on a missing folder is not free).
@@ -28,24 +28,40 @@ public static class EffectLibrary
     /// <summary>Frames of one flipbook, element with a Metal fallback.</summary>
     public static Sprite[] Frames(ProjectileElement element, string kind)
     {
-        var own = Load($"Sprites/Effects/{ElementProfile.Get(element).Key}/{kind}");
+        var own = Load(ElementProfile.Get(element).Key, kind);
         if (own.Length > 0) return own;
 
-        var fallback = ElementProfile.Get(ProjectileElement.Metal).Key;
-        return Load($"Sprites/Effects/{fallback}/{kind}");
+        return Load(ElementProfile.Get(ProjectileElement.Metal).Key, kind);
     }
 
-    private static Sprite[] Load(string path)
+    /// <summary>
+    /// Both kinds share one folder per element (impact_00.png,
+    /// explosion_00.png ...), so the load path is the FOLDER and the kind is
+    /// a name prefix - Resources.LoadAll on ".../impact" would look for an
+    /// asset by that exact name and quietly find nothing.
+    /// </summary>
+    private static Sprite[] Load(string elementKey, string kind)
     {
-        if (_frames.TryGetValue(path, out var cached)) return cached;
+        string cacheKey = elementKey + "/" + kind;
+        if (_frames.TryGetValue(cacheKey, out var cached)) return cached;
 
-        var loaded = Resources.LoadAll<Sprite>(path);
-        if (loaded == null) loaded = new Sprite[0];
+        var all = Resources.LoadAll<Sprite>($"Sprites/Effects/{elementKey}");
+        var matched = new List<Sprite>();
+        if (all != null)
+        {
+            string prefix = kind + "_";
+            foreach (var sprite in all)
+            {
+                if (sprite != null && sprite.name.StartsWith(prefix)) matched.Add(sprite);
+            }
+        }
 
         // LoadAll does not promise order; the files are <kind>_00, _01, ...
-        System.Array.Sort(loaded, (a, b) => string.CompareOrdinal(a.name, b.name));
-        _frames[path] = loaded;
-        return loaded;
+        matched.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+
+        var frames = matched.ToArray();
+        _frames[cacheKey] = frames;   // an empty result is cached too
+        return frames;
     }
 
     /// <summary>
