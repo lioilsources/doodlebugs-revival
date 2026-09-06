@@ -86,6 +86,15 @@ public class GameSetup : MonoBehaviour
             Debug.Log("[GameSetup] MatchManager created");
         }
 
+        // Warm-up bot (server-only lifecycle; ticked by MatchManager)
+        if (FindObjectOfType<BotManager>() == null)
+        {
+            var botManagerObj = new GameObject("BotManager");
+            botManagerObj.AddComponent<BotManager>();
+            DontDestroyOnLoad(botManagerObj);
+            Debug.Log("[GameSetup] BotManager created");
+        }
+
         // Plane skin entitlements (store init is best-effort - IAPManager
         // falls back to its PlayerPrefs cache if Unity IAP isn't configured yet)
         IAPManager.GetOrCreate();

@@ -70,6 +70,73 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// <summary>True while the plane is parked in the hangar (not deployed).</summary>
     public bool InHangar => NetInHangar.Value;
 
+    // --- warm-up bot (Prompts/25) --------------------------------------------
+    //
+    // The bot is an ordinary PlaneHolder flown by BotBrain instead of a
+    // device. Everything that keys on a player's identity - HUD panels, score
+    // rows, look claims, kill credit, READY - has to be able to tell it apart,
+    // so the flag is synced (a late joiner's HUD must skip it from frame one)
+    // and its couch-co-op index is a reserved value that can never collide
+    // with a real pilot (0-3) or fold onto the host's P1 key (-1 -> 0).
+    public NetworkVariable<bool> NetIsBot = new NetworkVariable<bool>(false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
+
+    public bool IsBot => NetIsBot.Value;
+
+    public const int BotLocalPlayerIndex = 99;
+    public const string BotDisplayName = "BOT";
+
+    /// <summary>Whether a (clientId, localPlayerIndex) pair names the bot -
+    /// the shape bullets and score calls carry the attacker in.</summary>
+    public static bool IsBotIdentity(ulong clientId, int localPlayerIndex) =>
+        localPlayerIndex == BotLocalPlayerIndex;
+
+    // Set by BotManager on the host; consulted before any device provider so
+    // a host-owned bot never mirrors the host's own stick and trigger.
+    private IInputProvider _inputOverride;
+    public void SetInputOverride(IInputProvider provider) => _inputOverride = provider;
+
+    /// <summary>Server-side: fired at the top of every death path, before the
+    /// explosion RPC. BotManager uses it to replace the bot with a fresh one.</summary>
+    public event System.Action OnServerDeath;
+
+    /// <summary>Server, right after Spawn(): turn this plane into the bot.
+    /// NetIsBot goes first so the claim coroutine and the index-change
+    /// handler already see it. Not SetLocalPlayerIndex - that would name
+    /// the plane "P100" for a frame.</summary>
+    public void ServerSetBotIdentity()
+    {
+        if (!IsServer) return;
+        NetIsBot.Value = true;
+        netLocalPlayerIndex.Value = BotLocalPlayerIndex;
+        // Owner-write, and the server IS the owner of a server-spawned object.
+        netPlayerName.Value = new Unity.Collections.FixedString64Bytes(BotDisplayName);
+    }
+
+    // Read-only flight state for the bot brain. Heading: 0 = flying right,
+    // 90 = straight up, -90 = straight down, +-180 = flying left - velocity is
+    // hard-set to transform.right while the engine runs, so this IS the
+    // direction of travel.
+    public float HeadingDegrees => Mathf.Atan2(transform.right.y, transform.right.x) * Mathf.Rad2Deg;
+    public bool IsInSpace => inSpace;
+    public float MaxFlightSpeed => maxSpeed;
+    public float MinFlightSpeed => minSpeed;
+
+    /// <summary>The heading band inside which a dead engine relights, in
+    /// degrees. movePlane tests the visual child's quaternion z, and
+    /// z = sin(heading / 2), hence the asin.</summary>
+    public (float minDeg, float maxDeg) EngineRestartHeadingWindow =>
+        (2f * Mathf.Asin(Mathf.Clamp(engineRestartMin, -1f, 1f)) * Mathf.Rad2Deg,
+         2f * Mathf.Asin(Mathf.Clamp(engineRestartMax, -1f, 1f)) * Mathf.Rad2Deg);
+
+    /// <summary>Turn radius with the engine on, world units. rotatePlane
+    /// scales the turn rate with speed / defaultSpeed, so speed cancels:
+    /// r = v / omega = defaultSpeed * 180 / (pi * rotateSpeed * handling).
+    /// Novice at full health: 5.73.</summary>
+    public float EngineOnTurnRadius =>
+        defaultSpeed * 180f / (Mathf.PI * Mathf.Max(1f, rotateSpeed) * Mathf.Max(0.1f, planeStats != null ? planeStats.Handling : 1f));
+
     /// <summary>
     /// Get the display name for this player (device name, shortened)
     /// </summary>
@@ -294,8 +361,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
             Debug.Log($"[PlayerController] rb was null, got component: {rb != null}");
         }
 
-        // Set player display name based on device/platform
-        netPlayerName.Value = new Unity.Collections.FixedString64Bytes(GetDeviceDisplayName());
+        // Set player display name based on device/platform - unless this is
+        // the bot, which was named by ServerSetBotIdentity before this ran
+        netPlayerName.Value = new Unity.Collections.FixedString64Bytes(IsBot ? BotDisplayName : GetDeviceDisplayName());
         Debug.Log($"[PlayerController] Set player name to: {netPlayerName.Value}");
 
         speed = defaultSpeed;
@@ -439,8 +507,11 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// <summary>
     /// Get the input provider for this player (local or network)
     /// </summary>
-    private IInputProvider GetInputProvider()
+    public IInputProvider GetInputProvider()
     {
+        // A scripted pilot (the warm-up bot) wins over every device
+        if (_inputOverride != null) return _inputOverride;
+
         // Local couch co-op player - use LocalPlayerManager
         if (IsLocalPlayer && LocalPlayerManager.Instance != null)
         {
@@ -583,9 +654,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     [ServerRpc]
     private void RequestRespawnServerRpc()
     {
-        // Player flew out of bounds - record death
+        // Player flew out of bounds - record death (the bot is not a player)
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
-        ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+        if (!IsBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
         SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.OutOfBounds);
         HandleDeathAndRespawn();
     }
@@ -595,6 +666,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// </summary>
     private void HandleDeathAndRespawn()
     {
+        OnServerDeath?.Invoke();
+
         visualEffects?.TriggerDamageFlash();
         ShowExplosionClientRpc();
 
@@ -787,13 +860,14 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// </summary>
     private void HandleCombatDeath(KillCause cause)
     {
-        // Record death for this player
+        // Record death for this player (the bot is not a player)
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
-        ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+        if (!IsBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
 
-        // Attribute kill to last attacker (only recent hits count)
+        // Attribute kill to last attacker (only recent hits count). A bot
+        // kill stays credited for the feed line but never scores.
         bool credited = _hasLastAttacker && Time.time - _lastAttackerTime <= KillAttributionWindow;
-        if (credited)
+        if (credited && !IsBot && !IsBotIdentity(_lastAttackerClientId, _lastAttackerLocalPlayerIndex))
         {
             ScoreManager.Instance?.AddScore(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
         }
@@ -802,8 +876,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
         SyncKillFeedClientRpc(OwnerClientId, localIdx,
             _lastAttackerClientId, _lastAttackerLocalPlayerIndex, credited, (byte)cause);
 
-        // Spawn power-up at death position
-        if (PowerUpManager.Instance != null)
+        // Spawn power-up at death position - not for the bot, or the warm-up
+        // sky fills with crates nobody earned
+        if (PowerUpManager.Instance != null && !IsBot)
         {
             PowerUpManager.Instance.SpawnPowerUp(transform.position);
         }
@@ -846,8 +921,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     {
         SfxManager.PlayExplosion();
 
-        // Vibrate on the device(s) controlling this plane
-        if (IsOwner)
+        // Vibrate on the device(s) controlling this plane - the host owns
+        // the bot too, and its phone must not buzz for a bot wreck
+        if (IsOwner && !IsBot)
         {
             SfxManager.Haptic();
         }
@@ -994,16 +1070,17 @@ public class PlayerController : NetworkBehaviour, IDamagable
         {
             // Crashed into ground/obstacle - instant kill, no power-up drop
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
-            ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+            if (!IsBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
             SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.Ground);
             HandleDeathAndRespawn();
         }
 
         if (collider.gameObject.CompareTag("Player"))
         {
-            // Collided with another plane - instant kill, drops power-up
+            // Collided with another plane - instant kill, drops power-up.
+            // The human half of a bot collision still counts, on its own object.
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
-            ScoreManager.Instance?.AddPlaneCollision(OwnerClientId, localIdx);
+            if (!IsBot) ScoreManager.Instance?.AddPlaneCollision(OwnerClientId, localIdx);
             HandleCombatDeath(KillCause.Collision);
         }
 

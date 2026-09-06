@@ -381,6 +381,7 @@ public class GameHUD : MonoBehaviour
         var activePlayerIds = new HashSet<string>();
         foreach (var player in players)
         {
+            if (player.IsBot) continue;   // no panel, no roster row, no score row
             activePlayerIds.Add(GetPlayerUniqueId(player));
         }
 
@@ -402,6 +403,7 @@ public class GameHUD : MonoBehaviour
         // Add/update entries for active players
         foreach (var player in players)
         {
+            if (player.IsBot) continue;
             string uniqueId = GetPlayerUniqueId(player);
 
             if (!_playerEntriesById.ContainsKey(uniqueId))
@@ -807,6 +809,8 @@ public class GameHUD : MonoBehaviour
 
     private string ResolvePlayerName(ulong clientId, int localPlayerIndex)
     {
+        if (PlayerController.IsBotIdentity(clientId, localPlayerIndex)) return PlayerController.BotDisplayName;
+
         string uniqueId = GetPlayerUniqueId(clientId, localPlayerIndex);
         if (_playerEntriesById.TryGetValue(uniqueId, out var entry) &&
             !string.IsNullOrEmpty(entry.lastKnownName))
@@ -1451,7 +1455,7 @@ public class GameHUD : MonoBehaviour
     {
         foreach (var p in FindObjectsOfType<PlayerController>())
         {
-            if (p.IsOwner) return p;
+            if (p.IsOwner && !p.IsBot) return p;   // the host owns the bot too
         }
         return null;
     }
@@ -1741,7 +1745,7 @@ public class GameHUD : MonoBehaviour
         // Apply to every plane this device owns (couch co-op picks together)
         foreach (var p in FindObjectsOfType<PlayerController>())
         {
-            if (!p.IsOwner) continue;
+            if (!p.IsOwner || p.IsBot) continue;
             var shooting = p.GetComponent<Shooting>();
             if (shooting != null)
             {
@@ -1938,7 +1942,10 @@ public class GameHUD : MonoBehaviour
         {
             foreach (var a in FindObjectsByType<PlaneAppearance>(FindObjectsSortMode.None))
             {
-                if (a.OwnerClientId == clientId) looks.Add((looks.Count, a.NetModelId.Value, a.NetSkinId.Value));
+                if (a.OwnerClientId != clientId) continue;
+                var pc = a.GetComponent<PlayerController>();
+                if (pc != null && pc.IsBot) continue;
+                looks.Add((looks.Count, a.NetModelId.Value, a.NetSkinId.Value));
             }
         }
         looks.Sort((p, q) => p.idx.CompareTo(q.idx));
@@ -2813,7 +2820,7 @@ public class GameHUD : MonoBehaviour
     {
         foreach (var p in FindObjectsOfType<PlayerController>())
         {
-            if (!p.IsOwner) continue;
+            if (!p.IsOwner || p.IsBot) continue;
             p.GetComponent<PlaneAppearance>()?.RequestSelectModelServerRpc(modelId);
         }
         SfxManager.PlayTick();
@@ -2826,7 +2833,7 @@ public class GameHUD : MonoBehaviour
     {
         foreach (var p in FindObjectsOfType<PlayerController>())
         {
-            if (!p.IsOwner) continue;
+            if (!p.IsOwner || p.IsBot) continue;
             var appearance = p.GetComponent<PlaneAppearance>();
             appearance?.RequestSelectSkinServerRpc(skinId);
         }

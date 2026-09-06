@@ -85,27 +85,13 @@ public class Shooting : NetworkBehaviour
     /// </summary>
     private bool GetShootInput()
     {
-        // Local couch co-op player - use LocalPlayerManager
-        if (playerController != null && playerController.IsLocalPlayer)
-        {
-            if (LocalPlayerManager.Instance != null)
-            {
-                var provider = LocalPlayerManager.Instance.GetInputProvider(playerController.LocalPlayerIndex);
-                if (provider != null)
-                {
-                    return provider.GetShootInput();
-                }
-            }
-            return false;
-        }
-
-        // Network player - use InputManager singleton
-        if (InputManager.Instance != null && InputManager.Instance.InputProvider != null)
-        {
-            return InputManager.Instance.InputProvider.GetShootInput();
-        }
-
-        return false;
+        // One dispatch for both axes and the trigger: PlayerController owns
+        // the provider choice (device, couch slot, or the bot's brain). This
+        // used to duplicate that logic, and the duplicate is where a scripted
+        // pilot would have been missed.
+        if (playerController == null) return false;
+        var provider = playerController.GetInputProvider();
+        return provider != null && provider.GetShootInput();
     }
 
     [ServerRpc]

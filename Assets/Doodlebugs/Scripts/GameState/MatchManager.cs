@@ -317,6 +317,7 @@ public class MatchManager : MonoBehaviour
 
         foreach (var player in FindObjectsOfType<PlayerController>())
         {
+            if (player.IsBot) continue;   // despawned by now; never deploy it into a battle
             SafeDeploy(player);
         }
     }
@@ -415,6 +416,13 @@ public class MatchManager : MonoBehaviour
         if (Phase == GamePhase.WaitingForPlayers)
         {
             BackgroundManager.Instance?.ServerTickWarmUpRotation();
+            BotManager.Instance?.ServerTickWarmUp();
+        }
+        else
+        {
+            // Polling the phase here rather than hooking every `Phase = ...`
+            // site means no future phase can leave the bot alive by accident.
+            BotManager.Instance?.ServerEnsureDespawned();
         }
 
         // Time-limit check (server decides)
@@ -652,7 +660,9 @@ public class MatchManager : MonoBehaviour
     {
         foreach (var player in FindObjectsOfType<PlayerController>())
         {
-            if (player.IsServer)
+            // Never route a phase RPC through the bot: it despawns on the very
+            // connect that triggers the pre-battle broadcast.
+            if (player.IsServer && !player.IsBot)
             {
                 rpc(player);
                 break;
@@ -861,6 +871,7 @@ public class MatchManager : MonoBehaviour
         ScoreManager.Instance?.RestartMatch();
         foreach (var player in FindObjectsOfType<PlayerController>())
         {
+            if (player.IsBot) continue;   // despawned by now; never deploy it into a battle
             SafeDeploy(player);
         }
         _serverRoundFlowCoroutine = null;

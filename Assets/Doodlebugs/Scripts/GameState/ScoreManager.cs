@@ -110,7 +110,7 @@ public class ScoreManager : MonoBehaviour
         var players = FindObjectsOfType<PlayerController>();
         foreach (var player in players)
         {
-            if (player.IsServer)
+            if (player.IsServer && !player.IsBot)
             {
                 player.SyncMatchStartClientRpc();
                 break;
@@ -146,6 +146,7 @@ public class ScoreManager : MonoBehaviour
     /// </summary>
     public void AddScore(ulong scorerClientId, int localPlayerIndex = 0)
     {
+        if (PlayerController.IsBotIdentity(scorerClientId, localPlayerIndex)) return;   // the warm-up bot is not a player
         // Only server can add scores, but this method is called directly from Bullet
         if (!NetworkManager.Singleton.IsServer)
         {
@@ -177,6 +178,7 @@ public class ScoreManager : MonoBehaviour
     /// </summary>
     public void AddDeath(ulong clientId, int localPlayerIndex = 0)
     {
+        if (PlayerController.IsBotIdentity(clientId, localPlayerIndex)) return;   // the warm-up bot is not a player
         if (!NetworkManager.Singleton.IsServer) return;
 
         var stats = GetStats(clientId, localPlayerIndex);
@@ -192,6 +194,7 @@ public class ScoreManager : MonoBehaviour
     /// </summary>
     public void AddPlaneCollision(ulong clientId, int localPlayerIndex = 0)
     {
+        if (PlayerController.IsBotIdentity(clientId, localPlayerIndex)) return;   // the warm-up bot is not a player
         if (!NetworkManager.Singleton.IsServer) return;
 
         var stats = GetStats(clientId, localPlayerIndex);
@@ -208,7 +211,7 @@ public class ScoreManager : MonoBehaviour
         var players = FindObjectsOfType<PlayerController>();
         foreach (var player in players)
         {
-            if (player.IsServer)
+            if (player.IsServer && !player.IsBot)
             {
                 player.SyncScoreClientRpc(scorerClientId, localPlayerIndex, newScore);
                 break;
@@ -222,7 +225,7 @@ public class ScoreManager : MonoBehaviour
         var players = FindObjectsOfType<PlayerController>();
         foreach (var player in players)
         {
-            if (player.IsServer)
+            if (player.IsServer && !player.IsBot)
             {
                 player.SyncStatsClientRpc(clientId, localPlayerIndex, stats.Kills, stats.Deaths, stats.PlaneCollisions);
                 break;

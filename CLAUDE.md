@@ -94,6 +94,9 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 - Always `if (!IsOwner) return;` before input handling
 - Always `if (!IsServer) return;` before collision/damage logic
 - Use `NetworkObjectSpawner` / `NetworkObjectDespawner` — never `Instantiate`/`Destroy` directly on networked objects
+- Any networked prefab with a `Rigidbody2D` needs `NetworkRigidbody2D` next to its
+  `NetworkTransform` (non-authority instances become kinematic); a `NetworkTransform`
+  on a dynamic body is simulated AND overwritten on clients
 - No `SendMessage()` — use direct calls or events
 - No hardcoded collision strings — prefer tags or layers
 - Test multiplayer changes with ParrelSync before committing
@@ -105,9 +108,15 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 - Foreground bottom edge is anchored to the bottom of the visible screen via
   `BackgroundProfile.foregroundBottomOffset` (0 = flush with screen bottom)
 - Each background has its own foreground sprite; tiles are 100×100 px
-- Planes fly **behind** the foreground (render order), bullets collide with it
+- Planes fly **behind** the foreground (render order), bullets collide with it.
+  Bullets sit on the `Bullet` layer (8); the 2D collision matrix lets
+  `Foreground` collide with `Bullet` only, so planes never touch the tiles
 - On bullet hit: `ForegroundTile` destroys itself (local, non-networked — visual only)
-- Colliders are `BoxCollider2D` auto-generated per tile from sprite alpha
+- Colliders are `BoxCollider2D` auto-generated per tile from sprite alpha;
+  every copy root carries a kinematic `Rigidbody2D` (`useFullKinematicContacts`)
+  so the tiles are fixtures of one body. Never let them become static
+  colliders again: the scroller moves them every frame and Physics2D would
+  rebuild each one per step (~1300 on Volcano) - that was the mobile stutter
 - `ForegroundSpriteGenerator` creates a runtime silhouette if no sprite is assigned
 
 **Art asset sizes:**
@@ -139,6 +148,19 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   device, READY skips early) → Battle → Intermission/Podium → Battle…
   Matches are NEVER auto-started on connect (`ScoreManager` no longer listens
   to `OnClientConnectedCallback`) — only `MatchManager` calls `RestartMatch()`.
+- Warm-up bot (Prompts/25): while the phase is WaitingForPlayers the host
+  spawns one AI-flown `PlaneHolder` (`Scripts/Bot/BotManager.cs`, ticked from
+  `MatchManager.Update`; `Scripts/Bot/BotBrain.cs` is its `IInputProvider`,
+  installed via `PlayerController.SetInputOverride`). It cruises, loops,
+  reverses, deliberately stalls and recovers by nosing into the engine-relight
+  window, and fires short bursts that mute when a human is in the cone ahead.
+  `PlayerController.NetIsBot` + reserved `LocalPlayerIndex` 99 keep it out of
+  the HUD panels, roster, READY, score rows, look claims (it wears an
+  UNCLAIMED look via `PlaneAppearance.ServerSetLookUnclaimed` and yields the
+  shape when a human picks it) and haptics; the kill feed names it "BOT".
+  Despawned the frame the phase leaves Waiting; a fresh bot with a fresh
+  free (non-premium) look on every appearance. Only the host can be in
+  Waiting today, so only the host device sees it.
 - Late join: a client connecting mid-battle does NOT reset the match. Its
   plane spawns parked (`PlayerController.NetInHangar` — hidden, frozen,
   collider off on every client, no shooting), the client requests a state
@@ -341,4 +363,6 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 
 ## Known Issues
 
-- Bullet/Cloud collision: occasionally de-syncs visually (investigate if reproduced)
+- Cloud collision: occasionally de-syncs visually (investigate if reproduced).
+  Bullets got `NetworkRigidbody2D` in v2.8.2 (clients used to simulate them
+  locally while the NetworkTransform overwrote them) - re-check the bullet half
