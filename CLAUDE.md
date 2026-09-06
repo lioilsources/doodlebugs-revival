@@ -210,9 +210,13 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   (`NetModelId` / `NetSkinId`); hangar picks go through
   `RequestSelectModelServerRpc` / `RequestSelectSkinServerRpc`.
   `PlaneSkinManager` (scene NetworkObject — `Doodlebugs → Setup Plane Skin
-  Manager` once, commit Scene01) arbitrates uniqueness per (shape, skin)
-  combo. Picker = PLANE button in every hangar (`GameHUD`): shape row above
-  the skin grid, every card previews the combo with the other current half.
+  Manager` once, commit Scene01) arbitrates uniqueness **per shape** - no two
+  players fly the same silhouette, whatever it is painted (2026-09-06,
+  superseding plan 23 D1a's per-combo rule). Skins may repeat freely: two
+  identical liveries on different shapes still read apart mid-dogfight, two
+  identical shapes in different colours do not. Picker = PLANE button in every
+  hangar (`GameHUD`): shape row above the skin grid, every card previews the
+  combo with the other current half; only shape cards can show TAKEN.
 - **The hitbox is not the sprite**: one shared 50×50 px `BoxCollider2D` on
   `PlaneHolder` for every shape. Every model must pass the envelope gate
   (`tools/planes/gate.py`, mirrored in `Doodlebugs → Validate Plane
