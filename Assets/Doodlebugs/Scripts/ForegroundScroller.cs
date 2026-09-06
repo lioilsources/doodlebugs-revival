@@ -201,10 +201,31 @@ public class ForegroundScroller : MonoBehaviour
         {
             copy.sprite = _sprite;
             copy.transform.localScale = Vector3.one * _scale;
+            EnsureBody(copy);
         }
 
         while (_epochX.Count < _copies.Count) _epochX.Add(0f);
         while (_epochX.Count > _copies.Count) _epochX.RemoveAt(_epochX.Count - 1);
+    }
+
+    /// <summary>
+    /// One kinematic body per copy, so the tiles under it are fixtures of that
+    /// body instead of static colliders. The scroller moves every copy every
+    /// frame, and Physics2D rebuilds each static collider whose transform
+    /// moved - up to ~1300 of them per step on the bigger maps, which is what
+    /// made the weaker device stutter. Moving a kinematic body is one
+    /// transform update however many fixtures hang off it. Full kinematic
+    /// contacts keep the bullet-vs-tile triggers firing on clients, where
+    /// NetworkRigidbody2D makes the bullets kinematic too.
+    /// </summary>
+    private static void EnsureBody(SpriteRenderer copy)
+    {
+        var rb = copy.GetComponent<Rigidbody2D>();
+        if (rb == null) rb = copy.gameObject.AddComponent<Rigidbody2D>();
+        rb.bodyType = RigidbodyType2D.Kinematic;
+        rb.useFullKinematicContacts = true;
+        rb.interpolation = RigidbodyInterpolation2D.None;
+        rb.gravityScale = 0f;
     }
 
     /// <summary>
