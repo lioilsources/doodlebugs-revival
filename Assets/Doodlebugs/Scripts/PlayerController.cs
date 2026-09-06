@@ -141,7 +141,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         set => netGravity.Value = value;
     }
 
-    // Public accessors for EngineAudio
+    // Public accessors for the HUD speed bar
     public bool IsEngineOff => engineOff;
     public float Speed => speed;
 
@@ -280,10 +280,6 @@ public class PlayerController : NetworkBehaviour, IDamagable
         }
 
         visualEffects?.SetHangarHidden(hidden);
-
-        // Disabled before its Start() runs = no engine sound while parked
-        var engineAudio = GetComponent<EngineAudio>();
-        if (engineAudio != null) engineAudio.enabled = !hidden;
     }
 
     private IEnumerator InitializeOwnerDelayed()
