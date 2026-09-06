@@ -139,6 +139,19 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   device, READY skips early) → Battle → Intermission/Podium → Battle…
   Matches are NEVER auto-started on connect (`ScoreManager` no longer listens
   to `OnClientConnectedCallback`) — only `MatchManager` calls `RestartMatch()`.
+- Warm-up bot (Prompts/25): while the phase is WaitingForPlayers the host
+  spawns one AI-flown `PlaneHolder` (`Scripts/Bot/BotManager.cs`, ticked from
+  `MatchManager.Update`; `Scripts/Bot/BotBrain.cs` is its `IInputProvider`,
+  installed via `PlayerController.SetInputOverride`). It cruises, loops,
+  reverses, deliberately stalls and recovers by nosing into the engine-relight
+  window, and fires short bursts that mute when a human is in the cone ahead.
+  `PlayerController.NetIsBot` + reserved `LocalPlayerIndex` 99 keep it out of
+  the HUD panels, roster, READY, score rows, look claims (it wears an
+  UNCLAIMED look via `PlaneAppearance.ServerSetLookUnclaimed` and yields the
+  shape when a human picks it) and haptics; the kill feed names it "BOT".
+  Despawned the frame the phase leaves Waiting; a fresh bot with a fresh
+  free (non-premium) look on every appearance. Only the host can be in
+  Waiting today, so only the host device sees it.
 - Late join: a client connecting mid-battle does NOT reset the match. Its
   plane spawns parked (`PlayerController.NetInHangar` — hidden, frozen,
   collider off on every client, no shooting), the client requests a state

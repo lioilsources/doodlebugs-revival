@@ -55,6 +55,9 @@ public class PlaneAppearance : NetworkBehaviour
     public void ServerEnsureClaim()
     {
         if (!IsServer || PlaneSkinManager.Instance == null) return;
+        // The warm-up bot never holds a claim - its shape must stay pickable
+        // for humans (Prompts/25, D3). BotManager sets its look directly.
+        if (_playerController != null && _playerController.IsBot) return;
 
         int idx = LocalIndex;
         if (_claimedIndex == idx) return;
@@ -89,6 +92,20 @@ public class PlaneAppearance : NetworkBehaviour
         Debug.Log($"[PlaneAppearance] Player {OwnerClientId}_{LocalIndex} equipped " +
                   $"{PlaneModelCatalog.Get(modelId).DisplayName} / {PlaneSkinCatalog.Get(skinId).DisplayName}");
         return true;
+    }
+
+    /// <summary>
+    /// Server: put a look on this plane WITHOUT registering a claim. Only for
+    /// the warm-up bot: a claim would mark the shape TAKEN in every picker,
+    /// and the bot is supposed to yield to humans, not block them. Because
+    /// there is no claim, a human's TryClaim on the same shape simply
+    /// succeeds and BotManager re-picks on its next tick.
+    /// </summary>
+    public void ServerSetLookUnclaimed(int modelId, int skinId)
+    {
+        if (!IsServer) return;
+        NetModelId.Value = modelId;
+        NetSkinId.Value = skinId;
     }
 
     public bool ServerSetSkin(int skinId) => ServerSetAppearance(NetModelId.Value, skinId);

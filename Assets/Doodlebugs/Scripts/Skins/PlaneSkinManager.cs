@@ -147,6 +147,18 @@ public class PlaneSkinManager : NetworkBehaviour
         return false;
     }
 
+    /// <summary>Is this shape flown by any human at all? The warm-up bot
+    /// asks this to pick a free silhouette and to notice when a human has
+    /// just taken the one it wears.</summary>
+    public bool IsModelTakenByAnyone(int modelId)
+    {
+        foreach (var c in _claims)
+        {
+            if (c.ModelId == modelId) return true;
+        }
+        return false;
+    }
+
     public bool HasClaim(ulong clientId, int localPlayerIndex)
     {
         foreach (var c in _claims)
