@@ -27,7 +27,7 @@ See [GALLERY.md](GALLERY.md)
 
 ## Getting Started
 
-**Requirements:** Unity 6000.2.9f1
+**Requirements:** Unity 6000.3.13f1
 
 1. Open the project in Unity
 2. Load scene: `Assets/Doodlebugs/Scenes/Scene01.unity`
@@ -40,6 +40,7 @@ See [GALLERY.md](GALLERY.md)
 
 ## Documentation
 
+- [ROADMAP.md](ROADMAP.md) — product roadmap: solo play, campaign, meta, store (Czech)
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [GALLERY.md](GALLERY.md) — screenshots and videos
 - [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup and contribution guide
@@ -49,7 +50,7 @@ See [GALLERY.md](GALLERY.md)
 
 ## Tech Stack
 
-- Unity 6000.2.9f1
-- Unity Netcode for GameObjects 1.14.1
-- Unity Input System 1.7.0
+- Unity 6000.3.13f1
+- Unity Netcode for GameObjects 2.11.0
+- Unity Input System 1.19.0
 - ParrelSync (multi-editor testing)

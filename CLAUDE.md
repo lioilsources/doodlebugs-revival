@@ -6,6 +6,65 @@ Instructions for Claude Code when working in this repository.
 
 2D multiplayer arcade air combat game. Unity 6000.3.13f1. WWI biplanes. Physics-based movement, one-hit kill, WiFi/couch multiplayer.
 
+## Product Direction (2026-09-11)
+
+The product plan lives in `ROADMAP.md` (Czech). Read it before proposing or
+planning any feature; it defines phases, KPIs and open decisions D1–D9.
+
+**Status:** v2.8.2 tagged 2026-09-06; CI ships every `v*.*.*` tag to
+TestFlight / Firebase App Distribution. The game is **not on the App Store
+yet** - listing kit in `marketing/appstore.md`. Today the loop is LAN-only:
+a single device never gets past "SEARCHING FOR GAME…" (only the warm-up bot
+flies), which is both a retention dead end and an App Review risk (two
+devices required). No analytics, no crash reporting, no player profile,
+no Game Center, no localisation; UI strings are hardcoded English in
+`GameHUD`.
+
+**North star:** open the app anywhere, alone, offline → shooting within
+15 s → a reason to play one more round and to come back tomorrow. LAN party
+stays the differentiator, never the precondition.
+
+**Phases** (each shippable on its own; details, acceptance criteria and
+effort in ROADMAP.md §4):
+
+| Phase | Version | Delivers |
+|---|---|---|
+| 0 Foundation | v2.9 | UGS Analytics + Cloud Diagnostics, `PlayerProfile` JSON save, `Tween` util, perf budget |
+| 1 Solo-first | v3.0 | Combat bots (Rookie/Pilot/Ace/Baron) from `BotBrain`, PLAY button at boot, bots in LAN, **App Store submission** |
+| 2 Juice | v3.1 | Tweened UI, camera shake, callouts, results sequence with stars, haptic taxonomy, audio layers |
+| 3 Campaign | v3.2 | `LevelDef` SOs, 5 worlds × 10 levels, saga map screen, FTUE levels 1–3, retry flow |
+| 4 Meta | v3.3 | Scrap currency, unlocks, collection screen, real IAP products, starter pack, loadout boosters |
+| 5 Daily | v3.4 | Daily rewards, missions, local notifications, live-ops cadence, cloud save |
+| 6 Social/Store | v3.5 | Game Center, review prompt, share card, cs+en localisation, screenshots/video |
+| 7 Online | v4.0 | Relay/Lobby - only if data after v3.4 says LAN + bots is not enough |
+
+**Rules for every new plan and PR** (ROADMAP.md §3):
+
+- **Solo-first.** Every screen and mode must make sense with one device and
+  no connection. LAN is a bonus that appears, never a gate.
+- **15-second rule.** Cold start → first shot under 15 s. No account, no
+  setup; network/notification permission prompts only after a first success.
+- **Four channels per event.** Kill, death, hit, pickup, round end, run end,
+  purchase: visual + audio + haptic + UI number/text. Missing one = not done.
+- **No pay-to-win, no lives/energy, no login wall, no interstitial ads.**
+  Money buys cosmetics and time only; in a LAN party everything
+  gameplay-relevant is available to everyone.
+- **One language per locale.** Fully localised or fully English - a mixed
+  UI is an App Review rejection (Lexify 2.2.2, 2026-09-03).
+- **Measurable.** A feature ships with its analytics event(s) or it is not
+  shipped.
+- **Never touch `Time.timeScale` in LAN.** Hit-stop/slow-mo only when the
+  host is the only simulation (solo).
+- **`GameHUD` stops growing.** New screens (map, shop, collection, daily)
+  go in their own `Scripts/UI/*` classes over a shared tween/layout util.
+
+**Plan-doc convention:** every phase or feature gets
+`Prompts/NN-CLAUDE-PLAN-<topic>.md` (status line, decisions table with the
+owner, files, exact seams, verification steps, risks - see Prompts/25) before
+code; ROADMAP.md status markers move `[ ]` → `[plan]` → `[wip]` → `[done vX.Y]`.
+`CHANGELOG.md` stopped at 31/03/2026 and does not track tags - GitHub
+Releases are the release record until it is revived or formally retired.
+
 ## Tech Stack
 
 - Unity 6000.3.13f1
@@ -144,8 +203,8 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 - Game loop (hangar-as-lobby): `MatchManager.GamePhase` is server-authoritative
   — WaitingForPlayers (host opens the Waiting hangar, may FLY out for a
   scoreless warm-up; corner HANGAR button returns) → PreBattleCountdown (2nd
-  client connects; `PreBattleSeconds` = 10 s weapon-pick window on every
-  device, READY skips early) → Battle → Intermission/Podium → Battle…
+  client connects; `PreBattleSeconds` = 120 s is a safety net only - READY on
+  every device is the normal path) → Battle → Intermission/Podium → Battle…
   Matches are NEVER auto-started on connect (`ScoreManager` no longer listens
   to `OnClientConnectedCallback`) — only `MatchManager` calls `RestartMatch()`.
 - Warm-up bot (Prompts/25): while the phase is WaitingForPlayers the host
@@ -172,11 +231,13 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   to WaitingForPlayers (timer frozen, scores kept, run state kept).
 - Round = first to `MatchManager.KillTarget` (3) kills or
   `MatchManager.TimeLimitSeconds` (3 min); winner by kills → deaths → collisions.
-  Results overlay (`ResultsSeconds`, 4 s) → hangar (`HangarSeconds`, 30 s):
-  weapon draft (keep-current + 2 random from `WeaponProfile.DraftPool`) + READY
-  check; server restarts early when every connected client is ready, otherwise
-  at the auto-start timeout (all synced via PlayerController ClientRpcs, same
-  routing pattern as ScoreManager).
+  Results overlay (`ResultsSeconds`, 4 s) → hangar (`HangarSeconds`, 120 s -
+  raised from 30 s once the plane picker held 15 shapes × 50 skins; READY is
+  the normal path, the timer is the safety net): weapon draft (keep-current +
+  2 random from `WeaponProfile.DraftPool`) + READY check; server restarts
+  early when every connected client is ready, otherwise at the auto-start
+  timeout (all synced via PlayerController ClientRpcs, same routing pattern
+  as ScoreManager).
 - Weapons: static registry in `Scripts/Weapons/WeaponProfile.cs` (MG, Twin MG,
   Flak, Heavy Flak, Aero Bomb, Sniper, Rocket, Mine) — every weapon is a
   parametric bullet variant (damage, cooldown, force, gravity, pellets, spread,
