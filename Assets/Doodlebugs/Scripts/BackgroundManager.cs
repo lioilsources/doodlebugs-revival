@@ -19,27 +19,29 @@ public class BackgroundManager : NetworkBehaviour
 
     [Header("Advertising Foregrounds")]
     [Tooltip("Ad-wall strips that rotate independently of the background. They " +
-             "are the exception, not the rule: a round shows one only with " +
-             "adStripChance probability, otherwise the map's own terrain wins. " +
+             "are the exception, not the rule: at most one round per run shows " +
+             "one (adStripRunChance), otherwise the map's own terrain wins. " +
              "A profile with no foreground of its own always gets an ad wall.")]
     [SerializeField] private Sprite[] adStrips;
 
-    [Tooltip("Probability that a round replaces the map's terrain with an ad " +
-             "wall. The ad art is a treat - at 1.0 it was the only foreground " +
-             "anyone ever saw and the per-map terrain never showed at all.")]
+    [Tooltip("Probability that a run (first to MatchManager.RoundWinsTarget round " +
+             "wins) gets an ad wall. A run that wins the roll shows it in exactly " +
+             "one of its rounds, picked at random; every other round keeps the " +
+             "map's own terrain. The ad art is a treat - rolled per round it came " +
+             "up in roughly a third of runs.")]
     [Range(0f, 1f)]
-    [SerializeField] private float adStripChance = 0.1f;
+    [SerializeField] private float adStripRunChance = 0.1f;
 
     [Tooltip("Seconds between arena changes while the lobby is waiting and a " +
              "player may be out on the FLY warm-up. 0 disables the rotation. " +
              "Each change also re-rolls the ad wall.")]
     [SerializeField] private float warmUpRotateSeconds = 45f;
 
-    [Tooltip("Ad-wall probability for a warm-up rotation. Higher than the " +
-             "per-round one: the warm-up is where the walls are meant to be " +
-             "seen, a battle wants them occasional.")]
+    [Tooltip("Ad-wall probability per warm-up rotation (and for the arena drawn " +
+             "at host start). A lone device lives in the warm-up, so this is " +
+             "the rate a solo player actually sees - keep it as rare as a run's.")]
     [Range(0f, 1f)]
-    [SerializeField] private float warmUpAdStripChance = 0.6f;
+    [SerializeField] private float warmUpAdStripChance = 0.1f;
 
     // Server-only deadline for the warm-up rotation; 0 = not armed yet.
     private float _warmUpRotateAt;
@@ -66,6 +68,14 @@ public class BackgroundManager : NetworkBehaviour
     // normal case now that every map has terrain of its own.
     private NetworkVariable<int> _adStripIndex = new NetworkVariable<int>(-1);
 
+    // Server-only plan for the current run's ad wall: how many more round
+    // arenas pass before the one that shows it. -1 = none left this run.
+    private int _runAdCountdown = -1;
+    private bool _runAdPlanned;
+
+    // The last wall actually shown, so two ad rounds in a row never repeat one.
+    private int _lastAdStrip = -1;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -91,6 +101,8 @@ public class BackgroundManager : NetworkBehaviour
 
         if (IsServer)
         {
+            // A fresh session is a fresh run - plan it on its first round.
+            _runAdPlanned = false;
             if (_sceneOrder.Count == 0) ResetSceneOrderToDefault();
             SelectRandomBackground();
         }
@@ -154,8 +166,13 @@ public class BackgroundManager : NetworkBehaviour
         if (_sceneCursor < 0)
         {
             // The arena on screen was just dropped - start the new list at the top.
+            // Only the waiting lobby re-rolls the ad wall; in the hangar between
+            // rounds the arena belongs to the next round and so does its wall.
             _sceneCursor = -1;
-            SelectRandomBackground();
+            bool waiting = MatchManager.Instance == null ||
+                           MatchManager.Instance.Phase == MatchManager.GamePhase.WaitingForPlayers;
+            if (waiting) SelectRandomBackground();
+            else SelectNextArena(_adStripIndex.Value);
         }
     }
 
@@ -167,25 +184,68 @@ public class BackgroundManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Advances to the next arena in the host's playlist and syncs it.
-    /// Call this from the server when a round starts.
+    /// Advances to the next arena in the host's playlist and syncs it, rolling
+    /// the ad wall with the warm-up probability. For the lobby: host start, the
+    /// warm-up rotation, a playlist edit while waiting. A battle round goes
+    /// through <see cref="SelectRoundBackground"/> instead.
     ///
     /// This used to draw at random; it now walks the playlist in order,
     /// because the host's ordering IS the intended sequence for the run.
-    /// The name is kept because four call sites use it and "the next arena"
-    /// is what they all actually mean.
     /// </summary>
-    public void SelectRandomBackground() => SelectRandomBackground(adStripChance);
-
-    /// <summary>As above, with an explicit ad-wall probability.</summary>
-    public void SelectRandomBackground(float adChance)
+    public void SelectRandomBackground()
     {
         if (!IsServer)
         {
             Debug.LogWarning("[BackgroundManager] SelectRandomBackground called on client - ignoring");
             return;
         }
+        SelectNextArena(Random.value < warmUpAdStripChance ? PickAdStrip() : -1);
+    }
 
+    /// <summary>
+    /// Server: the next arena for a battle round. The ad wall is not rolled
+    /// here - it comes from the run's plan, so a run shows at most one.
+    /// </summary>
+    public void SelectRoundBackground()
+    {
+        if (!IsServer)
+        {
+            Debug.LogWarning("[BackgroundManager] SelectRoundBackground called on client - ignoring");
+            return;
+        }
+
+        if (!_runAdPlanned) BeginRun();
+
+        int ad = -1;
+        if (_runAdCountdown == 0) ad = PickAdStrip();
+        if (_runAdCountdown >= 0) _runAdCountdown--;
+
+        SelectNextArena(ad);
+    }
+
+    /// <summary>
+    /// Server: a new run starts with the next round arena - decide now whether
+    /// it gets an ad wall and in which round. The round is drawn from the
+    /// shortest possible run (RoundWinsTarget rounds), so a run that wins the
+    /// roll always gets to show it.
+    /// </summary>
+    public void BeginRun()
+    {
+        _runAdPlanned = true;
+        _runAdCountdown = HasAdStrips && Random.value < adStripRunChance
+            ? Random.Range(0, MatchManager.RoundWinsTarget)
+            : -1;
+        Debug.Log(_runAdCountdown >= 0
+            ? $"[BackgroundManager] New run: ad wall in round {_runAdCountdown + 1}"
+            : "[BackgroundManager] New run: no ad wall");
+    }
+
+    private bool HasAdStrips => adStrips != null && adStrips.Length > 0;
+
+    /// <summary>Walk the playlist one step and sync it with the given ad wall
+    /// (-1 = the map's own terrain).</summary>
+    private void SelectNextArena(int adStrip)
+    {
         if (profiles == null || profiles.Length == 0)
         {
             Debug.LogWarning("[BackgroundManager] No background profiles configured");
@@ -208,43 +268,24 @@ public class BackgroundManager : NetworkBehaviour
         // Ad strip first: both indices trigger a foreground rebuild, and
         // setting this one last would make every round rebuild the terrain
         // twice.
-        SelectRandomAdStrip(adChance);
+        if (adStrip >= 0) _lastAdStrip = adStrip;
+        _adStripIndex.Value = adStrip;
 
-        Debug.Log($"[BackgroundManager] Arena {_sceneCursor + 1}/{_sceneOrder.Count} -> profile index {newIndex}");
+        Debug.Log($"[BackgroundManager] Arena {_sceneCursor + 1}/{_sceneOrder.Count} -> profile index {newIndex}, ad strip {adStrip}");
         _backgroundIndex.Value = newIndex;
     }
 
-    /// <summary>
-    /// Rolls for this round's advertising wall and syncs the result. Most
-    /// rounds come back empty (-1) and the map keeps its own terrain; see
-    /// adStripChance.
-    /// </summary>
-    public void SelectRandomAdStrip() => SelectRandomAdStrip(adStripChance);
-
-    /// <summary>As above, with an explicit probability - the warm-up rotation
-    /// wants the walls to actually turn up, a round wants them rare.</summary>
-    public void SelectRandomAdStrip(float chance)
+    /// <summary>A random ad wall, never the one shown last time.</summary>
+    private int PickAdStrip()
     {
-        if (!IsServer)
+        if (!HasAdStrips) return -1;
+
+        int index = Random.Range(0, adStrips.Length);
+        if (adStrips.Length > 1 && index == _lastAdStrip)
         {
-            return;
+            index = (index + 1) % adStrips.Length;
         }
-
-        if (adStrips == null || adStrips.Length == 0 || Random.value > chance)
-        {
-            _adStripIndex.Value = -1;
-            return;
-        }
-
-        int newIndex = Random.Range(0, adStrips.Length);
-
-        if (adStrips.Length > 1 && newIndex == _adStripIndex.Value)
-        {
-            newIndex = (newIndex + 1) % adStrips.Length;
-        }
-
-        Debug.Log($"[BackgroundManager] Server selected ad strip index: {newIndex}");
-        _adStripIndex.Value = newIndex;
+        return index;
     }
 
     /// <summary>
@@ -252,8 +293,8 @@ public class BackgroundManager : NetworkBehaviour
     /// One arena for the whole wait goes stale fast, and the FLY warm-up is
     /// the one place a player sits in the world with nothing else happening.
     /// Rotating through SelectRandomBackground means it walks the host's
-    /// playlist and re-rolls the ad wall exactly like a round change does,
-    /// and both indices are already synced, so every device follows.
+    /// playlist and re-rolls the ad wall at warmUpAdStripChance, and both
+    /// indices are already synced, so every device follows.
     ///
     /// Called from MatchManager's server tick; harmless if the lobby is
     /// empty, and the Waiting hangar is opaque so a rebuild behind it is
@@ -270,7 +311,7 @@ public class BackgroundManager : NetworkBehaviour
         if (Time.time < _warmUpRotateAt) return;
 
         _warmUpRotateAt = Time.time + warmUpRotateSeconds;
-        SelectRandomBackground(warmUpAdStripChance);
+        SelectRandomBackground();
     }
 
     /// <summary>Server: forget the warm-up timer, so a fresh wait gets a full
