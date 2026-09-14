@@ -312,7 +312,7 @@ public class MatchManager : MonoBehaviour
         ScoreManager.Instance?.RestartMatch();
 
         // Fresh arena for the first battle (synced NetworkVariable)
-        try { BackgroundManager.Instance?.SelectRandomBackground(); }
+        try { BackgroundManager.Instance?.SelectRoundBackground(); }
         catch (Exception e) { Debug.LogException(e); }
 
         foreach (var player in FindObjectsOfType<PlayerController>())
@@ -837,8 +837,11 @@ public class MatchManager : MonoBehaviour
         yield return new WaitForSeconds(ResultsSeconds);
 
         // Rotate the arena for the next round now - the terrain rebuild pops
-        // behind the hangar/podium overlay instead of mid-battle
-        BackgroundManager.Instance?.SelectRandomBackground();
+        // behind the hangar/podium overlay instead of mid-battle. After a run
+        // that arena already belongs to the next run's first round, so the
+        // new run's ad wall is planned before it is drawn.
+        if (runOver) BackgroundManager.Instance?.BeginRun();
+        BackgroundManager.Instance?.SelectRoundBackground();
 
         if (runOver)
         {
