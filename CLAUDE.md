@@ -192,6 +192,22 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   `typeSprites` array on `PowerUp.cs` (enum order) AND loaded by the HUD via
   `Resources.Load`; regenerate with Pillow-based script if the style changes
 
+## Clouds
+
+- Photo clouds in `Resources/Sprites/Clouds` (≤ 512 px, PPU 100), cut from
+  `tools/clouds/raw/sky_*.jpg` by `tools/clouds/photo_to_cloud.py`
+  (`--apply` writes the sprites, their `.meta` and `Cloud.prefab`). Clouds
+  render above planes (order 110) and are cover: bullets stop on the
+  `PolygonCollider2D`, which `CloudManager.FitColliderToSprite` refits from
+  `Sprite.GetPhysicsShape` on Awake and on every skin change.
+- **The collider is baked, not Unity's.** The script writes the outline of
+  the solid cloud (alpha ≥ 60 %, eroded 3 px, islands < 2 % dropped, ≤ 48
+  points per path) into the `.meta` `physicsShape`; Unity's fallback trace
+  left a dozen speck islands per sprite that stopped bullets in visibly
+  empty air. Judge the threshold on `tools/clouds/out/collider_overlay.png`,
+  never hand-edit the shape in the Sprite Editor (the next `--apply`
+  overwrites it).
+
 ## Match Flow / Audio / HUD
 
 - Boot: GameHUD opens an OPAQUE "Searching" hangar on the very first frame

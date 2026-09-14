@@ -19,13 +19,26 @@ Each photo yields its biggest cloud(s), and only them:
 Usage:
   python3 tools/clouds/photo_to_cloud.py tools/clouds/raw/sky_*.jpg [--apply]
 
+The collider is baked here too. Clouds are cover (Bullet.HandleContact stops
+a shot on one), and Unity's own fallback physics shape traces the alpha at a
+threshold of its choosing, with no filter: a dozen speck islands per sprite
+that stop a bullet in what looks like empty air, and on a soft cloud almost
+the whole translucent blob. Instead the outline of the solid cloud (alpha >=
+COLLIDER_ALPHA, eroded, small islands dropped, simplified) goes into the
+.meta as the sprite's physics shape, so Sprite.GetPhysicsShape - and with it
+CloudManager.FitColliderToSprite - returns exactly that polygon. The same
+outline is written into Cloud.prefab so the editor shows what the game uses.
+
 Without --apply the sprites land in tools/clouds/out/ for review, together
 with preview.png (every sprite on a dark and a light ground). With --apply
 they replace Assets/.../Resources/Sprites/Clouds/: the old cloud PNGs are
-removed, new ones are written as cloud_<photo>_<n>.png with a .meta each.
-Remember Cloud.prefab points at one of those sprites (m_Sprite).
+removed, new ones are written as cloud_<photo>_<n>.png with a .meta each
+(an existing .meta keeps its guid and only gets a new physicsShape).
+Either way collider_overlay.png in tools/clouds/out/ shows the baked
+collider over every sprite - that is where the threshold gets judged.
 """
 import argparse
+import re
 import sys
 import uuid
 from collections import deque
@@ -44,6 +57,14 @@ SOLID_LO, SOLID_HI = 0.10, 0.80   # alpha contrast: below LO gone, above HI soli
 MIN_BLOB_FRAC = 0.03  # a cloud smaller than this share of the frame is a scrap
 FEATHER_PX = 90       # fade where a cloud leaves the frame (work resolution)
 GRID = 4              # components are traced at 1/GRID resolution
+
+PPU = 100                 # Cloud.prefab collider is in world units
+COLLIDER_ALPHA = 153      # 60 %: where the cloud reads solid, not wisp
+COLLIDER_ERODE = 3        # px pulled in from that edge - cover starts inside it
+COLLIDER_MIN_AREA = 0.02  # islands under this share of the sprite are dropped
+COLLIDER_MAX_POINTS = 48  # per path, after simplification
+COLLIDER_MAX_PATHS = 6
+PREFAB = ROOT / "Assets/Doodlebugs/Prefabs/Cloud.prefab"
 
 
 def smooth(t):
@@ -238,6 +259,170 @@ def extract(path, count):
     return sprites
 
 
+# --- collider -----------------------------------------------------------------
+
+def trace_outlines(filled, w):
+    """Closed loops of pixel corners around a set of pixel indices.
+
+    Every filled pixel contributes its exposed edges, directed clockwise in
+    image space (y down) so the region is always on the right; the edges are
+    then chained. Where two pixels only touch at a corner the chain prefers
+    the right turn, which keeps them as two loops touching at a point rather
+    than one self-crossing figure of eight."""
+    out = {}
+
+    def edge(a, b):
+        out.setdefault(a, []).append(b)
+
+    for i in filled:
+        x, y = i % w, i // w
+        if (i - w) not in filled: edge((x, y), (x + 1, y))
+        if x == w - 1 or (i + 1) not in filled: edge((x + 1, y), (x + 1, y + 1))
+        if (i + w) not in filled: edge((x + 1, y + 1), (x, y + 1))
+        if x == 0 or (i - 1) not in filled: edge((x, y + 1), (x, y))
+
+    loops = []
+    while out:
+        start = next((p for p, ends in out.items() if len(ends) == 1), next(iter(out)))
+        p, d, loop = start, None, []
+        while True:
+            ends = out[p]
+            if len(ends) == 1 or d is None:
+                q = ends[0]
+            else:
+                right = (-d[1], d[0])
+                q = min(ends, key=lambda e: {right: 0, d: 1}.get((e[0] - p[0], e[1] - p[1]), 2))
+            ends.remove(q)
+            if not ends: del out[p]
+            loop.append(p)
+            d = (q[0] - p[0], q[1] - p[1])
+            p = q
+            if p == start: break
+        loops.append(loop)
+    return loops
+
+
+def polygon_area(pts):
+    return abs(sum(pts[i][0] * pts[i - 1][1] - pts[i - 1][0] * pts[i][1]
+                   for i in range(len(pts)))) / 2
+
+
+def douglas_peucker(pts, tol):
+    keep = [False] * len(pts)
+    keep[0] = keep[-1] = True
+    stack = [(0, len(pts) - 1)]
+    while stack:
+        a, b = stack.pop()
+        if b - a < 2: continue
+        (ax, ay), (bx, by) = pts[a], pts[b]
+        dx, dy, length = bx - ax, by - ay, ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5
+        best, best_d = a, -1.0
+        for i in range(a + 1, b):
+            px, py = pts[i]
+            d = (abs(dx * (ay - py) - (ax - px) * dy) / length if length
+                 else ((px - ax) ** 2 + (py - ay) ** 2) ** 0.5)
+            if d > best_d: best, best_d = i, d
+        if best_d > tol:
+            keep[best] = True
+            stack.append((a, best))
+            stack.append((best, b))
+    return [p for p, k in zip(pts, keep) if k]
+
+
+def simplify_loop(loop, tol):
+    """Douglas-Peucker on a closed loop: split at the point farthest from
+    the first, simplify both halves."""
+    far = max(range(len(loop)), key=lambda k: (loop[k][0] - loop[0][0]) ** 2 + (loop[k][1] - loop[0][1]) ** 2)
+    a = douglas_peucker(loop[:far + 1], tol)
+    b = douglas_peucker(loop[far:] + [loop[0]], tol)
+    return a[:-1] + b[:-1]
+
+
+def collider_paths(sprite):
+    """Outlines of the solid cloud as pixel corners in image space (y down)."""
+    w, h = sprite.size
+    a = sprite.getchannel("A").filter(ImageFilter.GaussianBlur(1.5))
+    solid = a.point(lambda v: 255 if v >= COLLIDER_ALPHA else 0)
+    solid = solid.filter(ImageFilter.MinFilter(2 * COLLIDER_ERODE + 1))
+    mask = bytes(1 if v else 0 for v in solid.get_flattened_data())
+    min_area = w * h * COLLIDER_MIN_AREA
+    paths = []
+    for pixels in components(mask, w, h, int(min_area))[:COLLIDER_MAX_PATHS]:
+        # Largest loop only: the others are holes, and a hole in cloud cover
+        # is not worth a path.
+        loop = max(trace_outlines(set(pixels), w), key=polygon_area)
+        tol = 2.0
+        pts = simplify_loop(loop, tol)
+        while len(pts) > COLLIDER_MAX_POINTS:
+            tol *= 1.25
+            pts = simplify_loop(loop, tol)
+        if polygon_area(pts) >= min_area:
+            paths.append(pts)
+    return paths
+
+
+def to_pivot_space(paths, size):
+    """Image-space corners -> pixels relative to the centred pivot, y up:
+    what the .meta physicsShape holds (Cloud.prefab wants the same / PPU)."""
+    w, h = size
+    return [[(x - w / 2, h / 2 - y) for x, y in path] for path in paths]
+
+
+def yaml_paths(paths, indent, scale=1.0):
+    lines = []
+    for path in paths:
+        for i, (x, y) in enumerate(path):
+            lead = " " * indent + ("- - " if i == 0 else "  - ")
+            lines.append(f"{lead}{{x: {x * scale:g}, y: {y * scale:g}}}")
+    return "\n".join(lines)
+
+
+def set_meta_physics_shape(meta, paths):
+    """Replace the sprite's physicsShape block; everything else (the guid
+    above all) stays as Unity serialised it."""
+    text = meta.read_text()
+    block = "    physicsShape:\n" + yaml_paths(paths, 4) + "\n"
+    new, n = re.subn(r"^ {4}physicsShape:.*?(?=^ {4}\w)", block, text, count=1,
+                     flags=re.MULTILINE | re.DOTALL)
+    if n != 1:
+        sys.exit(f"{meta.name}: no spriteSheet.physicsShape to replace")
+    meta.write_text(new)
+
+
+def set_prefab_collider(paths_by_guid):
+    """Cloud.prefab's authored collider = the outline of the sprite it wears,
+    so the editor shows the shape the game refits at runtime anyway."""
+    text = PREFAB.read_text()
+    m = re.search(r"m_Sprite: \{fileID: \d+, guid: ([0-9a-f]{32}), type: 3\}", text)
+    if not m or m.group(1) not in paths_by_guid:
+        print("Cloud.prefab: sprite not among the generated clouds - collider left alone")
+        return
+    block = "    m_Paths:\n" + yaml_paths(paths_by_guid[m.group(1)], 4, 1 / PPU) + "\n"
+    new, n = re.subn(r"^ {4}m_Paths:.*?(?=^ {2}\w)", block, text, count=1,
+                     flags=re.MULTILINE | re.DOTALL)
+    if n != 1:
+        sys.exit("Cloud.prefab: no PolygonCollider2D m_Paths to replace")
+    PREFAB.write_text(new)
+
+
+def collider_overlay(sprites, dest):
+    from PIL import ImageDraw
+    pad = 8
+    width = max(s.width for _, s, _ in sprites) + pad * 2
+    height = sum(s.height + pad for _, s, _ in sprites) + pad
+    sheet = Image.new("RGBA", (width, height), (120, 170, 225, 255))
+    y = pad
+    for _, s, paths in sprites:
+        sheet.alpha_composite(s, (pad, y))
+        draw = ImageDraw.Draw(sheet)
+        for path in paths:
+            draw.polygon([(pad + x, y + py) for x, py in path], outline=(255, 0, 0, 255))
+        y += s.height + pad
+    sheet.save(dest / "collider_overlay.png")
+
+
+# --- unity ----------------------------------------------------------------------
+
 META = """fileFormatVersion: 2
 guid: {guid}
 TextureImporter:
@@ -345,23 +530,26 @@ TextureImporter:
 """
 
 
-def write_meta(png):
-    """A .meta that already exists keeps its guid - Cloud.prefab references it."""
+def write_meta(png, paths):
+    """A .meta that already exists keeps its guid - Cloud.prefab references
+    it - and only its physicsShape is rewritten. Returns the guid."""
     meta = png.with_name(png.name + ".meta")
     if not meta.exists():
         meta.write_text(META.format(guid=uuid.uuid4().hex))
+    set_meta_physics_shape(meta, paths)
+    return re.search(r"^guid: ([0-9a-f]{32})", meta.read_text(), re.MULTILINE).group(1)
 
 
 def preview(sprites, dest):
     pad = 16
-    width = max(s.width for _, s in sprites) * 2 + pad * 3
-    height = sum(s.height + pad for _, s in sprites) + pad
+    width = max(s.width for _, s, _ in sprites) * 2 + pad * 3
+    height = sum(s.height + pad for _, s, _ in sprites) + pad
     sheet = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     half = width // 2
     sheet.paste((34, 44, 60, 255), (0, 0, half, height))
     sheet.paste((120, 170, 225, 255), (half, 0, width, height))
     y = pad
-    for _, s in sprites:
+    for _, s, _ in sprites:
         sheet.alpha_composite(s, (pad, y))
         sheet.alpha_composite(s, (half + pad // 2, y))
         y += s.height + pad
@@ -378,24 +566,33 @@ def main():
     sprites = []
     for photo in args.photos:
         for n, cloud in enumerate(extract(photo, args.count), 1):
-            sprites.append((f"cloud_{photo.stem}_{n}", cloud))
+            paths = collider_paths(cloud)
+            print(f"    collider: {len(paths)} path(s), "
+                  f"{sum(len(p) for p in paths)} points")
+            sprites.append((f"cloud_{photo.stem}_{n}", cloud, paths))
 
     dest = ASSETS if args.apply else OUT
     dest.mkdir(parents=True, exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     if args.apply:
-        keep = {name for name, _ in sprites}
+        keep = {name for name, _, _ in sprites}
         for old in dest.glob("*.png"):
             if old.stem not in keep:
                 old.unlink()
                 old.with_name(old.name + ".meta").unlink(missing_ok=True)
                 print(f"removed {old.name}")
-    for name, cloud in sprites:
+    paths_by_guid = {}
+    for name, cloud, paths in sprites:
         png = dest / f"{name}.png"
         cloud.save(png)
         if args.apply:
-            write_meta(png)
-    if not args.apply:
+            guid = write_meta(png, to_pivot_space(paths, cloud.size))
+            paths_by_guid[guid] = to_pivot_space(paths, cloud.size)
+    if args.apply:
+        set_prefab_collider(paths_by_guid)
+    else:
         preview(sprites, dest)
+    collider_overlay(sprites, OUT)
     print(f"-> {dest}")
 
 

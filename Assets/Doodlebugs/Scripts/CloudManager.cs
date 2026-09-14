@@ -382,6 +382,12 @@ public class CloudManager : MonoBehaviour
     /// Bullet.HandleContact) and that is the whole point of hiding behind one.
     /// The prefab-authored path belongs to whatever sprite the prefab happens
     /// to hold, so every cloud refits on Awake and again on each skin change.
+    ///
+    /// The physics shape itself is baked by tools/clouds/photo_to_cloud.py
+    /// into each sprite's .meta: the outline of the solid cloud (alpha >= 60 %,
+    /// eroded, specks dropped), not Unity's fallback trace of the alpha - that
+    /// one put a dozen speck islands round every cloud, each stopping a bullet
+    /// in what looked like empty air.
     /// </summary>
     public static void FitColliderToSprite(GameObject go)
     {
