@@ -1267,7 +1267,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ForegroundScroller
   spriteA: {fileID: 1945017003}
   spriteB: {fileID: 414433282}
-  tilePixelSize: 100
+  tilePixelSize: 50
 --- !u!4 &1318002864
 Transform:
   m_ObjectHideFlags: 0

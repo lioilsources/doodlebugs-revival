@@ -166,7 +166,13 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   N = ceil(cameraWidth / spriteWidth) + 1, so the wrap/heal always happens off-screen
 - Foreground bottom edge is anchored to the bottom of the visible screen via
   `BackgroundProfile.foregroundBottomOffset` (0 = flush with screen bottom)
-- Each background has its own foreground sprite; tiles are 100×100 px
+- Each background has its own foreground sprite; tiles are 1×1 world unit
+  (`tilePixelSize` = 50 px of the imported texture — every strip is 4096 px
+  wide and every platform caps textures at 2048, so 50 imported px = 100
+  source px = 1 unit; the value lives in Scene01, not only in the script).
+  A bullet bites 2×2 tiles (`ForegroundTile.OnTriggerEnter2D`), so a plain
+  shot takes a 2×2-unit hole; explosion craters are in world units and don't
+  care about the tile size. Up to ~450 tiles per copy (Volcano), ~1300 total
 - Planes fly **behind** the foreground (render order), bullets collide with it.
   Bullets sit on the `Bullet` layer (8); the 2D collision matrix lets
   `Foreground` collide with `Bullet` only, so planes never touch the tiles
@@ -185,8 +191,10 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   height (100 px = 1 world unit). Camera always shows 54 world units of width
   (`CameraAspectHandler.minVisibleWidth`), so 3 copies exist at runtime
 - Foreground textures **must have Read/Write enabled** (tile splitting reads pixels)
-- If `maxTextureSize` downscales the texture, the code compensates via `ppuScale`,
-  but tiles get coarser in world units
+- If `maxTextureSize` downscales the texture, the code compensates via `ppuScale`
+  for positions, but `tilePixelSize` counts imported pixels — halve the cap and
+  tiles double in world units. Raising the cap to 4096 is not the fix: 11 strips
+  with Read/Write would cost ~400 MB more
 - Power-up icons: `Resources/Sprites/PowerUps/powerup_{health,shield,repair,damage}.png`,
   96×96 px pixel-art (point filtering), wired into `PowerUp.prefab` via the
   `typeSprites` array on `PowerUp.cs` (enum order) AND loaded by the HUD via
