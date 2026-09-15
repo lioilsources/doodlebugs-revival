@@ -24,7 +24,11 @@ public class ForegroundScroller : MonoBehaviour
 
     [Header("Tile Settings")]
     [Tooltip("Size of each destructible tile in pixels.")]
-    [SerializeField] private int tilePixelSize = 100;
+    // In pixels of the texture AS IMPORTED. Every strip is 4096 px wide and
+    // every platform caps textures at 2048, so a tile is 50 imported px =
+    // 100 source px = 1 world unit. At 100 it was 2x2 units: the terrain was
+    // 4-8 tiles tall and a 2x2 bullet bite took half of it.
+    [SerializeField] private int tilePixelSize = 50;
 
     private float _scrollSpeed;
     private float _spriteWorldWidth;
