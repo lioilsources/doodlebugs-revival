@@ -16,10 +16,27 @@ public class Shooting : NetworkBehaviour
     public NetworkVariable<int> NetWeaponId = new NetworkVariable<int>((int)WeaponType.MG,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    // Second weapon slot (Prompts/26 D10): -1 = none. Firing, the charge ring
+    // and the second on-screen trigger are slot-aware already; the hangar
+    // draft that fills this slot is Phase 4's.
+    public NetworkVariable<int> NetWeaponId2 = new NetworkVariable<int>(-1,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     // Weapon chosen in the hangar - survives deaths, reset only by a new pick.
     private int _selectedWeaponId = (int)WeaponType.MG;
+    private int _selectedWeaponId2 = -1;
 
-    public WeaponProfile CurrentWeapon => WeaponProfile.Get(NetWeaponId.Value);
+    private const int MaxSlots = 2;
+
+    public WeaponProfile CurrentWeapon => GetWeapon(0);
+
+    /// <summary>Weapon slots the plane carries: 1, or 2 once NetWeaponId2 is set.</summary>
+    public int SlotCount => NetWeaponId2.Value >= 0 ? 2 : 1;
+
+    public int GetWeaponId(int slot) =>
+        slot == 1 && NetWeaponId2.Value >= 0 ? NetWeaponId2.Value : NetWeaponId.Value;
+
+    public WeaponProfile GetWeapon(int slot) => WeaponProfile.Get(GetWeaponId(slot));
 
     // Profile-aware modifiers (player's own maturity level scales ROF/force)
     private PilotMaturityProfile Profile =>
@@ -35,13 +52,25 @@ public class Shooting : NetworkBehaviour
     // Run-upgrade FIRE RATE levels shorten the cooldown
     private float runRofMultiplier => playerController?.PlaneStats?.RofMultiplier ?? 1f;
 
-    private float fireRateCooldown => CurrentWeapon.Cooldown * maturityRofMultiplier / runRofMultiplier;
+    private float FireRateCooldown(int slot) =>
+        GetWeapon(slot).Cooldown * maturityRofMultiplier / runRofMultiplier;
 
     // Reference to PlayerController for local player index
     private PlayerController playerController;
 
-    // Fire rate cooldown tracking
-    private float _lastFireTime;
+    // Fire rate cooldown tracking, per slot
+    private readonly float[] _lastFireTime = new float[MaxSlots];
+
+    /// <summary>0..1 recharge of a slot, for the trigger ring. Owner-side
+    /// clock - the same one the firing gate uses, so the ring is exact by
+    /// construction.</summary>
+    public float GetCharge01(int slot)
+    {
+        if ((uint)slot >= MaxSlots) return 1f;
+        float cooldown = FireRateCooldown(slot);
+        if (cooldown <= 0f) return 1f;
+        return Mathf.Clamp01((Time.time - _lastFireTime[slot]) / cooldown);
+    }
 
     public override void OnNetworkSpawn()
     {
@@ -66,36 +95,32 @@ public class Shooting : NetworkBehaviour
         if (!canProcessInput) return;
 
         // No shooting from inside the hangar
-        if (playerController != null && playerController.InHangar) return;
+        if (playerController == null || playerController.InHangar) return;
 
-        bool shootPressed = GetShootInput();
+        // One dispatch for both axes and the triggers: PlayerController owns
+        // the provider choice (device, couch slot, or the bot's brain).
+        var provider = playerController.GetInputProvider();
+        if (provider == null) return;
 
-        if (shootPressed && Time.time >= _lastFireTime + fireRateCooldown)
+        // Each slot has its own trigger and its own cooldown. A held touch
+        // trigger reports pressed every frame; the gate turns that into shots
+        // at the weapon's cadence (Prompts/26 D6).
+        int slots = SlotCount;
+        for (int slot = 0; slot < slots; slot++)
         {
-            _lastFireTime = Time.time;
+            if (!provider.GetShootInput(slot)) continue;
+            if (Time.time < _lastFireTime[slot] + FireRateCooldown(slot)) continue;
+
+            _lastFireTime[slot] = Time.time;
             float planeSpeed = planeRb != null ? planeRb.linearVelocity.magnitude : 0f;
-            int localPlayerIndex = playerController != null && playerController.LocalPlayerIndex >= 0
-                ? playerController.LocalPlayerIndex : 0;
-            ShootServerRpc(firePoint.position, firePoint.rotation, planeSpeed, localPlayerIndex);
+            int localPlayerIndex = playerController.LocalPlayerIndex >= 0 ? playerController.LocalPlayerIndex : 0;
+            ShootServerRpc(firePoint.position, firePoint.rotation, planeSpeed, localPlayerIndex, slot);
         }
     }
 
-    /// <summary>
-    /// Get shoot input from the appropriate provider (local or network)
-    /// </summary>
-    private bool GetShootInput()
-    {
-        // One dispatch for both axes and the trigger: PlayerController owns
-        // the provider choice (device, couch slot, or the bot's brain). This
-        // used to duplicate that logic, and the duplicate is where a scripted
-        // pilot would have been missed.
-        if (playerController == null) return false;
-        var provider = playerController.GetInputProvider();
-        return provider != null && provider.GetShootInput();
-    }
-
     [ServerRpc]
-    void ShootServerRpc(Vector3 position, Quaternion rotation, float planeSpeed, int localPlayerIndex, ServerRpcParams rpcParams = default)
+    void ShootServerRpc(Vector3 position, Quaternion rotation, float planeSpeed, int localPlayerIndex,
+        int slot, ServerRpcParams rpcParams = default)
     {
         // Get shooter's client ID from RPC sender
         ulong shooterClientId = rpcParams.Receive.SenderClientId;
@@ -103,7 +128,9 @@ public class Shooting : NetworkBehaviour
         // Server-side guard: parked planes don't shoot, whatever the client says
         if (playerController != null && playerController.InHangar) return;
 
-        var weapon = CurrentWeapon;
+        // The server resolves the weapon from its own slot state - a client
+        // can name a slot, never a weapon.
+        var weapon = GetWeapon((uint)slot < MaxSlots ? slot : 0);
 
         // Damage multiplier from PlaneStats power-up
         int bulletDamage = weapon.Damage;
@@ -201,12 +228,24 @@ public class Shooting : NetworkBehaviour
     {
         if (!IsServer) return;
         NetWeaponId.Value = _selectedWeaponId;
+        NetWeaponId2.Value = _selectedWeaponId2;
     }
 
-    /// <summary>Server-side: apply a validated hangar selection.</summary>
-    public void ServerSetSelectedWeapon(int weaponId)
+    /// <summary>Server-side: apply a validated hangar selection. Slot 1 takes
+    /// -1 to clear; nothing fills it yet (the second-weapon draft is Phase 4).</summary>
+    public void ServerSetSelectedWeapon(int weaponId, int slot = 0)
     {
         if (!IsServer) return;
+
+        if (slot == 1)
+        {
+            if (weaponId < -1 || weaponId >= WeaponProfile.Count) return;
+            _selectedWeaponId2 = weaponId;
+            NetWeaponId2.Value = weaponId;
+            Debug.Log($"[Shooting] Player {OwnerClientId} secondary weapon {(weaponId < 0 ? "none" : ((WeaponType)weaponId).ToString())}");
+            return;
+        }
+
         if (weaponId < 0 || weaponId >= WeaponProfile.Count) return;
 
         _selectedWeaponId = weaponId;

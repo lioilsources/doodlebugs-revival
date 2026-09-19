@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -63,6 +64,11 @@ public class WeaponProfile
     /// ignored — the art carries its own colours.</summary>
     public string ProjectileSpriteName;
 
+    /// <summary>Trigger icon in Resources/Sprites/Weapons (Prompts/26 D13).
+    /// Missing art falls back to the metal projectile sprite of the weapon's
+    /// form - see <see cref="LoadIcon"/>.</summary>
+    public string IconSpriteName;
+
     /// <summary>Next tier when a weapon crate is collected (null = maxed).</summary>
     public WeaponType? UpgradesTo;
 
@@ -72,6 +78,7 @@ public class WeaponProfile
         {
             Type = WeaponType.MG,
             DisplayName = "MG",
+            IconSpriteName = "weapon_mg",
             Description = "1 bullet, balanced",
             Damage = 1,
             Cooldown = 0.4f,
@@ -83,6 +90,7 @@ public class WeaponProfile
         {
             Type = WeaponType.TwinMG,
             DisplayName = "TWIN MG",
+            IconSpriteName = "weapon_twinmg",
             Description = "2 bullets, fast",
             Damage = 1,
             Cooldown = 0.45f,
@@ -95,6 +103,7 @@ public class WeaponProfile
         {
             Type = WeaponType.Flak,
             DisplayName = "FLAK",
+            IconSpriteName = "weapon_flak",
             Description = "5 pellets, close range",
             Damage = 1,
             Cooldown = 0.8f,
@@ -108,6 +117,7 @@ public class WeaponProfile
         {
             Type = WeaponType.HeavyFlak,
             DisplayName = "HEAVY FLAK",
+            IconSpriteName = "weapon_heavyflak",
             Description = "7 pellets, wider cone",
             Damage = 1,
             Cooldown = 0.85f,
@@ -121,6 +131,7 @@ public class WeaponProfile
         {
             Type = WeaponType.Bomb,
             DisplayName = "AERO BOMB",
+            IconSpriteName = "weapon_bomb",
             Description = "digs craters, big boom",
             Damage = 3,
             Cooldown = 1.6f,
@@ -139,6 +150,7 @@ public class WeaponProfile
         {
             Type = WeaponType.Sniper,
             DisplayName = "SNIPER",
+            IconSpriteName = "weapon_sniper",
             Description = "2 dmg, across the map",
             Damage = 2,
             Cooldown = 1.3f,
@@ -151,6 +163,7 @@ public class WeaponProfile
         {
             Type = WeaponType.Rocket,
             DisplayName = "ROCKET",
+            IconSpriteName = "weapon_rocket",
             Description = "accelerates, small AoE",
             Damage = 2,
             Cooldown = 1.1f,
@@ -166,6 +179,7 @@ public class WeaponProfile
         {
             Type = WeaponType.Mine,
             DisplayName = "MINE",
+            IconSpriteName = "weapon_mine",
             Description = "hides in clouds, 3 dmg",
             Damage = 3,
             Cooldown = 2.5f,
@@ -179,6 +193,34 @@ public class WeaponProfile
             UpgradesTo = null
         }
     };
+
+    private static readonly Dictionary<WeaponType, (Sprite sprite, Color tint)> IconCache = new();
+
+    /// <summary>Icon for the trigger button: own art first, then the metal
+    /// projectile sprite of the weapon's form (tinted like the projectile),
+    /// then null - the caller shows the name. Cached per weapon.</summary>
+    public Sprite LoadIcon(out Color tint)
+    {
+        if (IconCache.TryGetValue(Type, out var cached))
+        {
+            tint = cached.tint;
+            return cached.sprite;
+        }
+
+        Sprite sprite = null;
+        tint = Color.white;
+        if (!string.IsNullOrEmpty(IconSpriteName))
+        {
+            sprite = Resources.Load<Sprite>("Sprites/Weapons/" + IconSpriteName);
+        }
+        if (sprite == null)
+        {
+            sprite = Resources.Load<Sprite>("Sprites/Projectiles/metal/" + ElementProfile.SpriteForm(Type));
+            if (sprite != null) tint = ProjectileTint;
+        }
+        IconCache[Type] = (sprite, tint);
+        return sprite;
+    }
 
     public static WeaponProfile Get(WeaponType type)
     {

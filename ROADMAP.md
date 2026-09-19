@@ -127,7 +127,8 @@ v externí skupině.
 - Event taxonomie (`Scripts/Meta/Telemetry.cs`, jediné místo, kde se eventy
   posílají): `session_start`, `boot_mode {solo|lan}`, `round_start`,
   `round_end {result, kills, deaths, duration, weapon, arena}`,
-  `lan_pair {peers}`, později `level_*`, `iap_*`, `daily_*`, `mission_*`.
+  `lan_pair {peers}`, `input_scheme_set {scheme, source}` (Prompts/26),
+  později `level_*`, `iap_*`, `daily_*`, `mission_*`.
 - **PlayerProfile** (`Scripts/Meta/PlayerProfile.cs`): versionovaný JSON v
   `Application.persistentDataPath`, atomický zápis (tmp + rename), migrace
   podle `schemaVersion`. Zatím jen statistiky (kills, deaths, rounds,
@@ -157,6 +158,14 @@ se snaží mě sestřelit. Když se vedle objeví kamarád, hra mi ho nabídne, 
 nevytrhne mě z kola.
 
 **Práce**
+- **Dotykové ovládání** `[wip]` (Prompts/26): on-screen joystick vpravo
+  dole (Y = plyn, X = zatáčení, stejné osy jako `IInputProvider`), spouště
+  vlevo dole s kruhovým nabíjením podle cooldownu zbraně a ikonou zbraně,
+  druhá spoušť připravená pro druhý slot (`Shooting.NetWeaponId2`, hangárový
+  draft až ve fázi 4). Gyro je pro lidi těžké → zůstává volitelně; výchozí
+  schéma = joystick. Přepínač v nové `UI/SettingsOverlay.cs` (domov i pro
+  přepínače z fáze 2), persistence přes `PlayerPrefs` do doby `PlayerProfile`.
+  App Review na stole bez naklánění je vedlejší, ale reálný důvod.
 - **Bojový bot.** Rozšířit `Bot/BotBrain.cs` (dnes ne-agresivní warm-up)
   o stavy PURSUE (lead-pursuit s rychlostí střely z `WeaponProfile`),
   EVADE (člověk v kuželu za mnou → zlom/loop), DISENGAGE (nízké HP → k
