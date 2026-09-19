@@ -2,8 +2,9 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Mobile input provider using gyroscope for rotation and touch-anywhere for shooting.
-/// Uses new Input System for both gyro and touch.
+/// Gravity (gyro) axis source for the Gyro control scheme, wrapped by
+/// TouchInputProvider. Shooting moved to the on-screen triggers (Prompts/26
+/// D9) - this class no longer reads touches at all.
 ///
 /// Gyro pipeline: raw gravity → low-pass filter (kills sensor jitter) →
 /// smooth dead-zone remap (no jump at the dead-zone edge) → expo response
@@ -43,8 +44,6 @@ public class MobileInputProvider : IInputProvider
     // Input state
     private float horizontalInput = 0f;
     private float verticalInput = 0f;
-    private bool shootPressed = false;
-    private bool shootConsumed = false;
 
     public void Initialize()
     {
@@ -61,6 +60,16 @@ public class MobileInputProvider : IInputProvider
             gyroAvailable = false;
             Debug.LogWarning("[MobileInputProvider] GravitySensor not available");
         }
+    }
+
+    /// <summary>Run the sensor only while someone flies by it - a joystick
+    /// player should not pay for gravity sampling.</summary>
+    public void SetSensorEnabled(bool enabled)
+    {
+        if (gravitySensor == null) return;
+        if (enabled) InputSystem.EnableDevice(gravitySensor);
+        else InputSystem.DisableDevice(gravitySensor);
+        if (enabled) _hasSample = false;   // no stale reading after a pause
     }
 
     /// <summary>
@@ -83,16 +92,8 @@ public class MobileInputProvider : IInputProvider
         return verticalInput;
     }
 
-    public bool GetShootInput()
-    {
-        // Return true only once per press
-        if (shootPressed && !shootConsumed)
-        {
-            shootConsumed = true;
-            return true;
-        }
-        return false;
-    }
+    // Firing is the triggers' job (TouchInputProvider); the axis source never shoots.
+    public bool GetShootInput() => false;
 
     public void UpdateInput()
     {
@@ -135,29 +136,24 @@ public class MobileInputProvider : IInputProvider
             // Vertical: tilt forward/backward relative to the calibrated hold angle
             verticalInput = ApplyResponse(_smoothedGravity.y - neutralTiltY);
         }
-
-        // Touch anywhere = shoot
-        CheckTouchShoot();
-
-        // Reset shoot consumed flag when no touch
-        if (!shootPressed)
-        {
-            shootConsumed = false;
-        }
     }
 
     /// <summary>
     /// Smooth dead-zone + expo curve. Continuous at the dead-zone edge
     /// (the old code jumped from 0 straight to deadZone/maxTilt).
     /// </summary>
-    private float ApplyResponse(float tilt)
+    private float ApplyResponse(float tilt) => Curve(tilt, deadZone, maxTilt, responseExpo);
+
+    /// <summary>The same curve for any axis source - the on-screen stick
+    /// uses it with its own dead zone and expo.</summary>
+    internal static float Curve(float value, float deadZone, float max, float expo)
     {
-        float magnitude = Mathf.Abs(tilt);
+        float magnitude = Mathf.Abs(value);
         if (magnitude <= deadZone) return 0f;
 
-        float t = Mathf.InverseLerp(deadZone, maxTilt, magnitude); // 0 at edge, 1 at maxTilt
-        t = Mathf.Pow(t, responseExpo);
-        return Mathf.Sign(tilt) * Mathf.Clamp01(t);
+        float t = Mathf.InverseLerp(deadZone, max, magnitude); // 0 at edge, 1 at max
+        t = Mathf.Pow(t, expo);
+        return Mathf.Sign(value) * Mathf.Clamp01(t);
     }
 
     private Vector3 GetGravity()
@@ -167,20 +163,5 @@ public class MobileInputProvider : IInputProvider
             return gravitySensor.gravity.ReadValue();
         }
         return Vector3.zero;
-    }
-
-    private void CheckTouchShoot()
-    {
-        var touchscreen = Touchscreen.current;
-        if (touchscreen != null)
-        {
-            var primaryTouch = touchscreen.primaryTouch;
-            if (primaryTouch.press.wasPressedThisFrame)
-            {
-                shootPressed = true;
-                return;
-            }
-        }
-        shootPressed = false;
     }
 }

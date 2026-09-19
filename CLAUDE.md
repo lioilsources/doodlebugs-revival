@@ -216,6 +216,51 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   never hand-edit the shape in the Sprite Editor (the next `--apply`
   overwrites it).
 
+## Input / Touch Controls
+
+- `IInputProvider` is two axes + a trigger: horizontal = rotation (+1 =
+  clockwise = nose down while flying right), vertical = throttle, shoot;
+  `GetShootInput(int slot)` is a default interface method (slot 0 =
+  `GetShootInput()`), so single-trigger providers never mention slots.
+- Desktop: `DesktopInputProvider` / `GamepadInputProvider` (`HybridInputProvider`
+  per couch seat via `LocalPlayerManager`). Phone: `LocalPlayerManager` destroys
+  itself, so the only path is `InputManager.InputProvider` =
+  `TouchInputProvider`, which takes axes from the on-screen stick or - in the
+  Gyro scheme - from `MobileInputProvider` (gravity pipeline, `Recenter()`,
+  sensor enabled only in that scheme) and one held flag per weapon slot from
+  the triggers. Touch-anywhere-to-shoot is gone. A connected gamepad still
+  wins on mobile (`InputManager.IsUsingGamepad`), and the controls hide.
+- Scheme: `ControlSettings.Scheme` (`Scripts/Meta/`), Joystick by default,
+  Gyro opt-in; PlayerPrefs key `settings.controlScheme` until `PlayerProfile`
+  (Phase 0) absorbs it. Toggle lives in `UI/SettingsOverlay.cs` (SETTINGS
+  button in every hangar, bottom-left column) - Phase 2's shake/music/SFX/
+  haptics rows go there, not into `GameHUD`.
+- `UI/TouchControls.cs` (Prompts/26): runtime-built under a `Screen.safeArea`
+  container. Floating stick in the right 40 % × bottom 60 % zone (base Ø 260,
+  knob Ø 110, travel 90 canvas units, radial dead zone 0.12, expo 1.3 via
+  `MobileInputProvider.Curve`; knob clamped to the ring, axes clamped per
+  axis so a corner = full throttle + full turn). Triggers bottom-left at
+  (150,150) Ø 200 and (150,380) Ø 170; the second appears only when
+  `Shooting.SlotCount == 2`. Hold = auto-fire at the cooldown cadence (the
+  provider reports pressed every frame, `Shooting.Update` gates). Ring =
+  `Image` Radial360 filled with `Shooting.GetCharge01(slot)` - owner-side
+  clock, same as the firing gate, no netcode. Hidden whenever
+  `GameHUD.IsAnyOverlayOpen`, the plane is in the hangar, or a gamepad is
+  active; hiding releases every pointer. Multi-touch = uGUI pointer ids
+  (scene EventSystem runs `InputSystemUIInputModule`). The own HUD panel
+  moves up to y=260 on mobile to clear the stick zone.
+- Weapon slots: `Shooting.NetWeaponId2` (-1 = none) next to `NetWeaponId`;
+  `GetWeapon(slot)`, per-slot `_lastFireTime`, `ShootServerRpc(..., slot)`
+  resolves the weapon server-side. The hangar draft only fills slot 0 today;
+  a second pick (Phase 4) is `ServerSetSelectedWeapon(id, 1)` + a card.
+- Trigger icons: `Resources/Sprites/Weapons/weapon_<key>.png`, 96×96
+  pixel-art from `tools/weapons/generate_icons.py --apply` (Pillow only,
+  no GPU); `WeaponProfile.IconSpriteName` names them and `LoadIcon` falls
+  back to `Sprites/Projectiles/metal/<form>` tinted, then to the weapon name.
+  Ring/disc/knob sprites are generated at runtime by `UI/UiSprites.cs`.
+- iOS `deferSystemGesturesMode` = bottom edge (ProjectSettings) so a thumb on
+  the triggers does not summon the home indicator.
+
 ## Match Flow / Audio / HUD
 
 - Boot: GameHUD opens an OPAQUE "Searching" hangar on the very first frame

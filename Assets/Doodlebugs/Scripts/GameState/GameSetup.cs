@@ -113,5 +113,11 @@ public class GameSetup : MonoBehaviour
         // Create HUD programmatically
         _hud = GameHUD.CreateHUD(canvas);
         Debug.Log("[GameSetup] GameHUD created");
+
+        // Phone controls and the settings door: their own classes over the
+        // same canvas (ROADMAP §3.9 - GameHUD stops growing). Both are inert
+        // on desktop except the settings overlay itself.
+        TouchControls.Create(canvas);
+        SettingsOverlay.Create(canvas);
     }
 }

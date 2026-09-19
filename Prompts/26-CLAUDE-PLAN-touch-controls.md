@@ -1,6 +1,21 @@
 # Touch Controls — Implementation Plan
 
-Status (2026-09-19): **plan only, no code.** Owner's ask: gyro is hard for
+Status (2026-09-19): **implemented** in the same session as the plan, on the
+defaults of D6–D13 - files of §1, seams of §6. Verified by batchmode compile
+and an editor check that all eight icons, the runtime ring/disc sprites and
+the projectile fallback load; device verification per §8 is the owner's
+next step (TestFlight). Deviations from the plan as written: a small
+`UI/UiKit.cs` (font, label, flat button, stretch panel) sits next to
+`UiSprites.cs` and serves `TouchControls`, `SettingsOverlay` and the hangar's
+SETTINGS button; the crate "II" tier chip on the trigger was dropped
+(TwinMG is also a hangar pick, so "boosted" is not knowable from the id
+alone - the icon changes anyway); `MobileInputProvider` gained
+`SetSensorEnabled` so a joystick player pays nothing for gravity sampling;
+`Shooting.GetWeaponId(slot)` exists next to `GetWeapon(slot)` for the
+trigger's change detection; `deferSystemGesturesMode` is set to the bottom
+edge in ProjectSettings (risk §9).
+
+Owner's ask: gyro is hard for
 people, keep it as an optional switch in settings; default to an on-screen
 joystick bottom-right (up/down = throttle, left/right = turn down/up) and an
 on-screen fire trigger bottom-left with a circular charge indicator for

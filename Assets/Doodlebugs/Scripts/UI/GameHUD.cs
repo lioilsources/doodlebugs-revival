@@ -362,7 +362,11 @@ public class GameHUD : MonoBehaviour
         playerStatsContainer.anchorMin = new Vector2(1, 0);
         playerStatsContainer.anchorMax = new Vector2(1, 0);
         playerStatsContainer.pivot = new Vector2(1, 0);
-        playerStatsContainer.anchoredPosition = new Vector2(-60, 20);
+        // On a phone the stick zone owns the bottom-right corner (Prompts/26
+        // D8): the panel sits above it, whatever the scheme, so the HUD does
+        // not jump when the player flips to gyro.
+        bool touch = InputManager.Instance != null && InputManager.Instance.IsMobile();
+        playerStatsContainer.anchoredPosition = new Vector2(-60, touch ? 260 : 20);
         playerStatsContainer.sizeDelta = new Vector2(420, 700);
 
         var layout = containerObj.AddComponent<VerticalLayoutGroup>();
@@ -1413,6 +1417,16 @@ public class GameHUD : MonoBehaviour
     /// hides its corner status panel then - the overlay shows the status).</summary>
     public bool IsHangarOpen => _hangarOverlay != null && _hangarOverlay.activeSelf;
 
+    /// <summary>True while anything covers the arena - hangar, results,
+    /// podium, a picker, settings. The touch controls hide behind all of it.</summary>
+    public bool IsAnyOverlayOpen =>
+        IsHangarOpen ||
+        (_resultsOverlay != null && _resultsOverlay.activeSelf) ||
+        (_podiumOverlay != null && _podiumOverlay.activeSelf) ||
+        (_skinPickerOverlay != null && _skinPickerOverlay.activeSelf) ||
+        (_scenePickerOverlay != null && _scenePickerOverlay.activeSelf) ||
+        SettingsOverlay.IsOpen;
+
     private void OnClientReadyChanged(ulong clientId)
     {
         _readyClients.Add(clientId);
@@ -1563,6 +1577,7 @@ public class GameHUD : MonoBehaviour
         {
             BuildScenePickerButton();
         }
+        BuildSettingsButton();
         if (waiting && !_skinPickerAutoShown)
         {
             var owned = FindOwnedPlayer();
@@ -2136,6 +2151,17 @@ public class GameHUD : MonoBehaviour
         button.onClick.AddListener(OpenSkinPicker);
 
         CreateTextIn(buttonObj.transform, "Label", "PLANE", 16, Vector2.zero, Color.white);
+    }
+
+    // Settings live in their own overlay (SettingsOverlay); the hangar only
+    // carries the door. Third slot of the bottom-left column, or second on a
+    // client, which has no SCENES button.
+    private void BuildSettingsButton()
+    {
+        bool host = NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
+        UiKit.FlatButton(_hangarOverlay.transform, "SettingsButton", "SETTINGS", 16,
+            Vector2.zero, Vector2.zero, new Vector2(60, host ? 192 : 116), new Vector2(180, 68),
+            new Color(0.25f, 0.25f, 0.29f, 1f), () => SettingsOverlay.Instance?.Open());
     }
 
     private void OpenSkinPicker()

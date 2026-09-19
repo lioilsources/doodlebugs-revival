@@ -158,7 +158,7 @@ se snaží mě sestřelit. Když se vedle objeví kamarád, hra mi ho nabídne, 
 nevytrhne mě z kola.
 
 **Práce**
-- **Dotykové ovládání** `[plan]` (Prompts/26): on-screen joystick vpravo
+- **Dotykové ovládání** `[wip]` (Prompts/26): on-screen joystick vpravo
   dole (Y = plyn, X = zatáčení, stejné osy jako `IInputProvider`), spouště
   vlevo dole s kruhovým nabíjením podle cooldownu zbraně a ikonou zbraně,
   druhá spoušť připravená pro druhý slot (`Shooting.NetWeaponId2`, hangárový

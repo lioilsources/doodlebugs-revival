@@ -11,7 +11,9 @@ public class InputManager : MonoBehaviour
     public static InputManager Instance { get; private set; }
 
     private IInputProvider inputProvider;
-    private MobileInputProvider mobileProvider;
+    // Phone: the touch provider (stick + triggers) wraps the gyro source.
+    private TouchInputProvider mobileProvider;
+    private MobileInputProvider gyroProvider;
 
     // Desktop providers for auto-switching
     private DesktopInputProvider desktopProvider;
@@ -25,7 +27,10 @@ public class InputManager : MonoBehaviour
     private const float INPUT_CHECK_INTERVAL = 0.5f;
 
     public IInputProvider InputProvider => inputProvider;
-    public MobileInputProvider MobileProvider => mobileProvider;
+    /// <summary>The gravity source (RECENTER lives on it); null on desktop.</summary>
+    public MobileInputProvider MobileProvider => gyroProvider;
+    /// <summary>The phone's provider - TouchControls writes into it; null on desktop.</summary>
+    public TouchInputProvider TouchProvider => mobileProvider;
     public bool IsUsingGamepad => isUsingGamepad;
 
     private void Awake()
@@ -95,7 +100,10 @@ public class InputManager : MonoBehaviour
     private void OnDestroy()
     {
         InputSystem.onDeviceChange -= OnDeviceChange;
+        ControlSettings.Changed -= OnSchemeChanged;
     }
+
+    private void OnSchemeChanged(ControlScheme scheme) => mobileProvider?.SetScheme(scheme);
 
     private void InitializeInputProvider()
     {
@@ -111,8 +119,11 @@ public class InputManager : MonoBehaviour
 
         if (isMobile)
         {
-            mobileProvider = new MobileInputProvider();
-            mobileProvider.Initialize();
+            gyroProvider = new MobileInputProvider();
+            gyroProvider.Initialize();
+            mobileProvider = new TouchInputProvider(gyroProvider, ControlSettings.Scheme);
+            ControlSettings.Changed += OnSchemeChanged;
+            ControlSettings.LogBoot();
 
             if (forceGamepadInput || GamepadInputProvider.IsGamepadConnected())
             {
