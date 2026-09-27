@@ -236,10 +236,15 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   button in every hangar, bottom-left column) - Phase 2's shake/music/SFX/
   haptics rows go there, not into `GameHUD`.
 - `UI/TouchControls.cs` (Prompts/26): runtime-built under a `Screen.safeArea`
-  container. Floating stick in the right 40 % × bottom 60 % zone (base Ø 260,
+  container. Floating stick in the right 50 % × bottom 80 % zone (top strip
+  left free for the HANGAR corner button); at rest a dim ghost (alpha 0.35)
+  sits at the zone centre (base Ø 260,
   knob Ø 110, travel 90 canvas units, radial dead zone 0.12, expo 1.3 via
   `MobileInputProvider.Curve`; knob clamped to the ring, axes clamped per
-  axis so a corner = full throttle + full turn). Triggers bottom-left at
+  axis so a corner = full throttle + full turn). Stick mapping (2026-09-27,
+  playtest): up = turn left, down = turn right, right = throttle up, left =
+  throttle down. Stick and triggers also watch their own `Touchscreen`
+  touch id and release when it ends, so a lost pointer-up can't wedge them. Triggers bottom-left at
   (150,150) Ø 200 and (150,380) Ø 170; the second appears only when
   `Shooting.SlotCount == 2`. Hold = auto-fire at the cooldown cadence (the
   provider reports pressed every frame, `Shooting.Update` gates). Ring =
