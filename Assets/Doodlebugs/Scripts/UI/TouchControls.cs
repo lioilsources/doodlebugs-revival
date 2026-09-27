@@ -1,6 +1,8 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
 
 /// <summary>
@@ -14,7 +16,9 @@ using UnityEngine.UI;
 /// Multi-touch comes through uGUI pointer ids (the scene's EventSystem runs
 /// InputSystemUIInputModule): the stick keeps the id that pressed it, each
 /// trigger keeps its own, and a finger sliding from one onto another does
-/// nothing - triggers act on pointer-down only.
+/// nothing - triggers act on pointer-down only. A pointer-up the module
+/// never delivers (cancelled touch) must not wedge a control: each one also
+/// watches its own touch id on the Touchscreen and lets go when it ends.
 /// </summary>
 public class TouchControls : MonoBehaviour
 {
@@ -27,9 +31,12 @@ public class TouchControls : MonoBehaviour
     private const float StickKnobSize = 110f;
     private const float StickDeadZone = 0.12f;
     private const float StickExpo = 1.3f;
-    private const float ZoneWidthFrac = 0.40f;
-    private const float ZoneHeightFrac = 0.60f;
+    // Right half up to 80 % height: the top strip stays free for the corner
+    // HANGAR button (TouchControls sits above GameHUD and would swallow it).
+    private const float ZoneWidthFrac = 0.50f;
+    private const float ZoneHeightFrac = 0.80f;
     private const float BaseFadeSeconds = 0.15f;
+    private const float StickIdleAlpha = 0.35f;   // resting ghost: shows where the stick lives
 
     private const float PrimarySize = 200f;
     private const float SecondarySize = 170f;
@@ -234,7 +241,8 @@ public class TouchControls : MonoBehaviour
         _stick.BaseGroup = baseGroup;
         _stick.Travel = StickTravel;
         _stick.OnAxes = OnStickAxes;
-        baseGo.SetActive(false);
+        _stick.IdleAlpha = StickIdleAlpha;
+        _stick.Rest();
     }
 
     private void OnStickAxes(Vector2 raw)
@@ -242,16 +250,18 @@ public class TouchControls : MonoBehaviour
         var provider = Provider;
         if (provider == null) return;
 
-        // Per-axis curve, no circular normalisation: a thumb in the corner
-        // means full throttle AND full turn (the knob is clamped to the ring,
-        // the axes are not).
+        // Stick up = turn left (rotation -1), down = turn right, right = more
+        // throttle, left = less. Per-axis curve, no circular normalisation: a
+        // thumb in the corner means full throttle AND full turn (the knob is
+        // clamped to the ring, the axes are not).
         provider.SetStick(new Vector2(
-            MobileInputProvider.Curve(raw.x, StickDeadZone, 1f, StickExpo),
-            MobileInputProvider.Curve(raw.y, StickDeadZone, 1f, StickExpo)));
+            -MobileInputProvider.Curve(raw.y, StickDeadZone, 1f, StickExpo),
+            MobileInputProvider.Curve(raw.x, StickDeadZone, 1f, StickExpo)));
     }
 
-    /// <summary>Floating stick (D7): the base appears where the thumb lands,
-    /// the knob follows within <see cref="Travel"/>, release fades the base.</summary>
+    /// <summary>Floating stick (D7): the base jumps to where the thumb lands,
+    /// the knob follows within <see cref="Travel"/>, release fades the base
+    /// back to a dim ghost in the middle of the zone.</summary>
     private class StickZone : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler
     {
         public RectTransform Base;
@@ -259,9 +269,12 @@ public class TouchControls : MonoBehaviour
         public CanvasGroup BaseGroup;
         public float Travel;
         public System.Action<Vector2> OnAxes;
+        public float IdleAlpha;
 
         private RectTransform _rect;
         private int _pointer = int.MinValue;
+        private int _touchId = NoTouch;
+        private int _pressFrame;
         private Vector2 _origin;
         private Coroutine _fade;
 
@@ -275,15 +288,22 @@ public class TouchControls : MonoBehaviour
             Release();
         }
 
+        private void Update()
+        {
+            if (_pointer != int.MinValue && !TouchStillDown(_touchId, _pressFrame)) Release();
+        }
+
         public void OnPointerDown(PointerEventData e)
         {
             if (_pointer != int.MinValue) return;   // one finger owns the stick
             if (!ToLocal(e, out var local)) return;
 
             _pointer = e.pointerId;
+            _touchId = TouchIdOf(e);
+            _pressFrame = Time.frameCount;
             _origin = local;
             if (_fade != null) StopCoroutine(_fade);
-            Base.gameObject.SetActive(true);
+            _fade = null;
             BaseGroup.alpha = 1f;
             Base.anchoredPosition = local;
             Knob.anchoredPosition = Vector2.zero;
@@ -312,12 +332,21 @@ public class TouchControls : MonoBehaviour
         {
             bool wasHeld = _pointer != int.MinValue;
             _pointer = int.MinValue;
+            _touchId = NoTouch;
             OnAxes?.Invoke(Vector2.zero);
             if (!wasHeld || Base == null) return;
 
             Knob.anchoredPosition = Vector2.zero;
             if (isActiveAndEnabled) _fade = StartCoroutine(FadeBase());
-            else Base.gameObject.SetActive(false);
+            else Rest();
+        }
+
+        /// <summary>Dim ghost at the zone centre - the stick is always findable.</summary>
+        public void Rest()
+        {
+            Base.anchoredPosition = Vector2.zero;
+            Knob.anchoredPosition = Vector2.zero;
+            BaseGroup.alpha = IdleAlpha;
         }
 
         private IEnumerator FadeBase()
@@ -329,7 +358,7 @@ public class TouchControls : MonoBehaviour
                 BaseGroup.alpha = 1f - t / BaseFadeSeconds;
                 yield return null;
             }
-            Base.gameObject.SetActive(false);
+            Rest();
             _fade = null;
         }
 
@@ -470,6 +499,27 @@ public class TouchControls : MonoBehaviour
         target.localScale = Vector3.one;
     }
 
+    private const int NoTouch = -1;
+
+    /// <summary>Touchscreen touch id behind a uGUI pointer, or <see cref="NoTouch"/>
+    /// for mouse/pen (editor, Device Simulator) - those have no watchdog.</summary>
+    private static int TouchIdOf(PointerEventData e) =>
+        e is ExtendedPointerEventData x && x.pointerType == UIPointerType.Touch ? x.touchId : NoTouch;
+
+    /// <summary>Is the finger that pressed a control still on the glass? The
+    /// press frame always counts as down, so a one-frame tap still fires.</summary>
+    private static bool TouchStillDown(int touchId, int pressFrame)
+    {
+        if (touchId == NoTouch || Time.frameCount == pressFrame) return true;
+        var screen = Touchscreen.current;
+        if (screen == null) return false;
+        foreach (var touch in screen.touches)
+        {
+            if (touch.isInProgress && touch.touchId.ReadValue() == touchId) return true;
+        }
+        return false;
+    }
+
     /// <summary>Hold-to-fire button. Pointer-down starts holding, the matching
     /// pointer-up (delivered even after the finger slid off) ends it.</summary>
     private class Trigger : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
@@ -483,16 +533,25 @@ public class TouchControls : MonoBehaviour
         public System.Action<int, bool> OnHeld;
 
         private int _pointer = int.MinValue;
+        private int _touchId = NoTouch;
+        private int _pressFrame;
 
         private void OnDisable()
         {
             Release();
         }
 
+        private void Update()
+        {
+            if (_pointer != int.MinValue && !TouchStillDown(_touchId, _pressFrame)) Release();
+        }
+
         public void OnPointerDown(PointerEventData e)
         {
             if (_pointer != int.MinValue) return;
             _pointer = e.pointerId;
+            _touchId = TouchIdOf(e);
+            _pressFrame = Time.frameCount;
             OnHeld?.Invoke(Slot, true);
         }
 
@@ -506,6 +565,7 @@ public class TouchControls : MonoBehaviour
         {
             if (_pointer == int.MinValue) return;
             _pointer = int.MinValue;
+            _touchId = NoTouch;
             OnHeld?.Invoke(Slot, false);
         }
     }
