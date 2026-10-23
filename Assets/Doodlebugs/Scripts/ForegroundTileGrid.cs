@@ -13,6 +13,19 @@ public class ForegroundTileGrid : MonoBehaviour
 {
     private readonly Dictionary<int, ForegroundTile> _tiles = new();
 
+    /// <summary>Bumped on every tile build of this copy. A tile that flew off
+    /// as debris checks it on landing: same generation, the cell is still
+    /// its own and it parks back there; otherwise the copy wears a different
+    /// sprite now and the tile is destroyed.</summary>
+    public int Generation { get; private set; }
+
+    /// <summary>Call before building a fresh set of tiles under this copy.</summary>
+    public void BeginBuild()
+    {
+        Generation++;
+        _tiles.Clear();
+    }
+
     private static int Key(int col, int row) => (col << 12) ^ row;
 
     public void Register(ForegroundTile tile) => _tiles[Key(tile.Col, tile.Row)] = tile;

@@ -176,7 +176,13 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 - Planes fly **behind** the foreground (render order), bullets collide with it.
   Bullets sit on the `Bullet` layer (8); the 2D collision matrix lets
   `Foreground` collide with `Bullet` only, so planes never touch the tiles
-- On bullet hit: `ForegroundTile` destroys itself (local, non-networked — visual only)
+- On bullet hit: `ForegroundTile` flies off as debris (local, non-networked —
+  visual only). When the flight ends the tile parks back under its copy
+  **disabled** (`ReturnHome`) and the next off-screen wrap re-enables it -
+  that is the heal. `ForegroundTileGrid.Generation` tells a landing tile
+  whether its copy was rebuilt meanwhile (arena change → the tile is
+  destroyed instead). Never `Destroy` a tile at the end of its flight: that
+  made every hole permanent and a round ground the terrain down to nothing
 - Colliders are `BoxCollider2D` auto-generated per tile from sprite alpha;
   every copy root carries a kinematic `Rigidbody2D` (`useFullKinematicContacts`)
   so the tiles are fixtures of one body. Never let them become static
@@ -414,6 +420,15 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   element colour. Flipbooks fall back `Effects/<element>/<kind>` →
   `Effects/metal/<kind>` → the legacy `explosion.prefab`. Sounds fall back to
   the generic procedural clips. A build with no generated art still runs.
+- **Hitbox = the opaque pixels of the drawn sprite** (`Bullet.FitHitbox`,
+  alpha > 64, cached per sprite, floor 0.25 world units per axis). The
+  prefab's `BoxCollider2D` is sized for the legacy 1289 px tracer at the
+  prefab's tiny scale; `ApplyArtScale` scales the object ~3.5x for the 32 px
+  art and a box riding along with it was 19 x 7.5 units (v2.8–v2.9.1: one
+  shot bit a quarter of the terrain, bullets stopped in empty air ten units
+  short of a cloud, planes were hit from across the screen). Projectile
+  textures must stay Read/Write for the pixel scan. Bullet body uses
+  Continuous collision - at sniper speed a shot moves ~1 unit per step.
 - Eight weapons draw as **six forms** (`ElementProfile.SpriteForm`): tracer
   (MG, Twin MG), pellet (Flak, Heavy Flak), bomb, bolt (Sniper), rocket,
   mine. Sounds collapse further into two groups, `gun` and `heavy` (D6) -
@@ -449,6 +464,12 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   `BackgroundManager.SelectRandomBackground()` at battle start and at the top
   of every intermission (terrain rebuild pops behind the hangar overlay).
   `SelectRandomBackground` never repeats the current index.
+- Warm-up (Waiting lobby): the arena changes **only on FLY out of the
+  hangar** (`BackgroundManager.ServerOnWarmUpFlyOut`, called by
+  `GameHUD.HideHangarForWarmup` on the host; the first FLY keeps the arena
+  drawn at host start, every later one walks the playlist). There is no
+  timer any more - the synchronous terrain rebuild (~1300 tiles) is a
+  visible hitch, so it must land on the hangar transition, never mid-flight.
 - **Asset sizes:** background 4096×2732 px landscape PNG (Sprite, PPU 100,
   pivot Center, Read/Write OFF — it is only stretched by `ScreenSetup`).
   Foreground strip: 4096 px wide, height = terrain height in px
@@ -498,6 +519,12 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 
 ## Known Issues
 
-- Cloud collision: occasionally de-syncs visually (investigate if reproduced).
+- Cloud collision: until 2026-10-23 bullets stopped ~10 units short of a
+  cloud because of the oversized bullet hitbox (see Projectile Elements). If
+  a visual de-sync is still reproduced, suspect server-vs-client cloud
+  position: the server moves a Dynamic `Rigidbody2D` by writing
+  `transform.position` every FixedUpdate and clients interpolate the
+  `NetworkTransform`; the impact spark (`PlayHitFxClientRpc`) is drawn at
+  the server's position, the bullet sprite vanishes at the interpolated one.
   Bullets got `NetworkRigidbody2D` in v2.8.2 (clients used to simulate them
   locally while the NetworkTransform overwrote them) - re-check the bullet half

@@ -194,7 +194,7 @@ public class MatchManager : MonoBehaviour
     {
         if (!IsServer()) return;
         Phase = GamePhase.WaitingForPlayers;
-        BackgroundManager.Instance?.ServerResetWarmUpRotation();
+        BackgroundManager.Instance?.ServerResetWarmUpArena();
         Debug.Log("[MatchManager] Phase -> WaitingForPlayers (host started)");
         StartCoroutine(OpenWaitingHangarDelayed());
     }
@@ -362,7 +362,7 @@ public class MatchManager : MonoBehaviour
         _roundEnding = false;
         IsIntermission = false;
         Phase = GamePhase.WaitingForPlayers;
-        BackgroundManager.Instance?.ServerResetWarmUpRotation();
+        BackgroundManager.Instance?.ServerResetWarmUpArena();
 
         float frozenTime = ScoreManager.Instance != null ? ScoreManager.Instance.MatchTime : 0f;
         BroadcastThroughServerPlayer(p =>
@@ -376,7 +376,7 @@ public class MatchManager : MonoBehaviour
     private void HandleLocalSessionEnded()
     {
         Phase = GamePhase.WaitingForPlayers;
-        BackgroundManager.Instance?.ServerResetWarmUpRotation();
+        BackgroundManager.Instance?.ServerResetWarmUpArena();
         IsIntermission = false;
         IsRunOver = false;
         _clientRoundWins.Clear();
@@ -411,11 +411,11 @@ public class MatchManager : MonoBehaviour
             }
         }
 
-        // Waiting lobby: rotate the arena so the FLY warm-up does not sit on
-        // one map for the whole wait.
+        // Waiting lobby: keep the warm-up bot alive. (The arena rotates on
+        // FLY out of the hangar - BackgroundManager.ServerOnWarmUpFlyOut -
+        // not on a timer here, so the rebuild never lands mid-flight.)
         if (Phase == GamePhase.WaitingForPlayers)
         {
-            BackgroundManager.Instance?.ServerTickWarmUpRotation();
             BotManager.Instance?.ServerTickWarmUp();
         }
         else

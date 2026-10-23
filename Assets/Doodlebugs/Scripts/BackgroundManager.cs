@@ -32,19 +32,16 @@ public class BackgroundManager : NetworkBehaviour
     [Range(0f, 1f)]
     [SerializeField] private float adStripRunChance = 0.1f;
 
-    [Tooltip("Seconds between arena changes while the lobby is waiting and a " +
-             "player may be out on the FLY warm-up. 0 disables the rotation. " +
-             "Each change also re-rolls the ad wall.")]
-    [SerializeField] private float warmUpRotateSeconds = 45f;
-
-    [Tooltip("Ad-wall probability per warm-up rotation (and for the arena drawn " +
-             "at host start). A lone device lives in the warm-up, so this is " +
-             "the rate a solo player actually sees - keep it as rare as a run's.")]
+    [Tooltip("Ad-wall probability per warm-up arena change (every FLY out of " +
+             "the Waiting hangar after the first) and for the arena drawn at " +
+             "host start. A lone device lives in the warm-up, so this is the " +
+             "rate a solo player actually sees - keep it as rare as a run's.")]
     [Range(0f, 1f)]
     [SerializeField] private float warmUpAdStripChance = 0.1f;
 
-    // Server-only deadline for the warm-up rotation; 0 = not armed yet.
-    private float _warmUpRotateAt;
+    // Server-only: whether the arena on screen has already been flown in the
+    // warm-up. The first FLY keeps the arena drawn at host start.
+    private bool _warmUpArenaFlown;
 
     // The host's arena playlist: profile indices, in the order the run cycles
     // through them. Absent = deselected. Server-write like every other synced
@@ -270,6 +267,7 @@ public class BackgroundManager : NetworkBehaviour
         // twice.
         if (adStrip >= 0) _lastAdStrip = adStrip;
         _adStripIndex.Value = adStrip;
+        _warmUpArenaFlown = false;
 
         Debug.Log($"[BackgroundManager] Arena {_sceneCursor + 1}/{_sceneOrder.Count} -> profile index {newIndex}, ad strip {adStrip}");
         _backgroundIndex.Value = newIndex;
@@ -289,34 +287,26 @@ public class BackgroundManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Server: advance the warm-up arena on a timer while the lobby waits.
-    /// One arena for the whole wait goes stale fast, and the FLY warm-up is
-    /// the one place a player sits in the world with nothing else happening.
-    /// Rotating through SelectRandomBackground means it walks the host's
-    /// playlist and re-rolls the ad wall at warmUpAdStripChance, and both
-    /// indices are already synced, so every device follows.
+    /// Server: the host pressed FLY in the Waiting hangar. One arena for the
+    /// whole wait goes stale, so every FLY after the first walks the host's
+    /// playlist one step (SelectRandomBackground - re-rolls the ad wall at
+    /// warmUpAdStripChance; both indices are synced, so every device follows).
     ///
-    /// Called from MatchManager's server tick; harmless if the lobby is
-    /// empty, and the Waiting hangar is opaque so a rebuild behind it is
-    /// invisible anyway.
+    /// This used to run on a 45 s timer while the lobby waited, which put the
+    /// terrain rebuild - a visible hitch on a phone - in the middle of the
+    /// flight. Hung off the hangar transition it lands on the frame the
+    /// opaque overlay closes, where nothing is moving yet.
     /// </summary>
-    public void ServerTickWarmUpRotation()
+    public void ServerOnWarmUpFlyOut()
     {
-        if (!IsServer || warmUpRotateSeconds <= 0f) return;
-
-        _warmUpRotateAt = _warmUpRotateAt <= 0f
-            ? Time.time + warmUpRotateSeconds
-            : _warmUpRotateAt;
-
-        if (Time.time < _warmUpRotateAt) return;
-
-        _warmUpRotateAt = Time.time + warmUpRotateSeconds;
-        SelectRandomBackground();
+        if (!IsServer) return;
+        if (_warmUpArenaFlown) SelectRandomBackground();
+        _warmUpArenaFlown = true;
     }
 
-    /// <summary>Server: forget the warm-up timer, so a fresh wait gets a full
-    /// interval rather than rotating the instant it starts.</summary>
-    public void ServerResetWarmUpRotation() => _warmUpRotateAt = 0f;
+    /// <summary>Server: a fresh wait starts on the arena that is up - the
+    /// first FLY keeps it rather than skipping it.</summary>
+    public void ServerResetWarmUpArena() => _warmUpArenaFlown = false;
 
     /// <summary>
     /// Manually set a specific background (for testing or UI selection).

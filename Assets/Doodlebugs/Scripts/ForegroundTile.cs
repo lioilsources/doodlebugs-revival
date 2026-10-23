@@ -22,9 +22,59 @@ public class ForegroundTile : MonoBehaviour
 
     private ForegroundTileGrid _grid;
 
+    // Where the tile stood before it flew off. Debris used to be destroyed at
+    // the end of its flight, which made the wrap-time "heal" a no-op: the
+    // scroller re-enables the copy's children, but a destroyed tile is no
+    // longer one, so every hole was permanent and a round ground the terrain
+    // down to nothing. Now the tile parks back home, disabled, and the next
+    // wrap puts it up again like any other hole.
+    private Transform _homeParent;
+    private Vector3 _homeLocalPos;
+    private int _generation;
+    private bool _countedFalling;
+
     private void Awake()
     {
         _grid = GetComponentInParent<ForegroundTileGrid>();
+        _homeParent = transform.parent;
+        _homeLocalPos = transform.localPosition;
+        _generation = _grid != null ? _grid.Generation : 0;
+    }
+
+    private void OnDestroy()
+    {
+        // A tile torn down mid-flight (arena change, shutdown) must not leave
+        // the rubble cap permanently lower.
+        if (_countedFalling) _falling--;
+    }
+
+    /// <summary>
+    /// End of the flight: back under the copy at the original cell, disabled,
+    /// to be healed on the next wrap. If the copy was rebuilt meanwhile
+    /// (arena change) the cell belongs to a different sprite - then go.
+    /// </summary>
+    private void ReturnHome()
+    {
+        if (_countedFalling)
+        {
+            _falling--;
+            _countedFalling = false;
+        }
+
+        bool homeStands = _homeParent != null && _grid != null && _grid.Generation == _generation;
+        if (!homeStands)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        transform.SetParent(_homeParent, false);
+        transform.localPosition = _homeLocalPos;
+        transform.localRotation = Quaternion.identity;
+        transform.localScale = Vector3.one;
+        var col = GetComponent<Collider2D>();
+        if (col != null) col.enabled = true;
+        gameObject.SetActive(false);
     }
 
     private void OnEnable()
@@ -124,6 +174,7 @@ public class ForegroundTile : MonoBehaviour
         }
 
         _falling++;
+        _countedFalling = true;
         transform.SetParent(null, true);
         var col = GetComponent<Collider2D>();
         if (col != null) col.enabled = false;
@@ -152,8 +203,7 @@ public class ForegroundTile : MonoBehaviour
             yield return null;
         }
 
-        _falling--;
-        Destroy(gameObject);
+        ReturnHome();
     }
 
     public void LaunchDebris()
@@ -188,6 +238,6 @@ public class ForegroundTile : MonoBehaviour
             yield return null;
         }
 
-        Destroy(gameObject);
+        ReturnHome();
     }
 }

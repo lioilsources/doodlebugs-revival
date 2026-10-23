@@ -1601,6 +1601,13 @@ public class GameHUD : MonoBehaviour
 
     private void HideHangarForWarmup()
     {
+        // The arena changes here, on the way out of the opaque hangar, and
+        // nowhere else during the warm-up. Only the host waits, so this is
+        // the server.
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+        {
+            BackgroundManager.Instance?.ServerOnWarmUpFlyOut();
+        }
         if (_hangarOverlay != null) _hangarOverlay.SetActive(false);
         ShowHangarCornerButton();
         SfxManager.PlayTick();
