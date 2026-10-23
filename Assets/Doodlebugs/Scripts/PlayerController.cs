@@ -1101,52 +1101,6 @@ public class PlayerController : NetworkBehaviour, IDamagable
         }
     }
 
-    private void HandleExitGame()
-    {
-        //if (Input.GetKeyDown(KeyCode.Escape))
-        //{
-        //    // Exit the network state and return to the menu
-        //    if (IsServer) // Host
-        //    {
-        //        // All player should shutdown and exit
-        //        StartCoroutine(HostShutdown());
-        //    }
-        //    else
-        //    {
-        //        Shutdown();
-        //    }
-        //}
-    }
-
-    IEnumerator HostShutdown()
-    {
-        // Tell the clients to shutdown
-        ShutdownClientRpc();
-
-        // Wait some time for the message to get to clients
-        yield return new WaitForSeconds(0.5f);
-
-        // Shutdown server/host
-        Shutdown();
-    }
-
-    // Shutdown the network session and load the menu scene
-    void Shutdown()
-    {
-        NetworkManager.Singleton.Shutdown();
-        // TODO
-        //LoadingSceneManager.Instance.LoadScene(SceneName.Menu, false);
-    }
-
-    [ClientRpc]
-    void ShutdownClientRpc()
-    {
-        if (IsServer)
-            return;
-
-        Shutdown();
-    }
-
     /// <summary>
     /// Sync score to all clients. Called by ScoreManager.
     /// </summary>
