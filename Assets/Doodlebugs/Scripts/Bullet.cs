@@ -22,6 +22,27 @@ public class Bullet : NetworkBehaviour
     private Vector3 _baseScale;
     private bool _exploded;
 
+    // The hitbox. The prefab's box is sized for the legacy tracer texture at
+    // the prefab's own (tiny) scale; authored art is scaled UP by
+    // ApplyArtScale, and a box that just rode along with it was 19 x 7.5
+    // world units for a tracer - a third of the screen width. That is what
+    // bit a quarter of the terrain out of every foreground hit and stopped
+    // bullets in the empty air ten units short of a cloud.
+    private BoxCollider2D _box;
+    private Vector2 _baseBoxSize;
+    private Vector2 _baseBoxOffset;
+
+    // Opaque rect of each projectile sprite in sprite-local units, computed
+    // once from its pixels - the generated art has transparent padding and a
+    // tracer's stroke is 3 of its 16 rows, so the sprite bounds would still
+    // be several times too tall.
+    private static readonly Dictionary<Sprite, Rect> _opaqueRectCache = new();
+
+    // Floor for the hitbox in world units: a 3 px tracer stroke scaled to a
+    // tenth of a unit would slip between a plane's collider and the
+    // physics step. The legacy box was 0.53 x 0.24.
+    private const float MinHitboxWorld = 0.25f;
+
     // Which WeaponProfile drives this projectile (physics on the server,
     // scale/tint everywhere). Synced so late-arriving visuals stay correct.
     private NetworkVariable<int> _weaponId = new NetworkVariable<int>((int)WeaponType.MG,
@@ -59,6 +80,12 @@ public class Bullet : NetworkBehaviour
         _baseScale = transform.localScale;
         var sr = GetComponent<SpriteRenderer>();
         if (sr != null) _defaultSprite = sr.sprite;
+        _box = GetComponent<BoxCollider2D>();
+        if (_box != null)
+        {
+            _baseBoxSize = _box.size;
+            _baseBoxOffset = _box.offset;
+        }
     }
 
     public override void OnNetworkSpawn()
@@ -175,6 +202,7 @@ public class Bullet : NetworkBehaviour
             else
             {
                 if (_defaultSprite != null) sr.sprite = _defaultSprite;
+                RestoreLegacyHitbox();
                 // No art for this pair - the element still shows as a tint.
                 sr.color = Element == ProjectileElement.Metal
                     ? profile.ProjectileTint
@@ -203,6 +231,81 @@ public class Bullet : NetworkBehaviour
         float target = ElementProfile.WorldLength(profile.Type) * profile.ProjectileScale;
         float scale = target / spriteLong;
         transform.localScale = new Vector3(scale, scale, _baseScale.z);
+        FitHitbox(sprite, scale);
+    }
+
+    /// <summary>
+    /// Hitbox = the opaque part of the drawn sprite. Set in sprite-local
+    /// units, so the object's scale carries it to exactly the size on
+    /// screen; only a floor keeps a hairline stroke from being skipped over.
+    /// </summary>
+    private void FitHitbox(Sprite sprite, float scale)
+    {
+        if (_box == null) return;
+
+        Rect r = OpaqueRect(sprite);
+        float minLocal = MinHitboxWorld / Mathf.Max(scale, 0.0001f);
+        _box.size = new Vector2(Mathf.Max(r.width, minLocal), Mathf.Max(r.height, minLocal));
+        _box.offset = r.center;
+    }
+
+    /// <summary>The prefab's box again, for the legacy shared tracer the
+    /// prefab's scale was calibrated for.</summary>
+    private void RestoreLegacyHitbox()
+    {
+        if (_box == null) return;
+        _box.size = _baseBoxSize;
+        _box.offset = _baseBoxOffset;
+    }
+
+    /// <summary>
+    /// Bounding rect of the pixels with alpha above a quarter, relative to
+    /// the sprite pivot and in world units at scale 1. Falls back to the
+    /// sprite bounds when the texture is not readable or fully transparent.
+    /// The projectile textures are at most 48 x 32 px, so reading them once
+    /// is nothing; the result is cached per sprite.
+    /// </summary>
+    private static Rect OpaqueRect(Sprite sprite)
+    {
+        if (_opaqueRectCache.TryGetValue(sprite, out var cached)) return cached;
+
+        var b = sprite.bounds;
+        var result = new Rect(b.min.x, b.min.y, b.size.x, b.size.y);
+
+        var tex = sprite.texture;
+        if (tex != null && tex.isReadable)
+        {
+            var rect = sprite.rect;
+            int x0 = Mathf.RoundToInt(rect.x), y0 = Mathf.RoundToInt(rect.y);
+            int w = Mathf.RoundToInt(rect.width), h = Mathf.RoundToInt(rect.height);
+            var px = tex.GetPixels32();
+            int minX = int.MaxValue, minY = int.MaxValue, maxX = -1, maxY = -1;
+            for (int y = 0; y < h; y++)
+            {
+                int row = (y0 + y) * tex.width + x0;
+                for (int x = 0; x < w; x++)
+                {
+                    if (px[row + x].a <= 64) continue;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+            if (maxX >= 0)
+            {
+                float ppu = sprite.pixelsPerUnit > 0.01f ? sprite.pixelsPerUnit : 100f;
+                var pivot = sprite.pivot;   // pixels, relative to the sprite rect
+                result = new Rect(
+                    (minX - pivot.x) / ppu,
+                    (minY - pivot.y) / ppu,
+                    (maxX + 1 - minX) / ppu,
+                    (maxY + 1 - minY) / ppu);
+            }
+        }
+
+        _opaqueRectCache[sprite] = result;
+        return result;
     }
 
     private static Sprite CachedSprite(string path)

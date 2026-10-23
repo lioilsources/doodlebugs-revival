@@ -278,7 +278,10 @@ public class ForegroundScroller : MonoBehaviour
             var t = _copies[i].transform;
             t.position = new Vector3(maxRight - _spriteBoundsMinX, t.position.y, 0f);
 
-            // Reactivate all tiles so foreground "heals" when scrolling back
+            // Reactivate all tiles so foreground "heals" when scrolling back.
+            // Debris parks back under its copy, disabled, when its flight
+            // ends (ForegroundTile.ReturnHome), so this really does restore
+            // every hole the copy picked up on its way across the screen.
             ReactivateTiles(_copies[i]);
 
             // Reset epoch so absolute position stays accurate after wrap
@@ -341,6 +344,7 @@ public class ForegroundScroller : MonoBehaviour
 
         var grid = sr.GetComponent<ForegroundTileGrid>();
         if (grid == null) grid = sr.gameObject.AddComponent<ForegroundTileGrid>();
+        grid.BeginBuild();
 
         for (int row = 0; row < rows; row++)
         {
