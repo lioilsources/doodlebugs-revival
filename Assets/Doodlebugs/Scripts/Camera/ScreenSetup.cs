@@ -148,6 +148,12 @@ public class ScreenSetup : MonoBehaviour
             new Vector2(camPos.x, camPos.y + topY + borderThickness / 2f),
             new Vector2(camWidth * 2, borderThickness));
 
+        // Everything else reaches the edges through ArenaBounds, never by name.
+        for (int i = 0; i < borders.Length; i++)
+        {
+            ArenaBounds.Register((ArenaBounds.Edge)i, borders[i].GetComponent<Collider2D>());
+        }
+
         Debug.Log($"[ScreenSetup] Borders created. CamSize: {camWidth:F1}x{camHeight:F1}, OrthoSize: {cam.orthographicSize:F1}, " +
                   $"Aspect: {cam.aspect:F2}, Screen: {Screen.width}x{Screen.height}, " +
                   $"Ground.y: {(camPos.y + bottomY - borderThickness / 2f):F1}, CamBottom: {(camPos.y - halfHeight):F1}");

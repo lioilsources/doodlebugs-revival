@@ -22,6 +22,12 @@ public class Bullet : NetworkBehaviour
     private Vector3 _baseScale;
     private bool _exploded;
 
+    // One terrain bite per projectile. A bullet overlapping two or three
+    // tiles in its contact step used to fire every one of their 2x2 bites,
+    // so a "2x2 hole" was really 3x3 or 4x3; the first tile to see the
+    // bullet now claims it. Local per instance, so every peer bites once.
+    private bool _terrainBitten;
+
     // The hitbox. The prefab's box is sized for the legacy tracer texture at
     // the prefab's own (tiny) scale; authored art is scaled UP by
     // ApplyArtScale, and a box that just rode along with it was 19 x 7.5
@@ -70,6 +76,15 @@ public class Bullet : NetworkBehaviour
     /// Runs on every client (ForegroundTile checks it locally).</summary>
     public bool IsArmed => Time.time - _spawnTime >= Profile.ArmDelay;
 
+    /// <summary>ForegroundTile: true for the first tile this projectile
+    /// touches, false for every other one in the same contact step.</summary>
+    public bool TryClaimTerrainBite()
+    {
+        if (_terrainBitten) return false;
+        _terrainBitten = true;
+        return true;
+    }
+
     /// <summary>The prefab's shared bullet sprite, restored when a pooled
     /// bullet switches from an override weapon back to a plain one.</summary>
     private Sprite _defaultSprite;
@@ -92,6 +107,7 @@ public class Bullet : NetworkBehaviour
     {
         base.OnNetworkSpawn();
         _spawnTime = Time.time;
+        _terrainBitten = false;
 
         _weaponId.OnValueChanged += OnWeaponChanged;
         _elementId.OnValueChanged += OnElementChanged;
@@ -413,7 +429,7 @@ public class Bullet : NetworkBehaviour
         // Not armed yet (mine) - pass through everything
         if (Time.time - _spawnTime < Profile.ArmDelay) return;
 
-        if (other.gameObject.name == "Space") return;
+        if (ArenaBounds.IsSpace(other)) return;
 
         // Clouds block bullets (cover), but a falling bomb drops through and
         // a mine drifts inside one - that's where it hides.

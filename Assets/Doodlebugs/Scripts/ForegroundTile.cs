@@ -33,12 +33,52 @@ public class ForegroundTile : MonoBehaviour
     private int _generation;
     private bool _countedFalling;
 
+    private SpriteRenderer _sr;
+    private BoxCollider2D _box;
+
     private void Awake()
     {
+        _sr = GetComponent<SpriteRenderer>();
+        _box = GetComponent<BoxCollider2D>();
         _grid = GetComponentInParent<ForegroundTileGrid>();
         _homeParent = transform.parent;
         _homeLocalPos = transform.localPosition;
         _generation = _grid != null ? _grid.Generation : 0;
+    }
+
+    /// <summary>
+    /// (Re)make this tile one cell of its copy. ForegroundScroller pools the
+    /// tile objects per copy and calls this for every opaque cell of the new
+    /// strip, so an arena change re-sprites ~1300 tiles instead of
+    /// destroying and creating them.
+    /// </summary>
+    public void Assign(ForegroundTileGrid grid, int col, int row, Vector3 localPos, Sprite sprite)
+    {
+        _grid = grid;
+        Col = col;
+        Row = row;
+        _homeParent = grid.transform;
+        _homeLocalPos = localPos;
+        _generation = grid.Generation;
+        IsFalling = false;
+
+        if (transform.parent != _homeParent) transform.SetParent(_homeParent, false);
+        transform.localPosition = localPos;
+        transform.localRotation = Quaternion.identity;
+        transform.localScale = Vector3.one;
+
+        if (_sr != null) _sr.sprite = sprite;
+        if (_box != null)
+        {
+            // Edge cells are narrower than a full tile; the box must follow
+            // the sprite, not keep whatever size it auto-took at creation.
+            _box.size = sprite.bounds.size;
+            _box.offset = Vector2.zero;
+            _box.enabled = true;
+        }
+
+        gameObject.SetActive(true);
+        grid.Register(this);
     }
 
     private void OnDestroy()
@@ -91,6 +131,10 @@ public class ForegroundTile : MonoBehaviour
         // Arming mines pass through terrain without carving it
         var bullet = other.GetComponent<Bullet>();
         if (bullet != null && !bullet.IsArmed) return;
+
+        // One bite per projectile - the neighbours it also overlaps this
+        // step stay put, so a shot really takes 2x2 and not 3x3.
+        if (bullet != null && !bullet.TryClaimTerrainBite()) return;
 
         // Destroy 2x2 square: hit tile + right + below + below-right
         int[,] offsets = { { 0, 0 }, { 1, 0 }, { 0, -1 }, { 1, -1 } };
@@ -211,6 +255,17 @@ public class ForegroundTile : MonoBehaviour
         if (IsFalling) return;
         IsFalling = true;
         _grid?.Unregister(this);
+
+        // Same rubble cap as Topple - a Heavy Flak crater used to put every
+        // one of its tiles in the air at once, uncounted. Past the cap the
+        // tile just vanishes (still a child, so it heals on the next wrap).
+        if (_falling >= MaxFalling)
+        {
+            gameObject.SetActive(false);
+            return;
+        }
+        _falling++;
+        _countedFalling = true;
 
         // Detach from the scrolling parent, keeping current world position
         transform.SetParent(null, true);

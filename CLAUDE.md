@@ -157,7 +157,11 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   `NetworkTransform` (non-authority instances become kinematic); a `NetworkTransform`
   on a dynamic body is simulated AND overwritten on clients
 - No `SendMessage()` — use direct calls or events
-- No hardcoded collision strings — prefer tags or layers
+- No hardcoded collision strings — prefer tags or layers. The four arena
+  edges go through `ArenaBounds` (`Scripts/Camera/ArenaBounds.cs`:
+  `ArenaBounds.Left/Right/Ground/Space`, `ArenaBounds.IsSpace(collider)`),
+  registered by `ScreenSetup` when it creates the border objects - never
+  `GameObject.Find("Left")` or `collider.name == "Space"` again
 - Test multiplayer changes with ParrelSync before committing
 
 ## Foreground / Parallax Destruction Layer
@@ -183,6 +187,14 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   whether its copy was rebuilt meanwhile (arena change → the tile is
   destroyed instead). Never `Destroy` a tile at the end of its flight: that
   made every hole permanent and a round ground the terrain down to nothing
+- Tiles are **pooled per copy** and the strip layout (opaque cells + tile
+  sprites) is cached per strip sprite (`ForegroundScroller.GetLayout`): an
+  arena change re-assigns the existing tile objects (`ForegroundTile.Assign`)
+  instead of destroying ~1300 and creating ~1300, and the 5 MB `GetPixels32`
+  scan runs once per strip per session, not per copy per round. One bite per
+  projectile (`Bullet.TryClaimTerrainBite`) - the first tile to see the bullet
+  takes the 2x2, neighbours overlapped in the same step stay. Both debris
+  paths count toward the 80-tile rubble cap.
 - Colliders are `BoxCollider2D` auto-generated per tile from sprite alpha;
   every copy root carries a kinematic `Rigidbody2D` (`useFullKinematicContacts`)
   so the tiles are fixtures of one body. Never let them become static
@@ -520,11 +532,11 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 ## Known Issues
 
 - Cloud collision: until 2026-10-23 bullets stopped ~10 units short of a
-  cloud because of the oversized bullet hitbox (see Projectile Elements). If
-  a visual de-sync is still reproduced, suspect server-vs-client cloud
-  position: the server moves a Dynamic `Rigidbody2D` by writing
-  `transform.position` every FixedUpdate and clients interpolate the
-  `NetworkTransform`; the impact spark (`PlayHitFxClientRpc`) is drawn at
-  the server's position, the bullet sprite vanishes at the interpolated one.
+  cloud because of the oversized bullet hitbox (see Projectile Elements).
+  Clouds are now Kinematic bodies moved with `MovePosition` on the server
+  (`Cloud.prefab` + `Cloud.FixedUpdate`; teleports also set `rb.position`).
+  If a visual de-sync is still reproduced, what is left is NetworkTransform
+  interpolation on clients: the impact spark (`PlayHitFxClientRpc`) is drawn
+  at the server's position, the bullet sprite vanishes at the interpolated one.
   Bullets got `NetworkRigidbody2D` in v2.8.2 (clients used to simulate them
   locally while the NetworkTransform overwrote them) - re-check the bullet half

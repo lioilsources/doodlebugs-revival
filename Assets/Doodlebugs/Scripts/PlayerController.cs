@@ -249,11 +249,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
         networkTransform = GetComponent<ClientNetworkTransform>();
         planeCollider = GetComponent<BoxCollider2D>();
 
-        // Cache boundary references (get Collider2D to use bounds)
-        var leftObj = GameObject.Find("Left");
-        var rightObj = GameObject.Find("Right");
-        if (leftObj != null) leftBoundary = leftObj.GetComponent<Collider2D>();
-        if (rightObj != null) rightBoundary = rightObj.GetComponent<Collider2D>();
+        // Cache boundary references (Collider2D, for bounds)
+        leftBoundary = ArenaBounds.Left;
+        rightBoundary = ArenaBounds.Right;
 
         // Limit FPS for stability
         Application.targetFrameRate = 60;
@@ -1035,12 +1033,12 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (collider.gameObject.layer == LayerMask.NameToLayer("Foreground"))
             return;
 
-        if (collider.name == "Space")
+        if (ArenaBounds.IsSpace(collider))
         {
             SpaceClientRpc();
         }
 
-        if (collider.name == "Left" && rightBoundary != null)
+        if (ArenaBounds.Is(collider, ArenaBounds.Edge.Left) && rightBoundary != null)
         {
             // Hit left edge -> wrap to right side
             float margin = 0.1f;
@@ -1049,7 +1047,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             WrapToPositionClientRpc(targetX);
         }
 
-        if (collider.name == "Right" && leftBoundary != null)
+        if (ArenaBounds.Is(collider, ArenaBounds.Edge.Right) && leftBoundary != null)
         {
             // Hit right edge -> wrap to left side
             float margin = 0.1f;
@@ -1097,7 +1095,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (!IsServer)
             return;
 
-        if (collider.name == "Space")
+        if (ArenaBounds.IsSpace(collider))
         {
             LeaveSpaceClientRpc();
         }
