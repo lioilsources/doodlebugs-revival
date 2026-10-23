@@ -51,13 +51,13 @@ public class BoundaryManager : MonoBehaviour
     {
         // Auto-find boundaries if not assigned
         if (leftBoundary == null)
-            leftBoundary = GameObject.Find("Left")?.transform;
+            leftBoundary = ArenaBounds.Left?.transform;
         if (rightBoundary == null)
-            rightBoundary = GameObject.Find("Right")?.transform;
+            rightBoundary = ArenaBounds.Right?.transform;
         if (groundBoundary == null)
-            groundBoundary = GameObject.Find("Ground")?.transform;
+            groundBoundary = ArenaBounds.Ground?.transform;
         if (spaceBoundary == null)
-            spaceBoundary = GameObject.Find("Space")?.transform;
+            spaceBoundary = ArenaBounds.Space?.transform;
 
         UpdateBoundaries();
     }

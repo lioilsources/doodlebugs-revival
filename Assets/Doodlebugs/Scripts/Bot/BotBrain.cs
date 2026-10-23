@@ -114,10 +114,8 @@ public class BotBrain : MonoBehaviour, IInputProvider
 
         // The borders are runtime objects from ScreenSetup; their lines depend
         // on the host's aspect ratio, so they are read, never assumed.
-        var ground = GameObject.Find("Ground");
-        var space = GameObject.Find("Space");
-        var groundCol = ground != null ? ground.GetComponent<Collider2D>() : null;
-        var spaceCol = space != null ? space.GetComponent<Collider2D>() : null;
+        var groundCol = ArenaBounds.Ground;
+        var spaceCol = ArenaBounds.Space;
         _groundTop = groundCol != null ? groundCol.bounds.max.y : -9f;
         _spaceBottom = spaceCol != null ? spaceCol.bounds.min.y : 17f;
 

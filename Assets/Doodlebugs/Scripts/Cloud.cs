@@ -33,9 +33,14 @@ public class Cloud : NetworkBehaviour
     private float _spriteHalfWidth = 1f; // Will be calculated from SpriteRenderer
     private NetworkTransform _networkTransform;
 
+    // Kinematic (prefab): the server moves it with MovePosition, so Box2D
+    // sees a moving body with contact continuity instead of a Dynamic body
+    // teleported by transform writes every step - the last suspect for
+    // bullets stopping where no cloud is drawn.
+    private Rigidbody2D _rb;
+
     void Awake()
     {
-        Debug.Log($"[Cloud] Awake called on {gameObject.name}");
 
         // Cache sprite half width (at scale 1)
         var sr = GetComponent<SpriteRenderer>();
@@ -50,6 +55,7 @@ public class Cloud : NetworkBehaviour
 
         // Cache NetworkTransform for teleport
         _networkTransform = GetComponent<NetworkTransform>();
+        _rb = GetComponent<Rigidbody2D>();
     }
 
     /// <summary>Re-read the sprite's half width after a skin change.
@@ -67,20 +73,14 @@ public class Cloud : NetworkBehaviour
 
     void Start()
     {
-        Debug.Log($"[Cloud] Start called, IsServer={IsServer}, IsSpawned={IsSpawned}, speed={_speed}, scale={_scale}");
 
         // Cache right boundary
-        var rightObj = GameObject.Find("Right");
-        if (rightObj != null)
-        {
-            _rightBoundary = rightObj.GetComponent<Collider2D>();
-        }
+        _rightBoundary = ArenaBounds.Right;
     }
 
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
-        Debug.Log($"[Cloud] OnNetworkSpawn called, IsServer={IsServer}, hasPending={_hasPendingInit}");
 
         // The skin may already ride in the spawn snapshot (no OnValueChanged
         // then) or arrive as a delta a tick later - handle both.
@@ -94,7 +94,6 @@ public class Cloud : NetworkBehaviour
             _scale = _pendingScale;
             transform.localScale = Vector3.one * _scale;
             ApplyScaleClientRpc(_scale);
-            Debug.Log($"[Cloud] Applied pending init: speed={_speed}, scale={_scale}");
         }
     }
 
@@ -126,9 +125,16 @@ public class Cloud : NetworkBehaviour
         if (!IsServer) return;
         if (!IsSpawned) return;
 
-        // Move right
-        Vector3 movement = Vector3.right * _speed * Time.fixedDeltaTime;
-        transform.position += movement;
+        // Move right - through the body, so the step is a motion, not a teleport
+        Vector2 movement = Vector2.right * _speed * Time.fixedDeltaTime;
+        if (_rb != null && _rb.bodyType == RigidbodyType2D.Kinematic)
+        {
+            _rb.MovePosition(_rb.position + movement);
+        }
+        else
+        {
+            transform.position += (Vector3)movement;
+        }
 
         // Check if left edge of cloud passed right boundary
         if (_rightBoundary != null)
@@ -151,7 +157,6 @@ public class Cloud : NetworkBehaviour
     /// </summary>
     public void Initialize(float speed, float scale)
     {
-        Debug.Log($"[Cloud] Initialize called: speed={speed}, scale={scale}, IsSpawned={IsSpawned}, IsServer={IsServer}");
 
         _pendingSpeed = speed;
         _pendingScale = scale;
@@ -166,11 +171,9 @@ public class Cloud : NetworkBehaviour
         if (IsSpawned && IsServer)
         {
             ApplyScaleClientRpc(scale);
-            Debug.Log($"[Cloud] Applied via RPC: speed={speed}, scale={scale}");
         }
         else
         {
-            Debug.Log($"[Cloud] Stored as pending (will apply on spawn)");
         }
     }
 
@@ -188,6 +191,7 @@ public class Cloud : NetworkBehaviour
     {
         if (!IsServer) return;
         transform.position = newPosition;
+        if (_rb != null) _rb.position = newPosition;
     }
 
     /// <summary>
@@ -207,5 +211,8 @@ public class Cloud : NetworkBehaviour
         {
             transform.position = newPosition;
         }
+        // The body must jump too, or the next MovePosition walks on from the
+        // old spot and the cloud snaps back for a step.
+        if (_rb != null) _rb.position = newPosition;
     }
 }

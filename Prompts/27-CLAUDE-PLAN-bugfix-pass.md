@@ -1,11 +1,15 @@
 # Bug-fix pass (v2.9.x) — findings, priorities, plan
 
-Status (2026-10-23): **P0 implemented** on branch
-`fix/bullet-hitbox-fg-heal-warmup-arena` (this session; compile-checked with
+Status (2026-10-23): **P0 shipped** as v2.9.2 (PR #53). **P1 + P2
+implemented** the same day on `fix/bugfix-pass-p1-p2` (compile-checked with
 Roslyn against the Unity reference DLLs, NOT run in the editor - the Mac in
-use has no Rosetta 2, so batchmode refuses to start). P1-P3 are proposals
-with the owner's call in §3. No release per fix: the branch merges to main
-and devices take the next tag from TestFlight.
+use has no Rosetta 2, so batchmode refuses to start): strip layout cache +
+tile pooling, Kinematic clouds moved with `MovePosition`, first-tile-wins
+bite, rubble cap on both debris paths, `ArenaBounds` instead of name
+lookups, cloud log spam gone. Left open: `PlayerController.Shutdown` (P2,
+decide with Phase 1). Device verification per §5 + §7 is the owner's next
+step; no release per fix - the branch merges to main and devices take the
+next tag from TestFlight.
 
 ## 1. What was reported, what it actually was
 
@@ -73,6 +77,23 @@ Not bugs, already on the roadmap: single device never leaves "SEARCHING"
    localScale ≈ 1.1 x 0.25 (tracer), ≈ 0.5 x 0.5 (pellet).
 6. Phone: no frame drop during the warm-up flight (Profiler or the Phase 0
    budget overlay).
+
+## 7. Verification of the P1/P2 batch (owner)
+
+1. Round change / FLY: terrain rebuild is a shorter hitch than before (the
+   Profiler shows no `GetPixels32` after the first visit of a strip and no
+   Instantiate/Destroy spikes beyond the first build). Watch the hierarchy:
+   each copy keeps its `Tile_*` children across arena changes, count
+   changes only by the difference between strips.
+2. Shoot a corner between two tiles: exactly one 2x2 bite.
+3. Heavy Flak into a billboard tower: at most 80 tiles in the air; the rest
+   vanish and reappear after the wrap.
+4. Clouds: drift as before, wrap at the left edge without a one-step snap
+   back; respawn-on-cloud positions unchanged; bullets stop on the cloud
+   outline on host AND on a ParrelSync client.
+5. Plane wrap at Left/Right, Space (up) and Ground still behave; the bot
+   still turns at the ground/space lines (it reads them via ArenaBounds).
+6. Console: no `[Cloud]` lines per wrap.
 
 ## 6. Risks
 

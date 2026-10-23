@@ -91,10 +91,8 @@ public class ForegroundScroller : MonoBehaviour
             return;
         }
 
-        // Clean up any existing tiles before reassigning sprites
-        foreach (var copy in _copies)
-            DestroyTiles(copy);
-
+        // Existing tiles are reused by BuildTiles (pooled per copy), so no
+        // teardown here.
         _lastCamWidth = cam.orthographicSize * 2f * cam.aspect;
         EnsureCopyCount(RequiredCopyCount(cam));
 
@@ -297,54 +295,62 @@ public class ForegroundScroller : MonoBehaviour
     }
 
     /// <summary>
-    /// Splits a SpriteRenderer's sprite into a grid of small tile GameObjects.
-    /// Each tile has its own SpriteRenderer, BoxCollider2D, and ForegroundTile script.
-    /// The main SpriteRenderer is disabled since tiles replace it visually.
+    /// One opaque cell of a strip: where it sits under the copy and what it
+    /// shows. Computed once per strip sprite and kept for the session.
     /// </summary>
-    private void BuildTiles(SpriteRenderer sr)
+    private struct TileCell
     {
-        if (sr.sprite == null) return;
+        public int Col, Row;
+        public Vector3 LocalPos;
+        public Sprite Sprite;
+    }
 
-        // Visible by default; disabled again below once tiles replace it.
-        // Stays enabled as a fallback when the texture is not readable.
-        sr.enabled = true;
+    private sealed class StripLayout
+    {
+        public int TileSize;
+        public List<TileCell> Cells;
+    }
 
-        var tex = sr.sprite.texture;
+    // The pixel scan (GetPixels32 on a 2048 px strip is a 5 MB copy) and
+    // the Sprite.Create per cell used to run per copy per arena change -
+    // three times ~1300 cells every round. Now once per strip, ever.
+    private static readonly Dictionary<Sprite, StripLayout> _layouts = new();
+
+    private StripLayout GetLayout(Sprite sprite)
+    {
+        if (_layouts.TryGetValue(sprite, out var layout) && layout.TileSize == tilePixelSize)
+            return layout;
+
+        var tex = sprite.texture;
         if (!tex.isReadable)
         {
             Debug.LogWarning("[ForegroundScroller] Sprite texture is not readable. " +
                              "Enable Read/Write in texture import settings.");
-            return;
+            return null;
         }
 
         int texW = tex.width;
-        int texH = tex.height;
         var pixels = tex.GetPixels32();
-        float ppu = sr.sprite.pixelsPerUnit;
+        float ppu = sprite.pixelsPerUnit;
 
         // Account for possible texture downscaling (maxTextureSize < source)
-        float ppuScale = (float)texW / sr.sprite.rect.width;
+        float ppuScale = (float)texW / sprite.rect.width;
         float adjustedPPU = ppu * ppuScale;
 
         // Sprite rect in downscaled texture coordinates
-        int spriteX0 = Mathf.RoundToInt(sr.sprite.rect.x * ppuScale);
-        int spriteY0 = Mathf.RoundToInt(sr.sprite.rect.y * ppuScale);
-        int spriteW  = Mathf.RoundToInt(sr.sprite.rect.width  * ppuScale);
-        int spriteH  = Mathf.RoundToInt(sr.sprite.rect.height * ppuScale);
+        int spriteX0 = Mathf.RoundToInt(sprite.rect.x * ppuScale);
+        int spriteY0 = Mathf.RoundToInt(sprite.rect.y * ppuScale);
+        int spriteW  = Mathf.RoundToInt(sprite.rect.width  * ppuScale);
+        int spriteH  = Mathf.RoundToInt(sprite.rect.height * ppuScale);
 
         // Sprite pivot in downscaled texture coordinates
         // (Sprite.pivot returns pixel coords within the original texture)
-        float pivotX = sr.sprite.pivot.x * ppuScale;
-        float pivotY = sr.sprite.pivot.y * ppuScale;
+        float pivotX = sprite.pivot.x * ppuScale;
+        float pivotY = sprite.pivot.y * ppuScale;
 
-        int foregroundLayer = LayerMask.NameToLayer("Foreground");
         int cols = Mathf.CeilToInt((float)spriteW / tilePixelSize);
         int rows = Mathf.CeilToInt((float)spriteH / tilePixelSize);
-        int tileCount = 0;
-
-        var grid = sr.GetComponent<ForegroundTileGrid>();
-        if (grid == null) grid = sr.gameObject.AddComponent<ForegroundTileGrid>();
-        grid.BeginBuild();
+        var cells = new List<TileCell>(cols * rows / 2);
 
         for (int row = 0; row < rows; row++)
         {
@@ -359,38 +365,107 @@ public class ForegroundScroller : MonoBehaviour
                     continue;
 
                 var rect = new Rect(px, py, w, h);
-                var pivot = new Vector2(0.5f, 0.5f);
-                var tileSprite = Sprite.Create(tex, rect, pivot, adjustedPPU);
+                var tileSprite = Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), adjustedPPU);
 
                 // Position relative to sprite pivot (which is at local 0,0)
-                float localX = (px + w * 0.5f - pivotX) / adjustedPPU;
-                float localY = (py + h * 0.5f - pivotY) / adjustedPPU;
-
-                var tileGO = new GameObject($"Tile_{col}_{row}");
-                tileGO.transform.SetParent(sr.transform, false);
-                tileGO.transform.localPosition = new Vector3(localX, localY, 0f);
-                tileGO.layer = foregroundLayer;
-
-                var tileSR = tileGO.AddComponent<SpriteRenderer>();
-                tileSR.sprite = tileSprite;
-                tileSR.sortingLayerName = sr.sortingLayerName;
-                tileSR.sortingOrder = sr.sortingOrder;
-
-                var box = tileGO.AddComponent<BoxCollider2D>();
-                box.isTrigger = true;
-
-                var ft = tileGO.AddComponent<ForegroundTile>();
-                ft.Col = col;
-                ft.Row = row;
-                grid.Register(ft);
-                tileCount++;
+                cells.Add(new TileCell
+                {
+                    Col = col,
+                    Row = row,
+                    LocalPos = new Vector3(
+                        (px + w * 0.5f - pivotX) / adjustedPPU,
+                        (py + h * 0.5f - pivotY) / adjustedPPU,
+                        0f),
+                    Sprite = tileSprite,
+                });
             }
         }
 
+        layout = new StripLayout { TileSize = tilePixelSize, Cells = cells };
+        _layouts[sprite] = layout;
+        return layout;
+    }
+
+    // Scratch list for BuildTiles - the pool of a copy's existing tiles.
+    private readonly List<ForegroundTile> _poolScratch = new();
+
+    /// <summary>
+    /// Gives a copy the tiles of its current sprite: one GameObject per
+    /// opaque cell with SpriteRenderer, BoxCollider2D and ForegroundTile.
+    /// Tiles already under the copy are re-assigned in place (pool); only
+    /// the shortfall is created, and only the surplus destroyed. Debris in
+    /// flight is detached from the copy and so never re-assigned - it checks
+    /// the grid generation when it lands. The main SpriteRenderer stays
+    /// disabled since tiles replace it visually.
+    /// </summary>
+    private void BuildTiles(SpriteRenderer sr)
+    {
+        if (sr.sprite == null) return;
+
+        // Visible by default; disabled again below once tiles replace it.
+        // Stays enabled as a fallback when the texture is not readable.
+        sr.enabled = true;
+
+        var layout = GetLayout(sr.sprite);
+        if (layout == null) return;
+
+        int foregroundLayer = LayerMask.NameToLayer("Foreground");
+
+        var grid = sr.GetComponent<ForegroundTileGrid>();
+        if (grid == null) grid = sr.gameObject.AddComponent<ForegroundTileGrid>();
+        grid.BeginBuild();
+
+        _poolScratch.Clear();
+        for (int i = 0; i < sr.transform.childCount; i++)
+        {
+            var ft = sr.transform.GetChild(i).GetComponent<ForegroundTile>();
+            if (ft != null) _poolScratch.Add(ft);
+        }
+
+        int used = 0;
+        foreach (var cell in layout.Cells)
+        {
+            ForegroundTile ft;
+            if (used < _poolScratch.Count)
+            {
+                ft = _poolScratch[used];
+            }
+            else
+            {
+                ft = CreateTileObject(sr, foregroundLayer);
+            }
+            used++;
+
+            ft.name = $"Tile_{cell.Col}_{cell.Row}";
+            ft.Assign(grid, cell.Col, cell.Row, cell.LocalPos, cell.Sprite);
+        }
+
+        // The new strip has fewer cells than the old one: drop the rest.
+        for (int i = used; i < _poolScratch.Count; i++)
+        {
+            Destroy(_poolScratch[i].gameObject);
+        }
+        _poolScratch.Clear();
+
         // Disable main SpriteRenderer - tiles replace it visually
         sr.enabled = false;
+    }
 
-        // Debug.Log($"[ForegroundScroller] Built {tileCount} tiles for {sr.name} ({cols}x{rows} grid)");
+    private static ForegroundTile CreateTileObject(SpriteRenderer sr, int layer)
+    {
+        var tileGO = new GameObject("Tile");
+        tileGO.transform.SetParent(sr.transform, false);
+        tileGO.layer = layer;
+
+        var tileSR = tileGO.AddComponent<SpriteRenderer>();
+        tileSR.sortingLayerName = sr.sortingLayerName;
+        tileSR.sortingOrder = sr.sortingOrder;
+
+        var box = tileGO.AddComponent<BoxCollider2D>();
+        box.isTrigger = true;
+
+        // Last, so its Awake finds the renderer and the collider.
+        return tileGO.AddComponent<ForegroundTile>();
     }
 
     private bool HasOpaquePixel(Color32[] pixels, int texWidth, int startX, int startY, int w, int h)

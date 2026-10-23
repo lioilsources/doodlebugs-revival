@@ -90,11 +90,8 @@ public class CloudManager : MonoBehaviour
         // Wait for boundaries to be created by ScreenSetup
         while (_leftBoundary == null || _rightBoundary == null)
         {
-            var leftObj = GameObject.Find("Left");
-            var rightObj = GameObject.Find("Right");
-
-            if (leftObj != null) _leftBoundary = leftObj.GetComponent<Collider2D>();
-            if (rightObj != null) _rightBoundary = rightObj.GetComponent<Collider2D>();
+            _leftBoundary = ArenaBounds.Left;
+            _rightBoundary = ArenaBounds.Right;
 
             yield return new WaitForSeconds(0.1f);
         }
@@ -218,7 +215,6 @@ public class CloudManager : MonoBehaviour
             float scale = (i < cloudScales.Length) ? cloudScales[i] : cloudScales[cloudScales.Length - 1];
             cloud.transform.localScale = Vector3.one * scale;
 
-            Debug.Log($"[CloudManager] Local cloud {i}: scale={scale}, speed={localCloud.speed}");
 
             _localClouds.Add(cloud);
         }
@@ -295,7 +291,6 @@ public class CloudManager : MonoBehaviour
 
         // Set pending values before spawn
         cloudScript.Initialize(speed, scale);
-        Debug.Log($"[CloudManager] Networked cloud: scale={scale}, speed={speed}");
 
         // Now spawn the network object
         var netObj = cloud.GetComponent<NetworkObject>();
@@ -305,7 +300,6 @@ public class CloudManager : MonoBehaviour
         }
 
         _clouds.Add(cloudScript);
-        Debug.Log($"[CloudManager] Spawned networked cloud at ({x}, {y}) with speed={speed}, scale={scale}");
     }
 
     /// <summary>Hand out this round's skins.
@@ -437,7 +431,6 @@ public class CloudManager : MonoBehaviour
             newScale
         );
 
-        Debug.Log($"[CloudManager] Cloud wrapped to left edge at y={cloud.transform.position.y}, scale={newScale}");
     }
 
     /// <summary>
@@ -621,17 +614,8 @@ public class LocalCloudMovement : MonoBehaviour
 
     void Start()
     {
-        var rightObj = GameObject.Find("Right");
-        if (rightObj != null)
-        {
-            _rightBoundary = rightObj.GetComponent<Collider2D>();
-        }
-
-        var leftObj = GameObject.Find("Left");
-        if (leftObj != null)
-        {
-            _leftBoundary = leftObj.GetComponent<Collider2D>();
-        }
+        _rightBoundary = ArenaBounds.Right;
+        _leftBoundary = ArenaBounds.Left;
 
         // Cache sprite half width (at scale 1)
         var sr = GetComponent<SpriteRenderer>();
