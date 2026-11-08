@@ -75,7 +75,7 @@ Připravit hru Doodlebugs Revival pro mobilní platformy (iOS, Android) s podpor
 ### Aktuální stav:
 - Netcode for GameObjects 1.5.2
 - UTP transport na portu 7777
-- Hardcoded IP: 192.168.88.18
+- Hardcoded IP: <LAN IP hostitele>
 - Manuální výběr Host/Client tlačítky
 
 ### Navržené řešení: **UDP Broadcast Discovery**
