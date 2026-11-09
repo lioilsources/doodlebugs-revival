@@ -1,0 +1,14 @@
+Prends un ami, installez-vous dans la même pièce et combattez.
+
+Doodlebugs Revival est un jeu d'arcade de biplans de la Première Guerre mondiale en multijoueur local. De deux à huit appareils se trouvent automatiquement : pas de compte, pas de serveur, pas de réglages. Lancez le jeu sur les deux, ils s'associent en quelques secondes et le ciel se remplit de balles traçantes.
+
+- MANCHES RAPIDES : le premier à 3 victoires ou jusqu'à la cloche des 3 minutes. Séries en 5 manches avec podium pour le champion.
+- LE HANGAR : entre les manches, choisis une nouvelle arme (mitrailleuses, flak, bombes, roquettes, mines) et dépense des points en bouclier, coque, moteur et cadence de tir.
+- HORIZON DESTRUCTIBLE : chaque manche change d'arène et de mur d'affiches rétro peintes à la main. Démolis les tours morceau par morceau.
+- BONUS : les avions abattus lâchent des ballons de santé, bouclier, réparation et dégâts accrus.
+- COOP SUR LE CANAPÉ : jusqu'à 4 pilotes sur un ordinateur avec manettes et clavier ; gyroscope ou tactile sur téléphone et tablette.
+- CŒUR 8 BITS : musique chiptune procédurale, pixel art épuré et rythme « encore une manche ».
+
+Sans pub, sans achats intégrés, sans collecte de données. Juste des avions.
+
+Remarque : pour jouer contre d'autres, il faut un second appareil sur le même réseau.

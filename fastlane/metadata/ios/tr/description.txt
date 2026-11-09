@@ -1,0 +1,14 @@
+Bir arkadaşını al, aynı odada oturun ve savaşın.
+
+Doodlebugs Revival, Birinci Dünya Savaşı çift kanatlı uçaklarıyla yerel çok oyunculu bir arcade nişancı oyunudur. İki ila sekiz cihaz birbirini otomatik bulur: hesap, sunucu veya kurulum yok. Oyunu ikisinde de aç, birkaç saniyede eşleşirler ve gökyüzü iz bırakan mermilerle dolar.
+
+- HIZLI TURLAR: 3 düşürmeye ilk ulaşan ya da 3 dakikalık zil çalana kadar. Şampiyon için podyumlu, 5 turluk seriler.
+- HANGAR: turlar arasında yeni bir silah seç (makineli tüfek, uçaksavar, bomba, roket, mayın) ve puanları kalkan, gövde, motor ve atış hızı geliştirmelerine harca.
+- YIKILABİLİR MANZARA: her tur arena ve elle boyanmış retro reklam panolarından oluşan duvar değişir. Kuleleri parça parça yık.
+- GÜÇ ARTIRICILAR: düşürülen uçaklar can, kalkan, onarım ve fazladan hasar balonları bırakır.
+- KOLTUKTA İŞ BİRLİĞİ: tek bilgisayarda 4 pilota kadar, gamepad ve klavye ile; telefon ve tabletlerde jiroskop veya dokunmatik kontrol.
+- 8 BİT KALP: prosedürel chiptune müzik, düz piksel sanatı ve "bir tur daha" temposu.
+
+Reklam yok, uygulama içi satın alma yok, veri toplama yok. Sadece uçaklar.
+
+Not: başkalarına karşı oynamak için aynı ağda ikinci bir cihaz gerekir.

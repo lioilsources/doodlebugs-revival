@@ -1,0 +1,14 @@
+Ota kaveri, istukaa samaan huoneeseen ja taistelkaa.
+
+Doodlebugs Revival on ensimmäisen maailmansodan kaksitasoilla pelattava arcade-räiskintä paikallisena moninpelinä. Kahdesta kahdeksaan laitetta löytää toisensa automaattisesti: ei tilejä, palvelimia eikä asetuksia. Käynnistä peli molemmilla, ne yhdistyvät sekunneissa ja taivas täyttyy jälkiluodeista.
+
+- NOPEAT KIERROKSET: ensimmäinen kolmeen pudotukseen tai kunnes 3 minuutin kello soi. Viiden voiton sarjat ja palkintokorokkeella mestari.
+- HALLI: valitse kierrosten välillä uusi ase (konekiväärit, ilmatorjunta, pommit, raketit, miinat) ja käytä pisteet kilpeen, runkoon, moottoriin ja tulinopeuteen.
+- TUHOUTUVA SILHUETTI: joka kierros vaihtaa areenan ja käsinmaalatut retrojulisteet. Ammu tornit palasiksi.
+- BONUKSET: alas ammutut koneet pudottavat ilmapalloja, jotka antavat terveyttä, kilven, korjauksen ja lisävahinkoa.
+- SOHVAYHTEISPELI: jopa 4 lentäjää yhdellä tietokoneella ohjaimilla ja näppäimistöllä; kallistus- tai kosketusohjaus puhelimilla ja tableteilla.
+- 8-BITTINEN SYDÄN: proseduraalinen chiptune-musiikki, litteä pikselitaide ja "vielä yksi kierros" -rytmi.
+
+Ei mainoksia, ei sovelluksensisäisiä ostoksia, ei tietojen keräystä. Vain lentokoneita.
+
+Huom: toisia vastaan pelaaminen vaatii toisen laitteen samassa verkossa.
