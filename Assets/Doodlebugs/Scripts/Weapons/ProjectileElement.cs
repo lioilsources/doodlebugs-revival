@@ -79,6 +79,7 @@ public class ElementProfile
     public ProjectileElement Element;
     public string Key;                    // Resources subfolder + tools/weapons key
     public string DisplayName;            // picker badge - keep it short
+    public string LocalizedName => Loc.T("element." + Key, DisplayName);
     public Color Tint;                    // fallback projectile tint + badge colour
     public string ShootSfxGunKey;         // Resources/Sfx/Elements/<key>/...
     public TrailPreset Trail;

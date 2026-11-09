@@ -3,7 +3,7 @@
 
 Follows the Ol1nLLM playbook (backend/comfyui/README.md): POST /prompt to
 enqueue, poll GET /history/{id}, download via GET /view. On the LAN the API
-at 192.168.88.66:8188 is reachable directly; the public comfyui.ol1n.com
+at http://$SPARK_HOST:8188 is reachable directly; the public comfyui.ol1n.com
 sits behind Cloudflare Access and is not needed from here.
 
 Default job renders the DOODLE AIR airliner background — the rights-clean
@@ -18,6 +18,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import time
 import urllib.parse
 import urllib.request
@@ -25,7 +26,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-API = "http://192.168.88.66:8188"
+# SPARK_HOST comes from the environment (see .env.example); COMFYUI_URL overrides it.
+API = os.environ.get("COMFYUI_URL") or f"http://{os.environ.get('SPARK_HOST', 'localhost')}:8188"
 HERE = Path(__file__).parent
 ROOT = HERE.parents[1]
 FONT = HERE / "fonts/AlfaSlabOne-Regular.ttf"

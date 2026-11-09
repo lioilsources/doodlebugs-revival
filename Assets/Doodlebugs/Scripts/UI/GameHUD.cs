@@ -69,11 +69,8 @@ public class GameHUD : MonoBehaviour
         {
             if (_pixelFont == null)
             {
-                _pixelFont = Resources.Load<Font>("Fonts/PressStart2P");
-                if (_pixelFont == null)
-                {
-                    _pixelFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-                }
+                // Loc swaps in the OS-backed font for languages the pixel font can't draw
+                _pixelFont = Loc.PickFont(Resources.Load<Font>("Fonts/PressStart2P"));
             }
             return _pixelFont;
         }
@@ -205,7 +202,7 @@ public class GameHUD : MonoBehaviour
         if (_hangarMode != MatchManager.HangarMode.Searching) return;
         if (_hangarCountdownText != null)
         {
-            _hangarCountdownText.text = message.ToUpperInvariant();
+            _hangarCountdownText.text = Loc.Upper(message);
         }
     }
 
@@ -218,11 +215,11 @@ public class GameHUD : MonoBehaviour
         switch (role)
         {
             case Doodlebugs.Network.LocalRole.Host:
-                _hangarRoleText.text = "HOST";
+                _hangarRoleText.text = Loc.T("hud.host");
                 _hangarRoleText.color = new Color(1f, 0.85f, 0.3f);
                 break;
             case Doodlebugs.Network.LocalRole.Client:
-                _hangarRoleText.text = "CLIENT";
+                _hangarRoleText.text = Loc.T("hud.client");
                 _hangarRoleText.color = new Color(0.45f, 0.8f, 1f);
                 break;
             default:
@@ -747,16 +744,16 @@ public class GameHUD : MonoBehaviour
                 line = $"{ColoredName(killerClientId, killerLocalIdx)} >< {victim}";
                 break;
             case KillCause.Collision:
-                line = $"{victim} MIDAIR CRASH";
+                line = Loc.F("feed.midair", victim);
                 break;
             case KillCause.Ground:
-                line = $"{victim} CRASHED";
+                line = Loc.F("feed.crashed", victim);
                 break;
             case KillCause.OutOfBounds:
-                line = $"{victim} LOST";
+                line = Loc.F("feed.lost", victim);
                 break;
             default:
-                line = $"{victim} DOWN";
+                line = Loc.F("feed.down", victim);
                 break;
         }
 
@@ -911,7 +908,7 @@ public class GameHUD : MonoBehaviour
                 entry.shooting = entry.player.GetComponent<Shooting>();
             }
             entry.weaponText.text = entry.shooting != null
-                ? entry.shooting.CurrentWeapon.DisplayName
+                ? entry.shooting.CurrentWeapon.LocalizedName
                 : "";
         }
 
@@ -1133,7 +1130,7 @@ public class GameHUD : MonoBehaviour
             ? PlayerColorManager.Instance.GetColor(result.WinnerClientId, result.WinnerLocalPlayerIndex)
             : PlayerColorManager.GetColorByIndex((int)result.WinnerClientId + result.WinnerLocalPlayerIndex);
 
-        _resultsWinnerText.text = $"WINNER: {winnerName} ({result.WinnerKills})";
+        _resultsWinnerText.text = Loc.F("results.winner", winnerName, result.WinnerKills);
         _resultsWinnerText.color = winnerColor;
 
         // Standings from current HUD ranking (already sorted by performance)
@@ -1162,7 +1159,7 @@ public class GameHUD : MonoBehaviour
         }
 
         bool runOver = MatchManager.Instance != null && MatchManager.Instance.IsRunOver;
-        _resultsCountdownText.text = runOver ? "RUN OVER!" : "HANGAR OPENING...";
+        _resultsCountdownText.text = runOver ? Loc.T("results.run_over") : Loc.T("results.hangar_opening");
         _resultsOverlay.SetActive(true);
     }
 
@@ -1198,13 +1195,13 @@ public class GameHUD : MonoBehaviour
         var bg = _podiumOverlay.AddComponent<Image>();
         bg.color = new Color(0f, 0f, 0f, 0.88f);
 
-        CreatePodiumText("Title", "RUN OVER", 34, new Vector2(0, 130), new Color(1f, 0.85f, 0.3f));
+        CreatePodiumText("Title", Loc.T("podium.run_over"), 34, new Vector2(0, 130), new Color(1f, 0.85f, 0.3f));
 
         Color winnerColor = PlayerColorManager.Instance != null
             ? PlayerColorManager.Instance.GetColor(winnerClientId, 0)
             : PlayerColorManager.GetColorByIndex((int)winnerClientId);
         CreatePodiumText("Champion",
-            $"CHAMPION: {ResolvePlayerName(winnerClientId, 0)}", 22, new Vector2(0, 70), winnerColor);
+            Loc.F("podium.champion", ResolvePlayerName(winnerClientId, 0)), 22, new Vector2(0, 70), winnerColor);
 
         // Standings by round wins
         var mm = MatchManager.Instance;
@@ -1216,7 +1213,7 @@ public class GameHUD : MonoBehaviour
             entries.Sort((a, b) => b.Value.CompareTo(a.Value));
             for (int i = 0; i < entries.Count; i++)
             {
-                lines.Add($"{i + 1}. {ResolvePlayerName(entries[i].Key, 0)}  {entries[i].Value} WINS");
+                lines.Add($"{i + 1}. {ResolvePlayerName(entries[i].Key, 0)}  " + Loc.F("podium.wins", entries[i].Value));
             }
         }
         var standings = CreatePodiumText("Standings", string.Join("\n", lines), 14,
@@ -1225,7 +1222,7 @@ public class GameHUD : MonoBehaviour
         standings.GetComponent<RectTransform>().sizeDelta = new Vector2(900, 140);
 
         _podiumCountdownText = CreatePodiumText("Countdown",
-            $"NEW RUN IN {MatchManager.PodiumSeconds}", 16, new Vector2(0, -150),
+            Loc.F("podium.new_run_in", MatchManager.PodiumSeconds), 16, new Vector2(0, -150),
             new Color(1f, 0.85f, 0.3f));
     }
 
@@ -1266,7 +1263,7 @@ public class GameHUD : MonoBehaviour
         var bg = _resultsOverlay.AddComponent<Image>();
         bg.color = new Color(0f, 0f, 0f, 0.75f);
 
-        CreateOverlayText("Title", "ROUND OVER", 32, new Vector2(0, 140), Color.white);
+        CreateOverlayText("Title", Loc.T("results.round_over"), 32, new Vector2(0, 140), Color.white);
         _resultsWinnerText = CreateOverlayText("Winner", "", 22, new Vector2(0, 85), Color.white);
         _resultsWinsText = CreateOverlayText("Wins", "", 12, new Vector2(0, 52),
             new Color(1f, 1f, 1f, 0.7f));
@@ -1294,7 +1291,7 @@ public class GameHUD : MonoBehaviour
         {
             parts.Add($"{ColoredName(pair.Key, 0)} {pair.Value}");
         }
-        return $"WINS (TO {MatchManager.RoundWinsTarget}): " + string.Join(" · ", parts);
+        return Loc.F("results.wins_to", MatchManager.RoundWinsTarget, string.Join(" · ", parts));
     }
 
     private Text CreateOverlayText(string name, string content, int fontSize, Vector2 anchoredPos, Color color)
@@ -1366,7 +1363,7 @@ public class GameHUD : MonoBehaviour
         // Shared tick: podium countdown when the run is over, hangar otherwise
         if (_podiumCountdownText != null && _podiumOverlay != null)
         {
-            _podiumCountdownText.text = $"NEW RUN IN {secondsLeft}";
+            _podiumCountdownText.text = Loc.F("podium.new_run_in", secondsLeft);
             return;
         }
         if (_hangarCountdownText != null)
@@ -1374,13 +1371,13 @@ public class GameHUD : MonoBehaviour
             switch (_hangarMode)
             {
                 case MatchManager.HangarMode.PreBattle:
-                    _hangarCountdownText.text = $"BATTLE IN {secondsLeft}";
+                    _hangarCountdownText.text = Loc.F("hangar.battle_in", secondsLeft);
                     break;
                 case MatchManager.HangarMode.LateJoin:
-                    _hangarCountdownText.text = $"DEPLOY IN {secondsLeft}";
+                    _hangarCountdownText.text = Loc.F("hangar.deploy_in", secondsLeft);
                     break;
                 default:
-                    _hangarCountdownText.text = $"AUTO-START {secondsLeft}";
+                    _hangarCountdownText.text = Loc.F("hangar.auto_start", secondsLeft);
                     break;
             }
         }
@@ -1433,7 +1430,7 @@ public class GameHUD : MonoBehaviour
 
         if (_hangarReadyRows.TryGetValue(clientId, out var row) && row != null)
         {
-            row.text = "READY";
+            row.text = Loc.T("hangar.ready");
             row.color = ReadyGreen;
         }
         UpdateReadyCount();
@@ -1498,7 +1495,7 @@ public class GameHUD : MonoBehaviour
         // yet); the battle/results context stays dimly visible otherwise
         bg.color = new Color(0f, 0f, 0f, searching || waiting ? 1f : 0.82f);
 
-        string title = searching ? "DOODLEBUGS" : lateJoin ? "BATTLE IN PROGRESS" : "HANGAR";
+        string title = searching ? "DOODLEBUGS" : lateJoin ? Loc.T("hangar.battle_in_progress") : Loc.T("hangar.title");
         // The boot screen is the app's face and has the whole panel to itself,
         // so the title gets poster size there; hangar modes sit above a dense
         // draft/shop layout on 33px row spacing and stay modest.
@@ -1515,11 +1512,11 @@ public class GameHUD : MonoBehaviour
 
         // Status line: centered when there is no ready counter next to it
         string statusInit =
-            searching ? "SEARCHING FOR GAME..." :
-            waiting ? "WAITING FOR PLAYERS..." :
-            preBattle ? $"BATTLE IN {seconds}" :
-            lateJoin ? $"DEPLOY IN {seconds}" :
-            $"AUTO-START {MatchManager.HangarSeconds}";
+            searching ? Loc.T("hangar.searching") :
+            waiting ? Loc.T("hangar.waiting") :
+            preBattle ? Loc.F("hangar.battle_in", seconds) :
+            lateJoin ? Loc.F("hangar.deploy_in", seconds) :
+            Loc.F("hangar.auto_start", MatchManager.HangarSeconds);
         bool hasReadyCheck = preBattle || intermission;
         // Below the enlarged boot title the status drops to y=110 so the two
         // never touch (title half-height 32 reaches y=163).
@@ -1540,7 +1537,7 @@ public class GameHUD : MonoBehaviour
             return;
         }
 
-        string draftLabel = intermission ? "WEAPON FOR NEXT ROUND" : "PICK YOUR WEAPON";
+        string draftLabel = intermission ? Loc.T("hangar.weapon_next_round") : Loc.T("hangar.pick_weapon");
         CreateHangarText("DraftLabel", draftLabel, 11, new Vector2(0, 128),
             new Color(1f, 1f, 1f, 0.6f));
 
@@ -1594,7 +1591,7 @@ public class GameHUD : MonoBehaviour
 
     private void BuildFlyButton()
     {
-        var (button, _) = BuildHangarActionButton("FlyButton", "FLY",
+        var (button, _) = BuildHangarActionButton("FlyButton", Loc.T("hangar.fly"),
             new Color(0.12f, 0.3f, 0.45f, 1f));
         button.onClick.AddListener(HideHangarForWarmup);
     }
@@ -1642,14 +1639,14 @@ public class GameHUD : MonoBehaviour
             }
         });
 
-        CreateTextIn(_hangarCornerButton.transform, "Label", "HANGAR", 13, Vector2.zero, Color.white);
+        CreateTextIn(_hangarCornerButton.transform, "Label", Loc.T("hangar.title"), 13, Vector2.zero, Color.white);
     }
 
     // --- late-join deploy --------------------------------------------------------
 
     private void BuildJoinButton()
     {
-        var (button, label) = BuildHangarActionButton("JoinButton", "JOIN",
+        var (button, label) = BuildHangarActionButton("JoinButton", Loc.T("hangar.join"),
             new Color(0.12f, 0.4f, 0.16f, 1f));
         _readyButton = button;
         _readyButtonText = label;
@@ -1661,7 +1658,7 @@ public class GameHUD : MonoBehaviour
         if (_localReady) return;
         _localReady = true;
 
-        if (_readyButtonText != null) _readyButtonText.text = "DEPLOYING...";
+        if (_readyButtonText != null) _readyButtonText.text = Loc.T("hangar.deploying");
         if (_readyButton != null)
         {
             _readyButton.interactable = false;
@@ -1743,15 +1740,15 @@ public class GameHUD : MonoBehaviour
             int captured = weaponId;
             button.onClick.AddListener(() => SelectWeapon(captured));
 
-            string title = weaponId == currentId ? $"KEEP: {profile.DisplayName}" : profile.DisplayName;
+            string title = weaponId == currentId ? Loc.F("hangar.keep", profile.LocalizedName) : profile.LocalizedName;
             CreateTextIn(cardObj.transform, "Name", title, 13, new Vector2(0, 34), Color.white);
-            CreateTextIn(cardObj.transform, "Desc", profile.Description, 9, new Vector2(0, 8),
+            CreateTextIn(cardObj.transform, "Desc", profile.LocalizedDescription, 9, new Vector2(0, 8),
                 new Color(1f, 1f, 1f, 0.65f));
-            string stats = $"DMG {profile.Damage} · ROF {1f / profile.Cooldown:F1}/s" +
+            string stats = Loc.F("hangar.weapon_stats", profile.Damage, (1f / profile.Cooldown).ToString("F1", Loc.Culture)) +
                            (profile.PelletCount > 1 ? $" · x{profile.PelletCount}" : "");
             CreateTextIn(cardObj.transform, "Stats", stats, 9, new Vector2(0, -16),
                 new Color(1f, 0.75f, 0.4f));
-            CreateTextIn(cardObj.transform, "Sel", weaponId == currentId ? "SELECTED" : "", 9,
+            CreateTextIn(cardObj.transform, "Sel", weaponId == currentId ? Loc.T("hangar.selected") : "", 9,
                 new Vector2(0, -42), ReadyGreen);
 
             _weaponCards.Add((cardObj, cardBg, weaponId));
@@ -1780,7 +1777,7 @@ public class GameHUD : MonoBehaviour
         {
             cardBg.color = id == weaponId ? CardSelected : CardIdle;
             var sel = card.transform.Find("Sel")?.GetComponent<Text>();
-            if (sel != null) sel.text = id == weaponId ? "SELECTED" : "";
+            if (sel != null) sel.text = id == weaponId ? Loc.T("hangar.selected") : "";
         }
 
         SfxManager.PlayTick();
@@ -1860,7 +1857,7 @@ public class GameHUD : MonoBehaviour
 
         if (_runPointsText != null)
         {
-            _runPointsText.text = $"UPGRADES · RUN POINTS: {mm.LocalRunPoints}";
+            _runPointsText.text = Loc.F("hangar.run_points", mm.LocalRunPoints);
         }
 
         foreach (var (card, cardBg, levelText, type) in _upgradeCards)
@@ -1869,8 +1866,8 @@ public class GameHUD : MonoBehaviour
             bool maxed = level >= RunUpgrades.MaxLevel;
             bool affordable = mm.LocalRunPoints >= RunUpgrades.CostPoints;
 
-            levelText.text = maxed ? $"LV {level}/{RunUpgrades.MaxLevel} MAX"
-                                   : $"LV {level}/{RunUpgrades.MaxLevel} · COST {RunUpgrades.CostPoints}";
+            levelText.text = maxed ? Loc.F("hangar.level_max", level, RunUpgrades.MaxLevel)
+                                   : Loc.F("hangar.level_cost", level, RunUpgrades.MaxLevel, RunUpgrades.CostPoints);
             cardBg.color = maxed ? CardSelected
                 : affordable ? CardIdle
                 : new Color(0.07f, 0.07f, 0.09f, 0.95f);
@@ -1934,7 +1931,7 @@ public class GameHUD : MonoBehaviour
                 new Vector2(190, y), color).gameObject);
             bool alreadyReady = _readyClients.Contains(entry.clientId);
             var status = CreateCornerText($"Status_{entry.clientId}",
-                alreadyReady ? "READY" : "PICKING...", 10,
+                alreadyReady ? Loc.T("hangar.ready") : Loc.T("hangar.picking"), 10,
                 new Vector2(0, 0), new Vector2(400, y),
                 alreadyReady ? ReadyGreen : new Color(1f, 0.8f, 0.35f));
             _rosterObjects.Add(status.gameObject);
@@ -2065,7 +2062,7 @@ public class GameHUD : MonoBehaviour
         _readyButton.targetGraphic = bgImage;
         _readyButton.onClick.AddListener(PressReady);
 
-        _readyButtonText = CreateTextIn(buttonObj.transform, "Label", "READY", 20,
+        _readyButtonText = CreateTextIn(buttonObj.transform, "Label", Loc.T("hangar.ready"), 20,
             Vector2.zero, Color.white);
     }
 
@@ -2074,7 +2071,7 @@ public class GameHUD : MonoBehaviour
         if (_localReady) return;
         _localReady = true;
 
-        if (_readyButtonText != null) _readyButtonText.text = "WAITING...";
+        if (_readyButtonText != null) _readyButtonText.text = Loc.T("hangar.waiting_button");
         if (_readyButton != null)
         {
             _readyButton.interactable = false;
@@ -2089,7 +2086,7 @@ public class GameHUD : MonoBehaviour
     private void UpdateReadyCount()
     {
         if (_hangarReadyCountText == null) return;
-        _hangarReadyCountText.text = $"READY {_readyClients.Count}/{_hangarReadyRows.Count}";
+        _hangarReadyCountText.text = Loc.F("hangar.ready_count", _readyClients.Count, _hangarReadyRows.Count);
     }
 
     private Text CreateHangarText(string name, string content, int fontSize, Vector2 pos,
@@ -2157,7 +2154,7 @@ public class GameHUD : MonoBehaviour
         button.targetGraphic = bgImage;
         button.onClick.AddListener(OpenSkinPicker);
 
-        CreateTextIn(buttonObj.transform, "Label", "PLANE", 16, Vector2.zero, Color.white);
+        CreateTextIn(buttonObj.transform, "Label", Loc.T("hangar.plane"), 16, Vector2.zero, Color.white);
     }
 
     // Settings live in their own overlay (SettingsOverlay); the hangar only
@@ -2166,7 +2163,7 @@ public class GameHUD : MonoBehaviour
     private void BuildSettingsButton()
     {
         bool host = NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
-        UiKit.FlatButton(_hangarOverlay.transform, "SettingsButton", "SETTINGS", 16,
+        UiKit.FlatButton(_hangarOverlay.transform, "SettingsButton", Loc.T("hangar.settings"), 16,
             Vector2.zero, Vector2.zero, new Vector2(60, host ? 192 : 116), new Vector2(180, 68),
             new Color(0.25f, 0.25f, 0.29f, 1f), () => SettingsOverlay.Instance?.Open());
     }
@@ -2248,7 +2245,7 @@ public class GameHUD : MonoBehaviour
         button.targetGraphic = bgImage;
         button.onClick.AddListener(OpenScenePicker);
 
-        CreateTextIn(buttonObj.transform, "Label", "SCENES", 16, Vector2.zero, Color.white);
+        CreateTextIn(buttonObj.transform, "Label", Loc.T("hangar.scenes"), 16, Vector2.zero, Color.white);
     }
 
     private void OpenScenePicker()
@@ -2319,10 +2316,10 @@ public class GameHUD : MonoBehaviour
         var bg = _scenePickerOverlay.AddComponent<Image>();
         bg.color = new Color(0f, 0f, 0f, 0.94f);
 
-        CreateTextIn(_scenePickerOverlay.transform, "Title", "ARENA ROTATION", 26,
+        CreateTextIn(_scenePickerOverlay.transform, "Title", Loc.T("scenes.title"), 26,
             new Vector2(0, 250), new Color(1f, 0.85f, 0.3f));
         CreateTextIn(_scenePickerOverlay.transform, "Sub",
-            "drag the grip to reorder - tap a row to drop or restore it", 10,
+            Loc.T("scenes.sub"), 10,
             new Vector2(0, 216), new Color(1f, 1f, 1f, 0.55f));
 
         var viewportGO = new GameObject("Viewport");
@@ -2361,7 +2358,7 @@ public class GameHUD : MonoBehaviour
         contentGO.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         scroll.content = _scenePickerContent;
 
-        var (closeButton, _) = BuildHangarActionButtonIn(_scenePickerOverlay, "CloseScenePicker", "DONE",
+        var (closeButton, _) = BuildHangarActionButtonIn(_scenePickerOverlay, "CloseScenePicker", Loc.T("common.done"),
             new Color(0.25f, 0.45f, 0.3f, 1f));
         closeButton.onClick.AddListener(CloseScenePicker);
 
@@ -2422,13 +2419,14 @@ public class GameHUD : MonoBehaviour
 
             BuildScenePreview(row, profile, on, new Vector2(-212, 0), new Vector2(168, 112));
 
-            string mapName = profile.backgroundSprite != null ? profile.backgroundSprite.name : profile.name;
+            string mapKey = profile.backgroundSprite != null ? profile.backgroundSprite.name : profile.name;
+            string mapName = Loc.T("map." + mapKey, mapKey);
             CreateTextIn(row.transform, "Name", mapName, 13, new Vector2(60, 16),
                 on ? Color.white : new Color(1f, 1f, 1f, 0.4f));
 
             if (profile.isPremium)
             {
-                CreateTextIn(row.transform, "Premium", "PREMIUM", 8, new Vector2(60, -18),
+                CreateTextIn(row.transform, "Premium", Loc.T("scenes.premium"), 8, new Vector2(60, -18),
                     new Color(1f, 0.85f, 0.3f));
             }
 
@@ -2572,10 +2570,10 @@ public class GameHUD : MonoBehaviour
 
         // Vertical budget (relative to screen centre): title +300, sub +268,
         // shape row +25..+255, skin grid -305..-5, CLOSE in the corner.
-        CreateTextIn(_skinPickerOverlay.transform, "Title", "PICK YOUR PLANE", 26,
+        CreateTextIn(_skinPickerOverlay.transform, "Title", Loc.T("planes.title"), 26,
             new Vector2(0, 300), new Color(1f, 0.85f, 0.3f));
         CreateTextIn(_skinPickerOverlay.transform, "Sub",
-            "shape + skin is one-of-a-kind - once a pilot flies a combo, it's taken", 10,
+            Loc.T("planes.sub"), 10,
             new Vector2(0, 268), new Color(1f, 1f, 1f, 0.55f));
 
         // Shape row sits where the top of the skin grid used to be; the grid
@@ -2620,7 +2618,7 @@ public class GameHUD : MonoBehaviour
         contentGO.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         scroll.content = _skinPickerContent;
 
-        var (closeButton, _) = BuildHangarActionButtonIn(_skinPickerOverlay, "CloseSkinPicker", "CLOSE",
+        var (closeButton, _) = BuildHangarActionButtonIn(_skinPickerOverlay, "CloseSkinPicker", Loc.T("common.close"),
             new Color(0.25f, 0.25f, 0.25f, 1f));
         closeButton.onClick.AddListener(CloseSkinPicker);
 
@@ -2698,11 +2696,11 @@ public class GameHUD : MonoBehaviour
 
             // CreateTextIn positions are relative to the card CENTRE (148 px
             // tall card, icon spans +62..-26): -40/-56 land under the icon.
-            CreateTextIn(cardObj.transform, "Name", def.DisplayName, 8,
+            CreateTextIn(cardObj.transform, "Name", def.LocalizedName, 8,
                 new Vector2(0, -40), Color.white);
 
-            string status = isCurrent ? "EQUIPPED"
-                : !unlocked ? (iap?.BundleForSkin(i)?.PlaceholderPrice ?? "LOCKED") : "";
+            string status = isCurrent ? Loc.T("planes.equipped")
+                : !unlocked ? (iap?.BundleForSkin(i)?.PlaceholderPrice ?? Loc.T("planes.locked")) : "";
             Color statusColor = isCurrent ? ReadyGreen
                 : !unlocked ? new Color(1f, 0.85f, 0.3f)
                 : new Color(1f, 1f, 1f, 0.4f);
@@ -2824,7 +2822,7 @@ public class GameHUD : MonoBehaviour
             iconImg.color = taken ? new Color(1f, 1f, 1f, 0.4f) : Color.white;
 
             // 220 px tall card, icon spans +102..-26 from the centre.
-            CreateTextIn(cardObj.transform, "Name", def.DisplayName, 10, new Vector2(0, -46), Color.white);
+            CreateTextIn(cardObj.transform, "Name", def.LocalizedName, 10, new Vector2(0, -46), Color.white);
 
             // What this shape shoots (plan 24) - the element is a property of
             // the silhouette, so it has to be readable BEFORE the first shot.
@@ -2832,10 +2830,10 @@ public class GameHUD : MonoBehaviour
             var badgeColor = taken
                 ? new Color(element.Tint.r, element.Tint.g, element.Tint.b, 0.4f)
                 : element.Tint;
-            CreateTextIn(cardObj.transform, "Element", element.DisplayName, 8,
+            CreateTextIn(cardObj.transform, "Element", element.LocalizedName, 8,
                 new Vector2(0, -88), badgeColor);
 
-            string status = isCurrent ? "EQUIPPED" : taken ? "TAKEN" : "";
+            string status = isCurrent ? Loc.T("planes.equipped") : taken ? Loc.T("planes.taken") : "";
             Color statusColor = isCurrent ? ReadyGreen
                 : taken ? new Color(1f, 0.4f, 0.4f)
                 : new Color(1f, 1f, 1f, 0.4f);
@@ -2904,7 +2902,7 @@ public class GameHUD : MonoBehaviour
         // Match timer (top-center) + round goal below it
         hud.matchTimeText = CreateStaticText(hudObj.transform, "MatchTime", "-:--",
             new Vector2(0.5f, 1), new Vector2(0, -40), 28, Color.white);
-        hud.matchGoalText = CreateStaticText(hudObj.transform, "MatchGoal", $"FIRST TO {MatchManager.KillTarget}",
+        hud.matchGoalText = CreateStaticText(hudObj.transform, "MatchGoal", Loc.F("hud.first_to", MatchManager.KillTarget),
             new Vector2(0.5f, 1), new Vector2(0, -72), 12, new Color(1f, 1f, 1f, 0.6f));
 
         hud.floatingTextPrefab = CreateFloatingTextPrefab();

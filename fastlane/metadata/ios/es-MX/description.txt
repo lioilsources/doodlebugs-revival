@@ -1,0 +1,14 @@
+Coge a un amigo, sentaos en la misma sala y a combatir.
+
+Doodlebugs Revival es un arcade de biplanos de la Primera Guerra Mundial en multijugador local. De dos a ocho dispositivos se encuentran solos: sin cuentas, servidores ni configuración. Abre el juego en ambos, se emparejan en segundos y el cielo se llena de balas trazadoras.
+
+- RONDAS RÁPIDAS: el primero en 3 derribos o hasta que suene la campana de los 3 minutos. Series al mejor de 5 con podio para el campeón.
+- EL HANGAR: entre rondas elige un arma nueva (ametralladoras, antiaérea, bombas, cohetes, minas) y gasta puntos en mejoras de escudo, casco, motor y cadencia.
+- HORIZONTE DESTRUCTIBLE: cada ronda cambia la arena y su muro de carteles vintage pintados a mano. Derriba las torres pieza a pieza.
+- POTENCIADORES: los aviones derribados sueltan globos con salud, escudo, reparaciones y más daño.
+- COOP EN EL SOFÁ: hasta 4 pilotos en un ordenador con mandos y teclado; giroscopio o control táctil en móviles y tabletas.
+- CORAZÓN DE 8 BITS: banda sonora chiptune procedural, pixel art plano y el ritmo de «una ronda más».
+
+Sin anuncios, sin compras dentro de la app, sin recopilación de datos. Solo aviones.
+
+Nota: para jugar contra otros hace falta un segundo dispositivo en la misma red.

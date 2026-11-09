@@ -69,36 +69,36 @@ public class SettingsOverlay : MonoBehaviour
         UiKit.Panel(_panel.transform, "Background", new Color(0f, 0f, 0f, 0.92f), true);
 
         var centre = new Vector2(0.5f, 0.5f);
-        UiKit.Label(_panel.transform, "Title", "SETTINGS", 34, centre, new Vector2(0, 195), TitleColor);
+        UiKit.Label(_panel.transform, "Title", Loc.T("hangar.settings"), 34, centre, new Vector2(0, 195), TitleColor);
 
         bool mobile = InputManager.Instance != null && InputManager.Instance.IsMobile();
         if (mobile)
         {
-            UiKit.Label(_panel.transform, "ControlsLabel", "CONTROLS", 14, centre, new Vector2(0, 95), Dim);
+            UiKit.Label(_panel.transform, "ControlsLabel", Loc.T("settings.controls"), 14, centre, new Vector2(0, 95), Dim);
 
-            (_, _joystickBg, _) = UiKit.FlatButton(_panel.transform, "JoystickOption", "JOYSTICK", 16,
+            (_, _joystickBg, _) = UiKit.FlatButton(_panel.transform, "JoystickOption", Loc.T("settings.joystick"), 16,
                 centre, centre, new Vector2(-115, 40), new Vector2(210, 60), OptionIdle,
                 () => Select(ControlScheme.Joystick));
-            (_, _gyroBg, _) = UiKit.FlatButton(_panel.transform, "GyroOption", "GYRO", 16,
+            (_, _gyroBg, _) = UiKit.FlatButton(_panel.transform, "GyroOption", Loc.T("settings.gyro"), 16,
                 centre, centre, new Vector2(115, 40), new Vector2(210, 60), OptionIdle,
                 () => Select(ControlScheme.Gyro));
 
             _hint = UiKit.Label(_panel.transform, "Hint", "", 10, centre, new Vector2(0, -15), Dim,
                 new Vector2(900, 30));
 
-            var (recenterButton, _, _) = UiKit.FlatButton(_panel.transform, "Recenter", "RECENTER", 14,
+            var (recenterButton, _, _) = UiKit.FlatButton(_panel.transform, "Recenter", Loc.T("settings.recenter"), 14,
                 centre, centre, new Vector2(0, -75), new Vector2(240, 52), RecenterColor, Recenter);
             _recenter = recenterButton.gameObject;
         }
         else
         {
             UiKit.Label(_panel.transform, "DesktopHint",
-                "KEYBOARD: A/D TURN, W/S THROTTLE, SPACE FIRE - GAMEPAD: LEFT STICK + ANY BUTTON",
+                Loc.T("settings.desktop_hint"),
                 10, centre, new Vector2(0, 40), Dim, new Vector2(1200, 30));
         }
 
         // Same slot as the hangar's action button (bottom-right).
-        UiKit.FlatButton(_panel.transform, "Close", "CLOSE", 16,
+        UiKit.FlatButton(_panel.transform, "Close", Loc.T("common.close"), 16,
             new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-60, 40), new Vector2(180, 68),
             CloseColor, Close);
     }
@@ -112,8 +112,8 @@ public class SettingsOverlay : MonoBehaviour
         _joystickBg.color = gyro ? OptionIdle : OptionSelected;
         _gyroBg.color = gyro ? OptionSelected : OptionIdle;
         _hint.text = gyro
-            ? "TILT TO FLY. RECENTER TAKES YOUR CURRENT HOLD AS LEVEL."
-            : "STICK BOTTOM-RIGHT: UP/DOWN THROTTLE, LEFT/RIGHT TURN.";
+            ? Loc.T("settings.hint_gyro")
+            : Loc.T("settings.hint_stick");
         _recenter.SetActive(gyro);
     }
 

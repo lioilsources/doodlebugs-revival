@@ -12,7 +12,9 @@ namespace Doodlebugs.Editor
         // Unity export leaves the main target on manual signing with an empty
         // team (PlayerSettings has automatic signing off), so xcodebuild fails
         // with "requires a provisioning profile" — set it here instead.
-        private const string AppleTeamId = "P82HWPG7FN";
+        // Read from IOS_TEAM_ID (the same name CI uses) so the ID stays out of
+        // this public repo; without it the team is left for Xcode to pick.
+        private static string AppleTeamId => System.Environment.GetEnvironmentVariable("IOS_TEAM_ID");
 
         [PostProcessBuild(1)]
         public static void OnPostProcessBuild(BuildTarget target, string pathToBuiltProject)
@@ -47,6 +49,13 @@ namespace Doodlebugs.Editor
             // looks like the build never arrived.
             plist.root.SetBoolean("ITSAppUsesNonExemptEncryption", false);
 
+            // UI languages (Loc.cs). Without CFBundleLocalizations iOS treats the
+            // app as English-only: no per-app language in Settings, and the
+            // native locale lookup could never return anything else.
+            var localizations = plist.root.CreateArray("CFBundleLocalizations");
+            foreach (string code in Loc.RuntimeLanguages)
+                localizations.AddString(code);
+
             plist.WriteToFile(plistPath);
 
             // DoodlebugsMultipeer.m uses MCSession/MCPeerID — without this the
@@ -70,11 +79,57 @@ namespace Doodlebugs.Editor
             foreach (string guid in new[] { mainGuid, frameworkGuid })
             {
                 proj.SetBuildProperty(guid, "CODE_SIGN_STYLE", "Automatic");
-                proj.SetTeamId(guid, AppleTeamId);
+                if (!string.IsNullOrEmpty(AppleTeamId))
+                    proj.SetTeamId(guid, AppleTeamId);
             }
+
+            AddPermissionStrings(proj, mainGuid, pathToBuiltProject);
 
             proj.WriteToFile(projPath);
         }
+
+        private const string CatalogueDir = "Assets/Doodlebugs/Resources/Localization";
+
+        /// <summary>Per-language <c>&lt;code&gt;.lproj/InfoPlist.strings</c> so
+        /// the local-network and Bluetooth prompts speak the UI language
+        /// (ROADMAP §3: one language per locale, prompts included).</summary>
+        private static void AddPermissionStrings(PBXProject proj, string mainGuid, string buildPath)
+        {
+            foreach (string code in Loc.RuntimeLanguages)
+            {
+                if (code == Loc.SourceLanguage) continue; // Info.plist itself is English
+                var table = ReadCatalogue(Path.Combine(CatalogueDir, code + ".txt"));
+                if (!table.TryGetValue("perm.local_network", out var network) ||
+                    !table.TryGetValue("perm.bluetooth", out var bluetooth))
+                    continue;
+
+                string folder = code + ".lproj";
+                Directory.CreateDirectory(Path.Combine(buildPath, folder));
+                File.WriteAllText(Path.Combine(buildPath, folder, "InfoPlist.strings"),
+                    $"\"NSLocalNetworkUsageDescription\" = \"{Escape(network)}\";\n" +
+                    $"\"NSBluetoothAlwaysUsageDescription\" = \"{Escape(bluetooth)}\";\n" +
+                    $"\"NSBluetoothPeripheralUsageDescription\" = \"{Escape(bluetooth)}\";\n",
+                    new System.Text.UTF8Encoding(false));
+
+                string guid = proj.AddFolderReference(folder, folder, PBXSourceTree.Source);
+                proj.AddFileToBuild(mainGuid, guid);
+            }
+        }
+
+        private static System.Collections.Generic.Dictionary<string, string> ReadCatalogue(string path)
+        {
+            var table = new System.Collections.Generic.Dictionary<string, string>();
+            if (!File.Exists(path)) return table;
+            foreach (string raw in File.ReadAllLines(path))
+            {
+                if (raw.Length == 0 || raw[0] == '#' || raw[0] == '@') continue;
+                int eq = raw.IndexOf('=');
+                if (eq > 0) table[raw.Substring(0, eq).Trim()] = raw.Substring(eq + 1);
+            }
+            return table;
+        }
+
+        private static string Escape(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 }
 #endif

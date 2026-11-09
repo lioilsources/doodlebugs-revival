@@ -129,3 +129,6 @@ tools/weapons/review/
 tools/weapons/index.html
 tools/weapons/effects.html
 tools/weapons/sfx.html
+
+# Local config (see .env.example)
+.env
