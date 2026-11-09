@@ -32,6 +32,7 @@ namespace Doodlebugs.Network
         private bool _isServer;
         private string _hostPeerId;
         private bool _running;
+        private bool _hostLost; // client: Disconnect for the host already queued
 
         // peerId <-> transport clientId mapping (server assigns ids; client uses ServerClientId)
         private readonly Dictionary<string, ulong> _peerToClient = new();
@@ -85,6 +86,7 @@ namespace Doodlebugs.Network
             }
 
             _isServer = false;
+            _hostLost = false;
             SubscribeBackend();
             _running = true;
             Debug.Log($"[NativeLocalTransport] Client started, host peer={_hostPeerId}");
@@ -210,6 +212,24 @@ namespace Doodlebugs.Network
 
         private void HandlePeerDisconnected(string peerId)
         {
+            // A client never maps the host into _peerToClient (MapPeer returns
+            // ServerClientId), so the lookup below would swallow the host's loss and
+            // the client would sit in a frozen battle forever (plan 33 N1).
+            if (!_isServer)
+            {
+                if (peerId != _hostPeerId || _hostLost) return;
+                _hostLost = true;
+                Enqueue(new QueuedEvent
+                {
+                    Type = NetworkEvent.Disconnect,
+                    ClientId = ServerClientId,
+                    Payload = default,
+                    ReceiveTime = Time.realtimeSinceStartup
+                });
+                Debug.Log($"[NativeLocalTransport] Host peer lost peer={peerId}");
+                return;
+            }
+
             if (!_peerToClient.TryGetValue(peerId, out ulong clientId)) return;
 
             Enqueue(new QueuedEvent

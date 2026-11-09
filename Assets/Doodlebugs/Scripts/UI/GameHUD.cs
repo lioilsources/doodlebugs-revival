@@ -1279,6 +1279,17 @@ public class GameHUD : MonoBehaviour
     private void OnHangarOpened(MatchManager.HangarMode mode, int seconds)
     {
         if (_resultsOverlay != null) _resultsOverlay.SetActive(false);
+        // A leaver during the podium freezes the run back to Waiting; the podium
+        // must not stay over the arena with the controls hidden (plan 33 N4).
+        DestroyPodium();
+    }
+
+    private void DestroyPodium()
+    {
+        if (_podiumOverlay == null) return;
+        Destroy(_podiumOverlay);
+        _podiumOverlay = null;
+        _podiumCountdownText = null;
     }
 
     private void OnHangarTick(int secondsLeft)
