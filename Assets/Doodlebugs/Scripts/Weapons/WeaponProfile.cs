@@ -30,6 +30,10 @@ public class WeaponProfile
     public WeaponType Type;
     public string DisplayName;
     public string Description;      // short line for the hangar card
+
+    /// <summary>UI text in the active language (Resources/Localization).</summary>
+    public string LocalizedName => Loc.T($"weapon.{Type}.name", DisplayName);
+    public string LocalizedDescription => Loc.T($"weapon.{Type}.desc", Description);
     public int Damage = 1;          // per pellet, before the power-up multiplier
     public float Cooldown = 0.4f;   // seconds between shots at Novice ROF
     public float ForceMultiplier = 1f;   // scales base bullet force (20); 0 = released with plane speed only

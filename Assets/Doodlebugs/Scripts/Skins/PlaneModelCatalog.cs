@@ -75,6 +75,7 @@ public static class PlaneModelCatalog
             BundleId = bundleId;
         }
 
+        public string LocalizedName => Loc.T("plane." + Key, DisplayName);
         public string ResourcePath => $"Sprites/PlaneModels/model_{Key}";
         public string MaskResourcePath => $"Sprites/PlaneModels/model_{Key}_mask";
     }

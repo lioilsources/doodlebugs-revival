@@ -480,7 +480,7 @@ public class TouchControls : MonoBehaviour
         else
         {
             t.Icon.enabled = false;
-            t.Fallback.text = weapon.DisplayName;
+            t.Fallback.text = weapon.LocalizedName;
             t.Fallback.enabled = true;
         }
     }

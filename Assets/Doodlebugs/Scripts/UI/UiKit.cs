@@ -17,8 +17,8 @@ public static class UiKit
         {
             if (_font == null)
             {
-                _font = Resources.Load<Font>("Fonts/PressStart2P");
-                if (_font == null) _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                // Loc swaps in the OS-backed font for languages the pixel font can't draw
+                _font = Loc.PickFont(Resources.Load<Font>("Fonts/PressStart2P"));
             }
             return _font;
         }

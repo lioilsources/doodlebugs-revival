@@ -25,10 +25,10 @@ public static class RunUpgrades
     {
         switch (type)
         {
-            case RunUpgradeType.Shield: return "SHIELD";
-            case RunUpgradeType.Hull: return "HULL";
-            case RunUpgradeType.FireRate: return "FIRE RATE";
-            case RunUpgradeType.Engine: return "ENGINE";
+            case RunUpgradeType.Shield: return Loc.T("upgrade.Shield.name", "SHIELD");
+            case RunUpgradeType.Hull: return Loc.T("upgrade.Hull.name", "HULL");
+            case RunUpgradeType.FireRate: return Loc.T("upgrade.FireRate.name", "FIRE RATE");
+            case RunUpgradeType.Engine: return Loc.T("upgrade.Engine.name", "ENGINE");
             default: return "?";
         }
     }
@@ -37,10 +37,10 @@ public static class RunUpgrades
     {
         switch (type)
         {
-            case RunUpgradeType.Shield: return "+1 max shield";
-            case RunUpgradeType.Hull: return "+1 max hull";
-            case RunUpgradeType.FireRate: return "+15% ROF";
-            case RunUpgradeType.Engine: return "+10% speed";
+            case RunUpgradeType.Shield: return Loc.T("upgrade.Shield.desc", "+1 max shield");
+            case RunUpgradeType.Hull: return Loc.T("upgrade.Hull.desc", "+1 max hull");
+            case RunUpgradeType.FireRate: return Loc.T("upgrade.FireRate.desc", "+15% ROF");
+            case RunUpgradeType.Engine: return Loc.T("upgrade.Engine.desc", "+10% speed");
             default: return "";
         }
     }
