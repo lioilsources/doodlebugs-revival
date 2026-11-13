@@ -200,3 +200,7 @@ skin.brick_hero=Герой из кубиков
 skin.arcade_pixel=Аркадный пиксель
 skin.retro_wave=Ретроволна
 skin.tiger_stripe=Тигровые полосы
+bot.tier.0=НОВИЧОК
+bot.tier.1=ПИЛОТ
+bot.tier.2=АС
+bot.tier.3=БАРОН

@@ -200,3 +200,7 @@ skin.brick_hero=Palikkasankari
 skin.arcade_pixel=Arcade-pikseli
 skin.retro_wave=Retroaalto
 skin.tiger_stripe=Tiikeriraita
+bot.tier.0=NOVIISI
+bot.tier.1=LENTÄJÄ
+bot.tier.2=ÄSSÄ
+bot.tier.3=PARONI

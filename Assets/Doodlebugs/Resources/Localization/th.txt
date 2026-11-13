@@ -201,3 +201,7 @@ skin.brick_hero=ฮีโร่ตัวต่อ
 skin.arcade_pixel=พิกเซลอาร์เคด
 skin.retro_wave=คลื่นเรโทร
 skin.tiger_stripe=ลายเสือ
+bot.tier.0=มือใหม่
+bot.tier.1=นักบิน
+bot.tier.2=เอซ
+bot.tier.3=บารอน

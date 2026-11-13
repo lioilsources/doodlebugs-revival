@@ -200,3 +200,7 @@ skin.brick_hero=Blokjesheld
 skin.arcade_pixel=Arcadepixel
 skin.retro_wave=Retrogolf
 skin.tiger_stripe=Tijgerstrepen
+bot.tier.0=GROENTJE
+bot.tier.1=PILOOT
+bot.tier.2=AAS
+bot.tier.3=BARON

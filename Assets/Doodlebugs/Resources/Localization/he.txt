@@ -202,3 +202,7 @@ skin.brick_hero=גיבור לבנים
 skin.arcade_pixel=פיקסל ארקייד
 skin.retro_wave=גל רטרו
 skin.tiger_stripe=פסי נמר
+bot.tier.0=טירון
+bot.tier.1=טייס
+bot.tier.2=אס
+bot.tier.3=ברון

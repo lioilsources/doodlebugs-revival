@@ -201,3 +201,7 @@ skin.brick_hero=ブロックヒーロー
 skin.arcade_pixel=アーケードピクセル
 skin.retro_wave=レトロウェーブ
 skin.tiger_stripe=虎縞
+bot.tier.0=新米
+bot.tier.1=パイロット
+bot.tier.2=エース
+bot.tier.3=バロン

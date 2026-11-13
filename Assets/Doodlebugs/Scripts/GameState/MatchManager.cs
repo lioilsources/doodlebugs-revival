@@ -94,7 +94,8 @@ public class MatchManager : MonoBehaviour
     /// <summary>Fired on every client when local run points / upgrade levels change.</summary>
     public event Action OnRunStateChanged;
 
-    /// <summary>Fired on every client when a run ends (arg = winner clientId).</summary>
+    /// <summary>Fired on every client when a run ends (arg = winner participant
+    /// id - <see cref="ParticipantIdentity"/> turns it into a plane identity).</summary>
     public event Action<ulong> OnRunEnded;
 
     private Coroutine _intermissionCoroutine;
@@ -115,7 +116,10 @@ public class MatchManager : MonoBehaviour
     private float _preBattleDeadline;
 
     // --- Run state ---
-    // Server-authoritative wallets/levels/wins per client id.
+    // Server-authoritative wallets/levels/wins per PARTICIPANT id (Prompts/27
+    // S7): a human device = its clientId (couch seats share it), a combat bot
+    // = BotParticipantBase + seat. Bots share clientId 0 with the host, so a
+    // clientId key would credit a bot's round win to the host.
     private readonly System.Collections.Generic.Dictionary<ulong, int> _runPoints = new();
     private readonly System.Collections.Generic.Dictionary<ulong, int[]> _upgradeLevels = new();
     private readonly System.Collections.Generic.Dictionary<ulong, int> _roundWins = new();
@@ -125,7 +129,57 @@ public class MatchManager : MonoBehaviour
     private readonly int[] _localUpgradeLevels = new int[RunUpgrades.TypeCount];
     public int GetLocalUpgradeLevel(RunUpgradeType type) => _localUpgradeLevels[(int)type];
 
-    /// <summary>Round wins per client, known on every client (for results/podium).</summary>
+    /// <summary>First participant id of the combat bots; humans stay below it.</summary>
+    public const ulong BotParticipantBase = 1UL << 40;
+
+    /// <summary>Run-state key of a plane: its clientId, or its bot seat.</summary>
+    public static ulong ParticipantId(ulong clientId, int localPlayerIndex) =>
+        PlayerController.IsCombatBotIdentity(localPlayerIndex)
+            ? BotParticipantBase + (ulong)(localPlayerIndex - PlayerController.CombatBotIndexBase)
+            : clientId;
+
+    public static bool IsBotParticipant(ulong participantId) => participantId >= BotParticipantBase;
+
+    /// <summary>The (clientId, localPlayerIndex) a participant id names - seat 0
+    /// for a human device, the bot's own seat for a bot.</summary>
+    public static void ParticipantIdentity(ulong participantId, out ulong clientId, out int localPlayerIndex)
+    {
+        if (IsBotParticipant(participantId))
+        {
+            clientId = NetworkManager.ServerClientId;
+            localPlayerIndex = PlayerController.CombatBotIndexBase + (int)(participantId - BotParticipantBase);
+        }
+        else
+        {
+            clientId = participantId;
+            localPlayerIndex = 0;
+        }
+    }
+
+    /// <summary>Tier of the most recently seen combat bot on this device - the
+    /// name fallback when a bot's row is gone before the podium shows it.</summary>
+    public byte LastBotTier
+    {
+        get
+        {
+            foreach (var p in PlayerController.All) if (p.IsCombatBot) _lastBotTier = p.NetBotTier.Value;
+            return _lastBotTier;
+        }
+    }
+    private byte _lastBotTier;
+
+    /// <summary>Server: who can fight - connected devices plus combat bots.</summary>
+    public int ParticipantCount
+    {
+        get
+        {
+            var nm = NetworkManager.Singleton;
+            int clients = nm != null && nm.IsServer ? nm.ConnectedClientsIds.Count : 0;
+            return clients + (BotManager.Instance != null ? BotManager.Instance.CombatCount : 0);
+        }
+    }
+
+    /// <summary>Round wins per participant, known on every client (for results/podium).</summary>
     private readonly System.Collections.Generic.Dictionary<ulong, int> _clientRoundWins = new();
     public System.Collections.Generic.IReadOnlyDictionary<ulong, int> RoundWins => _clientRoundWins;
 
@@ -221,7 +275,7 @@ public class MatchManager : MonoBehaviour
         switch (Phase)
         {
             case GamePhase.WaitingForPlayers:
-                if (NetworkManager.Singleton.ConnectedClientsIds.Count >= 2)
+                if (ParticipantCount >= 2)
                 {
                     StartPreBattleCountdown();
                 }
@@ -261,7 +315,8 @@ public class MatchManager : MonoBehaviour
         _readyClients.Remove(clientId);
 
         // The leaver may still be counted at callback time - exclude it.
-        int remaining = 0;
+        // Combat bots keep a battle going: one human + a bot is a fight.
+        int remaining = BotManager.Instance != null ? BotManager.Instance.CombatCount : 0;
         foreach (ulong id in nm.ConnectedClientsIds)
         {
             if (id != clientId) remaining++;
@@ -320,11 +375,35 @@ public class MatchManager : MonoBehaviour
         try { BackgroundManager.Instance?.SelectRoundBackground(); }
         catch (Exception e) { Debug.LogException(e); }
 
+        DeployAllForRound();
+    }
+
+    // Every pilot, human or combat bot, to a fresh spawn. The warm-up bot is
+    // despawned by now and must never be deployed into a battle.
+    private void DeployAllForRound()
+    {
+        try { BotManager.Instance?.ServerPrepareRound(); }
+        catch (Exception e) { Debug.LogException(e); }
+
         foreach (var player in FindObjectsOfType<PlayerController>())
         {
-            if (player.IsBot) continue;   // despawned by now; never deploy it into a battle
+            if (player.IsWarmupBot) continue;
             SafeDeploy(player);
         }
+    }
+
+    /// <summary>Server, debug entry (Prompts/27 WP3): from the Waiting lobby,
+    /// put `count` combat bots of `tier` in the sky and start a battle now.</summary>
+    public void ServerDebugStartBotBattle(int count, byte tier)
+    {
+        if (!IsServer() || Phase != GamePhase.WaitingForPlayers) return;
+        BotManager.Instance?.ServerSetCombatRoster(count, tier);
+        if (_preBattleCoroutine != null)
+        {
+            StopCoroutine(_preBattleCoroutine);
+            _preBattleCoroutine = null;
+        }
+        ServerStartBattle();
     }
 
     // Un-park and respawn one plane; a single bad plane must never abort the
@@ -368,6 +447,9 @@ public class MatchManager : MonoBehaviour
         IsIntermission = false;
         Phase = GamePhase.WaitingForPlayers;
         BackgroundManager.Instance?.ServerResetWarmUpArena();
+        // Never leave a combat bot behind in the lobby - the warm-up bot
+        // takes the sky back on the next tick.
+        BotManager.Instance?.ServerDespawnCombat();
 
         float frozenTime = ScoreManager.Instance != null ? ScoreManager.Instance.MatchTime : 0f;
         BroadcastThroughServerPlayer(p =>
@@ -416,10 +498,15 @@ public class MatchManager : MonoBehaviour
             }
         }
 
-        // Waiting lobby: keep the warm-up bot alive. (The arena rotates on
-        // FLY out of the hangar - BackgroundManager.ServerOnWarmUpFlyOut -
-        // not on a timer here, so the rebuild never lands mid-flight.)
-        if (Phase == GamePhase.WaitingForPlayers)
+        // Combat bots: roster upkeep and shape yields, every phase.
+        BotManager.Instance?.ServerTickCombat();
+
+        // Waiting lobby: keep the warm-up bot alive unless combat bots took
+        // the sky. (The arena rotates on FLY out of the hangar -
+        // BackgroundManager.ServerOnWarmUpFlyOut - not on a timer here, so
+        // the rebuild never lands mid-flight.)
+        if (Phase == GamePhase.WaitingForPlayers &&
+            (BotManager.Instance == null || BotManager.Instance.CombatTarget == 0))
         {
             BotManager.Instance?.ServerTickWarmUp();
         }
@@ -577,16 +664,17 @@ public class MatchManager : MonoBehaviour
         }
 
         int winnerKills = best?.Kills ?? 0;
+        ulong winner = ParticipantId(winnerClient, winnerLocalIdx);
         Debug.Log($"[MatchManager] Round over - winner {winnerClient}_{winnerLocalIdx} with {winnerKills} kills");
 
         // Round win + run-over check (best-of-N)
-        _roundWins.TryGetValue(winnerClient, out int wins);
+        _roundWins.TryGetValue(winner, out int wins);
         wins++;
-        _roundWins[winnerClient] = wins;
+        _roundWins[winner] = wins;
         bool runOver = wins >= RoundWinsTarget;
 
         // Run points: 1 for playing, +1 for top half, +1 for winning the round
-        AwardRunPoints(score, winnerClient);
+        AwardRunPoints(score, winner);
 
         // Broadcast through any server-owned player (existing sync pattern)
         BroadcastThroughServerPlayer(p =>
@@ -598,8 +686,8 @@ public class MatchManager : MonoBehaviour
         _serverRoundFlowCoroutine = StartCoroutine(ServerEndRoundFlow(runOver));
     }
 
-    // Rank every player, take each device's best placement, hand out points.
-    private void AwardRunPoints(ScoreManager score, ulong winnerClient)
+    // Rank every plane, take each participant's best placement, hand out points.
+    private void AwardRunPoints(ScoreManager score, ulong winner)
     {
         var ranked = new System.Collections.Generic.List<
             System.Collections.Generic.KeyValuePair<string, ScoreManager.PlayerStats>>(score.AllStats);
@@ -615,10 +703,12 @@ public class MatchManager : MonoBehaviour
         var bestRankByClient = new System.Collections.Generic.Dictionary<ulong, int>();
         for (int i = 0; i < ranked.Count; i++)
         {
-            ScoreManager.ParsePlayerId(ranked[i].Key, out ulong clientId, out _);
-            if (!bestRankByClient.ContainsKey(clientId))
+            ScoreManager.ParsePlayerId(ranked[i].Key, out ulong clientId, out int localIdx);
+            if (PlayerController.IsWarmupBotIdentity(clientId, localIdx)) continue;
+            ulong participant = ParticipantId(clientId, localIdx);
+            if (!bestRankByClient.ContainsKey(participant))
             {
-                bestRankByClient[clientId] = i;
+                bestRankByClient[participant] = i;
             }
         }
 
@@ -634,12 +724,13 @@ public class MatchManager : MonoBehaviour
             ulong clientId = clients[i].Key;
             int points = 1;                              // participation
             if (i < topHalfCutoff) points++;             // top half
-            if (clientId == winnerClient) points++;      // round winner
+            if (clientId == winner) points++;            // round winner
 
             _runPoints.TryGetValue(clientId, out int total);
             _runPoints[clientId] = total + points;
 
-            SyncRunStateTo(clientId);
+            // Bots buy nothing (S5); their points only keep the ranking honest.
+            if (!IsBotParticipant(clientId)) SyncRunStateTo(clientId);
         }
     }
 
@@ -686,7 +777,8 @@ public class MatchManager : MonoBehaviour
             WinnerKills = winnerKills
         };
 
-        _clientRoundWins[winnerClientId] = winnerRoundWins;
+        ulong winner = ParticipantId(winnerClientId, winnerLocalPlayerIndex);
+        _clientRoundWins[winner] = winnerRoundWins;
         IsRunOver = runOver;
 
         Phase = runOver ? GamePhase.Podium : GamePhase.Intermission;
@@ -697,11 +789,12 @@ public class MatchManager : MonoBehaviour
         OnMatchEnded?.Invoke(LastResult);
 
         if (_intermissionCoroutine != null) StopCoroutine(_intermissionCoroutine);
-        _intermissionCoroutine = StartCoroutine(ClientIntermissionFlow(runOver, winnerClientId));
+        _intermissionCoroutine = StartCoroutine(ClientIntermissionFlow(runOver, winner));
     }
 
     // Cosmetic flow on every client: results screen, then the hangar (or the
     // podium when the run is over). The real restart always comes from the server.
+    // The run winner is a participant id (see ParticipantIdentity).
     private IEnumerator ClientIntermissionFlow(bool runOver, ulong winnerClientId)
     {
         yield return new WaitForSeconds(ResultsSeconds);
@@ -877,11 +970,7 @@ public class MatchManager : MonoBehaviour
         // hangar (late joiners whose round ended while picking)
         Phase = GamePhase.Battle;
         ScoreManager.Instance?.RestartMatch();
-        foreach (var player in FindObjectsOfType<PlayerController>())
-        {
-            if (player.IsBot) continue;   // despawned by now; never deploy it into a battle
-            SafeDeploy(player);
-        }
+        DeployAllForRound();
         _serverRoundFlowCoroutine = null;
         Debug.Log("[MatchManager] New round started");
     }

@@ -200,3 +200,7 @@ skin.brick_hero=Heroi de blocs
 skin.arcade_pixel=Píxel arcade
 skin.retro_wave=Ona retro
 skin.tiger_stripe=Ratlles de tigre
+bot.tier.0=NOVELL
+bot.tier.1=PILOT
+bot.tier.2=AS
+bot.tier.3=BARÓ

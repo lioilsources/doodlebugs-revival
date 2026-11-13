@@ -202,3 +202,7 @@ skin.brick_hero=ഇഷ്ടിക ഹീറോ
 skin.arcade_pixel=ആർക്കേഡ് പിക്സൽ
 skin.retro_wave=റെട്രോ തരംഗം
 skin.tiger_stripe=കടുവ വരകൾ
+bot.tier.0=പുതുമുഖം
+bot.tier.1=പൈലറ്റ്
+bot.tier.2=ഏസ്
+bot.tier.3=ബാരൺ

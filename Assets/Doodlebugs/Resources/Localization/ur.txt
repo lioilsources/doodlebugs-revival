@@ -202,3 +202,7 @@ skin.brick_hero=اینٹوں کا ہیرو
 skin.arcade_pixel=آرکیڈ پکسل
 skin.retro_wave=ریٹرو لہر
 skin.tiger_stripe=شیر کی دھاریاں
+bot.tier.0=نوآموز
+bot.tier.1=پائلٹ
+bot.tier.2=ماہر
+bot.tier.3=بیرن

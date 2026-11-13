@@ -201,3 +201,7 @@ skin.brick_hero=積木英雄
 skin.arcade_pixel=街機畫素
 skin.retro_wave=復古浪潮
 skin.tiger_stripe=虎紋
+bot.tier.0=新手
+bot.tier.1=飛行員
+bot.tier.2=王牌
+bot.tier.3=男爵

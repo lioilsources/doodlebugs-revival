@@ -200,3 +200,7 @@ skin.brick_hero=Eroe di mattoncini
 skin.arcade_pixel=Pixel arcade
 skin.retro_wave=Onda retrò
 skin.tiger_stripe=Strisce di tigre
+bot.tier.0=RECLUTA
+bot.tier.1=PILOTA
+bot.tier.2=ASSO
+bot.tier.3=BARONE

@@ -202,3 +202,7 @@ skin.brick_hero=ఇటుక హీరో
 skin.arcade_pixel=ఆర్కేడ్ పిక్సెల్
 skin.retro_wave=రెట్రో తరంగం
 skin.tiger_stripe=పులి చారలు
+bot.tier.0=కొత్తవాడు
+bot.tier.1=పైలట్
+bot.tier.2=ఏస్
+bot.tier.3=బ్యారన్

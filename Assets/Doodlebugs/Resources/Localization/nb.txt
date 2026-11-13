@@ -200,3 +200,7 @@ skin.brick_hero=Klosshelt
 skin.arcade_pixel=Arkadepiksel
 skin.retro_wave=Retrobølge
 skin.tiger_stripe=Tigerstriper
+bot.tier.0=NYBEGYNNER
+bot.tier.1=PILOT
+bot.tier.2=ESS
+bot.tier.3=BARON

@@ -200,3 +200,7 @@ skin.brick_hero=Tuğla Kahraman
 skin.arcade_pixel=Atari Pikseli
 skin.retro_wave=Retro Dalga
 skin.tiger_stripe=Kaplan Çizgili
+bot.tier.0=ÇAYLAK
+bot.tier.1=PİLOT
+bot.tier.2=AS
+bot.tier.3=BARON

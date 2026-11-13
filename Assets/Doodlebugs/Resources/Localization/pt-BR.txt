@@ -200,3 +200,7 @@ skin.brick_hero=Herói de blocos
 skin.arcade_pixel=Pixel arcade
 skin.retro_wave=Onda retrô
 skin.tiger_stripe=Listras de tigre
+bot.tier.0=NOVATO
+bot.tier.1=PILOTO
+bot.tier.2=ÁS
+bot.tier.3=BARÃO

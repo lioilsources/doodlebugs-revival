@@ -202,3 +202,7 @@ skin.brick_hero=બ્લૉક હીરો
 skin.arcade_pixel=આર્કેડ પિક્સેલ
 skin.retro_wave=રેટ્રો લહેર
 skin.tiger_stripe=વાઘના પટ્ટા
+bot.tier.0=નવો
+bot.tier.1=પાયલટ
+bot.tier.2=એસ
+bot.tier.3=બેરન
