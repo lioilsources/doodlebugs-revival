@@ -1,10 +1,11 @@
 # Solo-first (v3.0) — Next-steps Plan
 
-Status (2026-11-12): **plan, nothing implemented.** Written against `main` @
-`4ce7970` (v2.9.3). Line numbers below are from that commit; `GameHUD.cs`
-lines shift by a few once PR #57 lands, so every seam also names its symbol.
-The executor updates this status line after each work package (WP) lands:
-`WP0 done (PR #NN) · WP1 …`.
+Status (2026-11-13): **WP0 PR #58 · WP1 verified on PR #57 (licence-free
+compile + checker; real Unity builds blocked by an expired editor licence on
+the dev Mac) · WP2 PR open.** Written against `main` @ `4ce7970` (v2.9.3).
+Line numbers below are from that commit; `GameHUD.cs` lines shift by a few
+once PR #57 lands, so every seam also names its symbol. The executor updates
+this status line after each work package (WP) lands.
 
 Owner's ask (2026-11-12): "prepare a plan for Opus, what next". This file is
 that hand-off. It is self-contained for a fresh session that has read

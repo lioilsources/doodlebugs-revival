@@ -10,11 +10,11 @@ Stav řádků: `[ ]` neplánováno v detailu · `[plan]` má plán v Prompts ·
 
 ---
 
-## 0. Kde jsme (2026-09-11)
+## 0. Kde jsme (2026-11-13)
 
 Fakta z repa, ne z paměti:
 
-- **Verze** v2.8.2 (tag 2026-09-06). CI staví desktop, Android (Firebase App
+- **Verze** v2.9.3 (tag 2026-10-23). CI staví desktop, Android (Firebase App
   Distribution) i iOS (TestFlight) z každého `v*.*.*` tagu. **Na App Store hra
   není** — listing kit je připravený v `marketing/appstore.md`, v katalogu
   `ol1n.now` jsou pole `appstore/playstore/testflight` prázdná.
@@ -22,18 +22,22 @@ Fakta z repa, ne z paměti:
   druhé zařízení. Sólo hráč vidí jen warm-up bota (Prompts/25) a nikdy
   nezačne bitvu. `marketing/appstore.md` pro App Review výslovně píše, že
   jsou potřeba dvě zařízení — to je riziko zamítnutí i nulová retence
-  osamělého hráče.
+  osamělého hráče. Plán, jak to změnit: `Prompts/27-CLAUDE-PLAN-solo-first.md`.
 - **Obsah:** 15 tvarů letadel × 50 liverií, 8 zbraní, 4 run-upgrady, 5 arén
   (Metropolis, MistyPeaks, DuneSea, Volcano, Orbit), 6 elementů projektilů.
   Vše kromě 38 „premium“ skinů je zdarma; IAP produkty ve storech neexistují,
   paywall je záměrně neaktivní (`Skins/IAPManager.cs`).
-- **Persistence:** jediný `PlayerPrefs` klíč (vlastněné skin bundly). Žádný
-  profil hráče, žádný postup, žádné statistiky přes sezení.
+- **Persistence:** `PlayerProfile` (`Scripts/Meta/PlayerProfile.cs`, JSON v
+  `persistentDataPath`) drží statistiky, nastavení ovládání a sólo tier;
+  `IAPManager` má dál vlastní `PlayerPrefs` cache vlastněných bundlů.
 - **Měření:** žádná analytika, žádný crash reporting, žádné Game Center,
-  žádný review prompt, žádné notifikace. Privacy label „Data Not Collected“.
-- **UI:** celé generované v kódu (`UI/GameHUD.cs`, 2 923 řádků, uGUI, font
-  Press Start 2P), texty natvrdo anglicky. Žádné tweeny, žádný screen shake,
-  haptika = jediné `Handheld.Vibrate()` při vlastní smrti.
+  žádný review prompt, žádné notifikace. `Scripts/Meta/Telemetry.cs` zatím
+  jen loguje. Privacy label „Data Not Collected“.
+- **UI:** celé generované v kódu (`UI/GameHUD.cs`, ~2 950 řádků, uGUI, font
+  Press Start 2P). Texty jdou přes `Loc` (PR #57): 45 katalogů, 32 jazyků
+  aktivních za běhu (RTL a indická písma zůstávají anglicky). Dotykové
+  ovládání (joystick + spouště, gyro volitelně) od v2.9.1. Žádné tweeny,
+  žádný screen shake, haptika = jediné `Handheld.Vibrate()` při vlastní smrti.
 - **Obsahová pipeline** je silná stránka: arény, tvary, skiny, projektily,
   efekty i SFX se generují skripty v `tools/` (FLUX na SPARKu). Nový obsah
   je levný — to je konkurenční výhoda pro live-ops.
@@ -115,7 +119,7 @@ Platí od teď pro každý plán i PR (zrcadleno v CLAUDE.md):
 
 ## 4. Fáze
 
-### Fáze 0 — Základna a data (v2.9) `[ ]` · ~1–2 týdny
+### Fáze 0 — Základna a data (v2.9) `[wip]` · ~1–2 týdny
 
 **Cíl:** umět měřit a ukládat, než se začne cokoli stavět. Beta na TestFlight
 v externí skupině.
@@ -129,10 +133,10 @@ v externí skupině.
   `round_end {result, kills, deaths, duration, weapon, arena}`,
   `lan_pair {peers}`, `input_scheme_set {scheme, source}` (Prompts/26),
   později `level_*`, `iap_*`, `daily_*`, `mission_*`.
-- **PlayerProfile** (`Scripts/Meta/PlayerProfile.cs`): versionovaný JSON v
+- **PlayerProfile** `[done]` (`Scripts/Meta/PlayerProfile.cs`): versionovaný JSON v
   `Application.persistentDataPath`, atomický zápis (tmp + rename), migrace
   podle `schemaVersion`. Zatím jen statistiky (kills, deaths, rounds,
-  rounds won, playtime) a nastavení. Nahradí i `IAPManager` PlayerPrefs cache.
+  rounds won, playtime) a nastavení. `IAPManager` PlayerPrefs cache až ve fázi 4.
 - **Tween util** (`Scripts/UI/Tween.cs`): coroutine-based, easing OutBack /
   OutCubic / OutElastic, `Scale`, `Fade`, `Move`, `Punch`, sekvence se
   staggerem. Bez balíčků třetích stran (repo je záměrně drží mimo; PrimeTween
@@ -167,7 +171,7 @@ nevytrhne mě z kola.
   druhá spoušť připravená pro druhý slot (`Shooting.NetWeaponId2`, hangárový
   draft až ve fázi 4). Gyro je pro lidi těžké → zůstává volitelně; výchozí
   schéma = joystick. Přepínač v nové `UI/SettingsOverlay.cs` (domov i pro
-  přepínače z fáze 2), persistence přes `PlayerPrefs` do doby `PlayerProfile`.
+  přepínače z fáze 2), persistence v `PlayerProfile`.
   App Review na stole bez naklánění je vedlejší, ale reálný důvod.
 - **Bojový bot.** Rozšířit `Bot/BotBrain.cs` (dnes ne-agresivní warm-up)
   o stavy PURSUE (lead-pursuit s rychlostí střely z `WeaponProfile`),

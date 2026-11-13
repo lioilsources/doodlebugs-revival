@@ -11,14 +11,19 @@ Instructions for Claude Code when working in this repository.
 The product plan lives in `ROADMAP.md` (Czech). Read it before proposing or
 planning any feature; it defines phases, KPIs and open decisions D1–D9.
 
-**Status:** v2.8.2 tagged 2026-09-06; CI ships every `v*.*.*` tag to
+**Status:** v2.9.3 tagged 2026-10-23; CI ships every `v*.*.*` tag to
 TestFlight / Firebase App Distribution. The game is **not on the App Store
 yet** - listing kit in `marketing/appstore.md`. Today the loop is LAN-only:
 a single device never gets past "SEARCHING FOR GAME…" (only the warm-up bot
 flies), which is both a retention dead end and an App Review risk (two
-devices required). No analytics, no crash reporting, no player profile,
-no Game Center, no localisation; UI strings are hardcoded English in
-`GameHUD`.
+devices required) - `Prompts/27-CLAUDE-PLAN-solo-first.md` is the work
+order that fixes it. No analytics, no crash reporting, no Game Center
+(`Telemetry.cs` only logs). UI strings go through `Loc`
+(`Scripts/Localization/Loc.cs`, 45 catalogues in `Resources/Localization`,
+`tools/l10n/check_catalogues.py` must pass): a new string is a key in
+`en.txt` plus all 44 other catalogues. Local state lives in `PlayerProfile`
+(`Scripts/Meta/PlayerProfile.cs`, `profile.json` in persistentDataPath;
+`ProfileRecorder` adds the local rows at every round end).
 
 **North star:** open the app anywhere, alone, offline → shooting within
 15 s → a reason to play one more round and to come back tomorrow. LAN party
@@ -249,8 +254,8 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   the triggers. Touch-anywhere-to-shoot is gone. A connected gamepad still
   wins on mobile (`InputManager.IsUsingGamepad`), and the controls hide.
 - Scheme: `ControlSettings.Scheme` (`Scripts/Meta/`), Joystick by default,
-  Gyro opt-in; PlayerPrefs key `settings.controlScheme` until `PlayerProfile`
-  (Phase 0) absorbs it. Toggle lives in `UI/SettingsOverlay.cs` (SETTINGS
+  Gyro opt-in; stored in `PlayerProfile.settings` (the old PlayerPrefs key
+  `settings.controlScheme` is imported once when no profile exists). Toggle lives in `UI/SettingsOverlay.cs` (SETTINGS
   button in every hangar, bottom-left column) - Phase 2's shake/music/SFX/
   haptics rows go there, not into `GameHUD`.
 - `UI/TouchControls.cs` (Prompts/26): runtime-built under a `Screen.safeArea`
