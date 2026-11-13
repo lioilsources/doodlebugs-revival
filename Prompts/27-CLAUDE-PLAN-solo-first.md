@@ -2,7 +2,7 @@
 
 Status (2026-11-13): **WP0 PR #58 · WP1 verified on PR #57 (licence-free
 compile + checker; real Unity builds blocked by an expired editor licence on
-the dev Mac) · WP2 PR #59 · WP3 PR open.** Written against `main` @ `4ce7970` (v2.9.3).
+the dev Mac) · WP2 PR #59 · WP3 PR #60 · WP4 PR open (not soaked: needs the editor).** Written against `main` @ `4ce7970` (v2.9.3).
 Line numbers below are from that commit; `GameHUD.cs` lines shift by a few
 once PR #57 lands, so every seam also names its symbol. The executor updates
 this status line after each work package (WP) lands.

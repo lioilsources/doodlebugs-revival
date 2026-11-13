@@ -707,7 +707,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         // Player flew out of bounds - record death (the warm-up bot is not a player)
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
         if (!IsWarmupBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
-        SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.OutOfBounds);
+        ServerReportDeath(localIdx, 0, 0, false, KillCause.OutOfBounds);
         HandleDeathAndRespawn();
     }
 
@@ -924,8 +924,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         }
         _hasLastAttacker = false;
 
-        SyncKillFeedClientRpc(OwnerClientId, localIdx,
-            _lastAttackerClientId, _lastAttackerLocalPlayerIndex, credited, (byte)cause);
+        ServerReportDeath(localIdx, _lastAttackerClientId, _lastAttackerLocalPlayerIndex, credited, cause);
 
         // Spawn power-up at death position - not for the warm-up bot, or the
         // warm-up sky fills with crates nobody earned
@@ -935,6 +934,18 @@ public class PlayerController : NetworkBehaviour, IDamagable
         }
 
         HandleDeathAndRespawn();
+    }
+
+    /// <summary>Server: every death of every plane, after scoring, before the
+    /// feed line goes out (victim, killer clientId, killer index, credited, cause).
+    /// The bot soak harness counts causes and pairings from it.</summary>
+    public static event System.Action<PlayerController, ulong, int, bool, KillCause> ServerDeathReported;
+
+    private void ServerReportDeath(int victimLocalIdx, ulong killerClientId, int killerLocalIdx,
+        bool hasKiller, KillCause cause)
+    {
+        ServerDeathReported?.Invoke(this, killerClientId, killerLocalIdx, hasKiller, cause);
+        SyncKillFeedClientRpc(OwnerClientId, victimLocalIdx, killerClientId, killerLocalIdx, hasKiller, (byte)cause);
     }
 
     /// <summary>
@@ -1122,7 +1133,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             // Crashed into ground/obstacle - instant kill, no power-up drop
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
             if (!IsWarmupBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
-            SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.Ground);
+            ServerReportDeath(localIdx, 0, 0, false, KillCause.Ground);
             HandleDeathAndRespawn();
         }
 

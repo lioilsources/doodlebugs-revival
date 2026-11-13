@@ -72,6 +72,7 @@ public class BotManager : MonoBehaviour
 
     // Index = seat; null = free seat.
     private readonly PlayerController[] _combat = new PlayerController[PlayerController.MaxCombatBots];
+    private readonly byte[] _seatTier = new byte[PlayerController.MaxCombatBots];
     private int _combatTarget;
     private byte _combatTier;
 
@@ -102,8 +103,25 @@ public class BotManager : MonoBehaviour
     public void ServerSetCombatRoster(int count, byte tier)
     {
         if (!IsServer) return;
-        _combatTarget = Mathf.Clamp(count, 0, PlayerController.MaxCombatBots);
-        _combatTier = (byte)Mathf.Clamp(tier, 0, PlayerController.BotTierCount - 1);
+        count = Mathf.Clamp(count, 0, PlayerController.MaxCombatBots);
+        var tiers = new byte[count];
+        for (int i = 0; i < count; i++) tiers[i] = tier;
+        ServerSetCombatRoster(tiers);
+    }
+
+    /// <summary>Server: one bot per entry, seat = index, each with its own
+    /// tier (the soak harness mixes tiers; play uses one tier for all).</summary>
+    public void ServerSetCombatRoster(byte[] tiers)
+    {
+        if (!IsServer) return;
+        _combatTarget = Mathf.Clamp(tiers.Length, 0, PlayerController.MaxCombatBots);
+        for (int seat = 0; seat < _seatTier.Length; seat++)
+        {
+            _seatTier[seat] = seat < _combatTarget
+                ? (byte)Mathf.Clamp(tiers[seat], 0, PlayerController.BotTierCount - 1)
+                : (byte)0;
+        }
+        _combatTier = _combatTarget > 0 ? _seatTier[0] : (byte)0;
         // The warm-up bot is the lobby's screensaver; combat bots replace it.
         if (_combatTarget > 0) ServerEnsureDespawned();
         ReconcileCombat();
@@ -139,12 +157,10 @@ public class BotManager : MonoBehaviour
         foreach (var bot in _combat)
         {
             if (bot == null) continue;
-            bot.GetComponent<Shooting>()?.ServerSetSelectedWeapon(PickRoundWeapon(_combatTier));
+            var weapon = BotTier.Get(bot.NetBotTier.Value).PickRoundWeapon();
+            bot.GetComponent<Shooting>()?.ServerSetSelectedWeapon((int)weapon);
         }
     }
-
-    // WP4 replaces this with the tier's weapon pool (BotTier).
-    private static int PickRoundWeapon(byte tier) => (int)WeaponType.MG;
 
     private void ReconcileCombat()
     {
@@ -153,14 +169,15 @@ public class BotManager : MonoBehaviour
         {
             DespawnCombat(seat);
         }
-        foreach (var bot in _combat)
+        for (int seat = 0; seat < _combat.Length; seat++)
         {
-            if (bot != null && bot.NetBotTier.Value != _combatTier) bot.NetBotTier.Value = _combatTier;
+            var bot = _combat[seat];
+            if (bot != null && bot.NetBotTier.Value != _seatTier[seat]) bot.NetBotTier.Value = _seatTier[seat];
         }
         if (CombatCount >= _combatTarget || !WorldReady()) return;
-        for (int seat = 0; seat < _combat.Length && CombatCount < _combatTarget; seat++)
+        for (int seat = 0; seat < _combatTarget; seat++)
         {
-            if (_combat[seat] == null) _combat[seat] = SpawnPlane(seat, _combatTier);
+            if (_combat[seat] == null) _combat[seat] = SpawnPlane(seat, _seatTier[seat]);
         }
     }
 
