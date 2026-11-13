@@ -237,3 +237,11 @@ bot.tier.0=ROOKIE
 bot.tier.1=PILOT
 bot.tier.2=ACE
 bot.tier.3=BARON
+
+# --- Home screen and solo session (Prompts/27 WP5) ---
+home.play=PLAY
+home.party=PARTY
+home.cancel=CANCEL
+home.loading=TAKING OFF...
+solo.home=HOME
+solo.next_round=NEXT ROUND

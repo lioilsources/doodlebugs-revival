@@ -115,6 +115,7 @@ public class Shooting : NetworkBehaviour
             float planeSpeed = planeRb != null ? planeRb.linearVelocity.magnitude : 0f;
             int localPlayerIndex = playerController.LocalPlayerIndex >= 0 ? playerController.LocalPlayerIndex : 0;
             ShootServerRpc(firePoint.position, firePoint.rotation, planeSpeed, localPlayerIndex, slot);
+            if (!playerController.IsBot) ProfileRecorder.ReportLocalShot();
         }
     }
 
