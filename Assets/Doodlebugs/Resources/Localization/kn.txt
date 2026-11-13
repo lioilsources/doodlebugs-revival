@@ -212,3 +212,6 @@ home.cancel=ರದ್ದು
 home.loading=ಹಾರಾಟ...
 solo.home=ಮುಖಪುಟ
 solo.next_round=ಮುಂದಿನ ಸುತ್ತು
+lan.add_bot=+ ಬಾಟ್
+lan.remove_bot=- ಬಾಟ್
+lan.nearby_join=ಹತ್ತಿರ ಪೈಲಟ್ · ಸೇರಿ

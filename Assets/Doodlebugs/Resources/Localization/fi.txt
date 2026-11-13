@@ -210,3 +210,6 @@ home.cancel=PERUUTA
 home.loading=NOUSTAAN...
 solo.home=ALKUUN
 solo.next_round=SEURAAVA ERÄ
+lan.add_bot=+ BOTTI
+lan.remove_bot=- BOTTI
+lan.nearby_join=LENTÄJÄ LÄHELLÄ · LIITY

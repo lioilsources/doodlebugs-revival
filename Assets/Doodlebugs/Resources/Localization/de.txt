@@ -210,3 +210,6 @@ home.cancel=ABBRECHEN
 home.loading=STARTE...
 solo.home=MENÜ
 solo.next_round=NÄCHSTE RUNDE
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOT IN DER NÄHE · BEITRETEN

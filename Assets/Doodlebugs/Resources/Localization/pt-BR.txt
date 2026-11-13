@@ -210,3 +210,6 @@ home.cancel=CANCELAR
 home.loading=DECOLANDO...
 solo.home=INÍCIO
 solo.next_round=PRÓXIMA RODADA
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOTO POR PERTO · ENTRAR

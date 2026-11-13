@@ -488,6 +488,17 @@ public class MatchManager : MonoBehaviour
         {
             BotManager.Instance.ServerSetCombatRoster(_soloBots, SoloTier);
         }
+        // Party: humans who joined since push bots out beyond the cap.
+        if (!_soloArmed && BotManager.Instance != null && BotManager.Instance.CombatTarget > 0)
+        {
+            int clients = NetworkManager.Singleton.ConnectedClientsIds.Count;
+            int room = Mathf.Max(0, LanBotParticipantCap - clients);
+            if (BotManager.Instance.CombatTarget > room)
+            {
+                BotManager.Instance.ServerSetCombatRoster(room, LanBotTier);
+                Telemetry.Log("bot_removed", ("count", room), ("phase", "round_start"));
+            }
+        }
         try { BotManager.Instance?.ServerPrepareRound(); }
         catch (Exception e) { Debug.LogException(e); }
 
@@ -495,6 +506,54 @@ public class MatchManager : MonoBehaviour
         {
             if (player.IsWarmupBot) continue;
             SafeDeploy(player);
+        }
+    }
+
+    // --- LAN bots (Prompts/27 S8, WP6) -----------------------------------------
+
+    /// <summary>Most participants a party fills with bots; humans beyond it
+    /// push a bot out at the next round start.</summary>
+    public const int LanBotParticipantCap = 4;
+    public const byte LanBotTier = 1;   // Pilot
+
+    public bool CanAddLanBot =>
+        !_soloArmed && ParticipantCount < LanBotParticipantCap &&
+        (Phase == GamePhase.WaitingForPlayers || Phase == GamePhase.PreBattleCountdown || IsIntermission);
+
+    public bool CanRemoveLanBot =>
+        !_soloArmed && BotManager.Instance != null && BotManager.Instance.CombatTarget > 0;
+
+    /// <summary>Server: host's + BOT. In the Waiting lobby the first bot makes
+    /// two participants and starts the PreBattle countdown (it replaces the
+    /// warm-up bot, like a second device would).</summary>
+    public void ServerAddLanBot()
+    {
+        if (!IsServer() || !CanAddLanBot || BotManager.Instance == null) return;
+        var bots = BotManager.Instance;
+        bots.ServerSetCombatRoster(bots.CombatTarget + 1, LanBotTier);
+        Telemetry.Log("bot_added", ("count", bots.CombatTarget), ("phase", Phase));
+        if (Phase == GamePhase.WaitingForPlayers && ParticipantTarget >= 2) StartPreBattleCountdown();
+    }
+
+    /// <summary>Server: host's - BOT. Dropping below two participants goes
+    /// back to the Waiting lobby, as a leaving device would.</summary>
+    public void ServerRemoveLanBot()
+    {
+        if (!IsServer() || !CanRemoveLanBot) return;
+        var bots = BotManager.Instance;
+        bots.ServerSetCombatRoster(bots.CombatTarget - 1, LanBotTier);
+        Telemetry.Log("bot_removed", ("count", bots.CombatTarget), ("phase", Phase));
+        if (Phase != GamePhase.WaitingForPlayers && ParticipantTarget < 2) ServerFreezeToWaiting();
+    }
+
+    // Like ParticipantCount, but counts bots asked for (they spawn a frame later).
+    private int ParticipantTarget
+    {
+        get
+        {
+            var nm = NetworkManager.Singleton;
+            int clients = nm != null && nm.IsServer ? nm.ConnectedClientsIds.Count : 0;
+            return clients + (BotManager.Instance != null ? BotManager.Instance.CombatTarget : 0);
         }
     }
 

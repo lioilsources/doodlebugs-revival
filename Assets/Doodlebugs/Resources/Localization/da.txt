@@ -210,3 +210,6 @@ home.cancel=ANNULLER
 home.loading=LETTER...
 solo.home=HJEM
 solo.next_round=NÆSTE RUNDE
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOT I NÆRHEDEN · DELTAG

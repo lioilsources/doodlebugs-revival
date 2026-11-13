@@ -212,3 +212,6 @@ home.cancel=റദ്ദാക്കുക
 home.loading=പറന്നുയരുന്നു...
 solo.home=ഹോം
 solo.next_round=അടുത്ത റൗണ്ട്
+lan.add_bot=+ ബോട്ട്
+lan.remove_bot=- ബോട്ട്
+lan.nearby_join=സമീപം പൈലറ്റ് · ചേരുക

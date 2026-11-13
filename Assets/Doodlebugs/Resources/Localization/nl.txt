@@ -210,3 +210,6 @@ home.cancel=ANNULEREN
 home.loading=OPSTIJGEN...
 solo.home=HOME
 solo.next_round=VOLGENDE RONDE
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOOT IN DE BUURT · MEEDOEN

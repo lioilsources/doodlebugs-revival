@@ -210,3 +210,6 @@ home.cancel=ZRUŠIŤ
 home.loading=ŠTARTUJEME...
 solo.home=DOMOV
 solo.next_round=ĎALŠIE KOLO
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOT NABLÍZKU · PRIDAŤ SA

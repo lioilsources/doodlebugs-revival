@@ -210,3 +210,6 @@ home.cancel=BATAL
 home.loading=BERLEPAS...
 solo.home=UTAMA
 solo.next_round=PUSINGAN SETERUSNYA
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=JURUTERBANG BERDEKATAN · SERTAI

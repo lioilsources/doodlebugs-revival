@@ -210,3 +210,6 @@ home.cancel=ΑΚΥΡΟ
 home.loading=ΑΠΟΓΕΙΩΣΗ...
 solo.home=ΑΡΧΙΚΗ
 solo.next_round=ΕΠΟΜΕΝΟΣ ΓΥΡΟΣ
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=ΠΙΛΟΤΟΣ ΚΟΝΤΑ · ΣΥΜΜΕΤΟΧΗ

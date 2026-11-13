@@ -210,3 +210,6 @@ home.cancel=İPTAL
 home.loading=KALKIŞ...
 solo.home=ANA MENÜ
 solo.next_round=SONRAKİ TUR
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=YAKINDA PİLOT · KATIL

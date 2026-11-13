@@ -211,3 +211,6 @@ home.cancel=HỦY
 home.loading=CẤT CÁNH...
 solo.home=TRANG CHỦ
 solo.next_round=VÒNG TIẾP
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PHI CÔNG GẦN ĐÂY · THAM GIA

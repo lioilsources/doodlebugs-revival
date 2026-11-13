@@ -212,3 +212,6 @@ home.cancel=ਰੱਦ ਕਰੋ
 home.loading=ਉਡਾਣ...
 solo.home=ਹੋਮ
 solo.next_round=ਅਗਲਾ ਰਾਊਂਡ
+lan.add_bot=+ ਬੋਟ
+lan.remove_bot=- ਬੋਟ
+lan.nearby_join=ਨੇੜੇ ਪਾਇਲਟ · ਸ਼ਾਮਲ ਹੋਵੋ

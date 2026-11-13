@@ -211,3 +211,6 @@ home.cancel=取消
 home.loading=起飛中...
 solo.home=主頁
 solo.next_round=下一輪
+lan.add_bot=+ 機器人
+lan.remove_bot=- 機器人
+lan.nearby_join=附近有飛行員 · 加入

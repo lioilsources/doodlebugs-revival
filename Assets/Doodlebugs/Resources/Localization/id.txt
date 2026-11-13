@@ -210,3 +210,6 @@ home.cancel=BATAL
 home.loading=LEPAS LANDAS...
 solo.home=BERANDA
 solo.next_round=RONDE BERIKUTNYA
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOT DI DEKAT · GABUNG

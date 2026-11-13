@@ -212,3 +212,6 @@ home.cancel=منسوخ
 home.loading=اڑان...
 solo.home=ہوم
 solo.next_round=اگلا راؤنڈ
+lan.add_bot=+ بوٹ
+lan.remove_bot=- بوٹ
+lan.nearby_join=قریب پائلٹ · شامل ہوں

@@ -344,6 +344,25 @@ public class GameHUD : MonoBehaviour
         UpdatePlayerEntries();
         UpdateAllBars();
         UpdateTimer();
+        RefreshReadyListForBots();
+    }
+
+    // The host can add or remove LAN bots while a READY list is up
+    // (Prompts/27 WP6); every device rebuilds its list when the bot rows change.
+    private int _readyListBots = -1;
+
+    private void RefreshReadyListForBots()
+    {
+        if (_hangarOverlay == null || !_hangarOverlay.activeSelf) return;
+        if (_hangarMode != MatchManager.HangarMode.PreBattle && _hangarMode != MatchManager.HangarMode.Intermission) return;
+        int bots = 0;
+        foreach (var entry in _playerEntries)
+        {
+            if (PlayerController.IsCombatBotIdentity(entry.localPlayerIndex)) bots++;
+        }
+        if (bots == _readyListBots) return;
+        BuildReadyList();
+        UpdateReadyCount();
     }
 
     // --- layout construction ------------------------------------------------
@@ -1614,6 +1633,13 @@ public class GameHUD : MonoBehaviour
         {
             SoloControls.AddHangarHomeButton(_hangarOverlay.transform);
         }
+        // + BOT / - BOT for the party host (Prompts/27 S8).
+        bool partyHost = NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost &&
+                         (MatchManager.Instance == null || !MatchManager.Instance.IsSoloSession);
+        if (partyHost && (waiting || preBattle || intermission))
+        {
+            LanBotControls.AddButtons(_hangarOverlay.transform);
+        }
         if (waiting && !_skinPickerAutoShown)
         {
             var owned = FindOwnedPlayer();
@@ -1938,8 +1964,24 @@ public class GameHUD : MonoBehaviour
         const float rowStep = 40f;
         const float thumb = 36f;
         const int maxThumbs = 3;
+        _readyListBots = 0;
         foreach (var entry in _playerEntries)
         {
+            // Combat bots share clientId 0 with the host: their own row, always
+            // READY - nobody waits for a bot (Prompts/27 WP6).
+            if (PlayerController.IsCombatBotIdentity(entry.localPlayerIndex))
+            {
+                Color botColor = PlayerColorManager.Instance != null
+                    ? PlayerColorManager.Instance.GetColor(entry.clientId, entry.localPlayerIndex)
+                    : PlayerColorManager.GetColorByIndex(entry.localPlayerIndex);
+                _rosterObjects.Add(CreateCornerText($"Bot_{entry.localPlayerIndex}", entry.lastKnownName ?? "BOT", 10,
+                    new Vector2(0, 0), new Vector2(190, y), botColor).gameObject);
+                _rosterObjects.Add(CreateCornerText($"BotStatus_{entry.localPlayerIndex}", Loc.T("hangar.ready"), 10,
+                    new Vector2(0, 0), new Vector2(400, y), ReadyGreen).gameObject);
+                _readyListBots++;
+                y += rowStep;
+                continue;
+            }
             if (!seen.Add(entry.clientId)) continue;
 
             string name = entry.lastKnownName ?? $"P{entry.clientId + 1}";
@@ -2128,7 +2170,8 @@ public class GameHUD : MonoBehaviour
     private void UpdateReadyCount()
     {
         if (_hangarReadyCountText == null) return;
-        _hangarReadyCountText.text = Loc.F("hangar.ready_count", _readyClients.Count, _hangarReadyRows.Count);
+        int bots = Mathf.Max(0, _readyListBots);
+        _hangarReadyCountText.text = Loc.F("hangar.ready_count", _readyClients.Count + bots, _hangarReadyRows.Count + bots);
     }
 
     private Text CreateHangarText(string name, string content, int fontSize, Vector2 pos,

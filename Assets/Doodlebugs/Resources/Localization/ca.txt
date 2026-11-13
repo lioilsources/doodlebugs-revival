@@ -210,3 +210,6 @@ home.cancel=CANCEL·LA
 home.loading=ENLAIRANT...
 solo.home=INICI
 solo.next_round=SEGÜENT RONDA
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOT A PROP · UNEIX-T'HI

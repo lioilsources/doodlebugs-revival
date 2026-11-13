@@ -210,3 +210,6 @@ home.cancel=ODUSTANI
 home.loading=POLIJEĆEMO...
 solo.home=POČETNA
 solo.next_round=SLJEDEĆA RUNDA
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOT U BLIZINI · PRIDRUŽI SE
