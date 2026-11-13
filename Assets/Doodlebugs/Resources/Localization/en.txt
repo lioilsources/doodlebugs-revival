@@ -245,3 +245,8 @@ home.cancel=CANCEL
 home.loading=TAKING OFF...
 solo.home=HOME
 solo.next_round=NEXT ROUND
+
+# --- LAN bots and the nearby-pilot toast (Prompts/27 WP6) ---
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOT NEARBY · JOIN

@@ -54,6 +54,7 @@ public class HangarScreen : MonoBehaviour
     private RectTransform _roster;
     private Ui.Cta _cta;
     private string _rosterSignature;
+    private LanBotControls _lanBots;
 
     // Home (Searching mode)
     private RectTransform _boot;
@@ -403,6 +404,9 @@ public class HangarScreen : MonoBehaviour
 
         _cta = Ui.BigButton(bar, "Cta", "READY", UiTheme.Confirm, PressCta);
         Ui.Place(_cta.Panel.Root, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), Vector2.zero, new Vector2(204f, 54f));
+
+        // + BOT / - BOT above the CTA, party host only (Prompts/27 S8)
+        _lanBots = LanBotControls.Create(_layer);
     }
 
     private void BuildBoot()
@@ -561,6 +565,10 @@ public class HangarScreen : MonoBehaviour
         bool partyHostLobby = mode == MatchManager.HangarMode.Waiting &&
                               NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;
         _homePill.root.gameObject.SetActive(partyHostLobby || (solo && mode == MatchManager.HangarMode.Intermission));
+        bool partyHost = !solo && NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
+        _lanBots.gameObject.SetActive(partyHost && (mode == MatchManager.HangarMode.Waiting ||
+                                                    mode == MatchManager.HangarMode.PreBattle ||
+                                                    mode == MatchManager.HangarMode.Intermission));
         RefreshPills();
 
         // Tabs per mode
@@ -684,8 +692,10 @@ public class HangarScreen : MonoBehaviour
         _nextPill.label.text = (host ? "ARENAS · " : "NEXT · ") + arena.ToUpperInvariant();
         _nextPill.bg.raycastTarget = host;
 
-        int devices = RosterDevices().Count;
-        _readyPill.label.text = $"READY {_readyClients.Count}/{Mathf.Max(1, devices)}";
+        var roster = RosterDevices();
+        int bots = 0;
+        foreach (var r in roster) if (r.Bot) bots++;
+        _readyPill.label.text = $"READY {_readyClients.Count + bots}/{Mathf.Max(1, roster.Count)}";
 
         if (mm != null && _tabs.TryGetValue(Tab.Upgrades, out var up))
         {
@@ -1057,7 +1067,9 @@ public class HangarScreen : MonoBehaviour
         return lightGlass && Lum(accent) > 0.45f ? UiTheme.OnBackdrop : accent;
     }
 
-    private struct Pilot { public ulong Client; public string Name; public int Model, Skin; }
+    // Bot = a combat bot in a LAN party (Prompts/27 WP6): its own pill, always
+    // READY; Client is then its participant id, LocalIdx its seat index.
+    private struct Pilot { public ulong Client; public int LocalIdx; public bool Bot; public string Name; public int Model, Skin; }
 
     private static List<Pilot> RosterDevices()
     {
@@ -1071,7 +1083,22 @@ public class HangarScreen : MonoBehaviour
         });
         foreach (var p in planes)
         {
-            if (p.IsBot || !seen.Add(p.OwnerClientId)) continue;
+            if (p.IsWarmupBot) continue;
+            if (p.IsCombatBot)
+            {
+                var ba = p.GetComponent<PlaneAppearance>();
+                list.Add(new Pilot
+                {
+                    Client = MatchManager.ParticipantId(p.OwnerClientId, p.LocalPlayerIndex),
+                    LocalIdx = p.LocalPlayerIndex,
+                    Bot = true,
+                    Name = p.DisplayName,
+                    Model = ba != null ? ba.NetModelId.Value : 0,
+                    Skin = ba != null ? ba.NetSkinId.Value : 0,
+                });
+                continue;
+            }
+            if (!seen.Add(p.OwnerClientId)) continue;
             var a = p.GetComponent<PlaneAppearance>();
             string n = p.PlayerName;
             int hash = n.IndexOf('#');
@@ -1084,7 +1111,10 @@ public class HangarScreen : MonoBehaviour
                 Skin = a != null ? a.NetSkinId.Value : 0,
             });
         }
-        return list;
+        // Humans first, bots after, each group in plane order
+        var ordered = list.FindAll(x => !x.Bot);
+        ordered.AddRange(list.FindAll(x => x.Bot));
+        return ordered;
     }
 
     private void RebuildRoster(bool force)
@@ -1126,9 +1156,11 @@ public class HangarScreen : MonoBehaviour
             var le = pill.gameObject.AddComponent<LayoutElement>();
             le.preferredHeight = 40f;
 
+            ulong colorClient = p.Bot ? 0UL : p.Client;
+            int colorIdx = p.Bot ? p.LocalIdx : 0;
             Color pc = PlayerColorManager.Instance != null
-                ? PlayerColorManager.Instance.GetColor(p.Client, 0)
-                : PlayerColorManager.GetColorByIndex((int)p.Client);
+                ? PlayerColorManager.Instance.GetColor(colorClient, colorIdx)
+                : PlayerColorManager.GetColorByIndex((int)colorClient + colorIdx);
             var (thumb, _, icon) = Ui.Badge(pill, "Thumb", PlaneModelCatalog.LoadSprite(p.Model, p.Skin), UiTheme.Frame, 32f);
             thumb.GetChild(0).GetComponent<Image>().color = pc;
             var tle = thumb.gameObject.AddComponent<LayoutElement>();
@@ -1141,8 +1173,8 @@ public class HangarScreen : MonoBehaviour
             v.childControlWidth = true;
             v.childControlHeight = true;
             v.childAlignment = TextAnchor.MiddleLeft;
-            Ui.AutoText(col, "Name", p.Client == me ? "You" : p.Name, UiTheme.BodyStrong, 13, UiTheme.OnBackdrop);
-            bool ready = _readyClients.Contains(p.Client);
+            Ui.AutoText(col, "Name", !p.Bot && p.Client == me ? "You" : p.Name, UiTheme.BodyStrong, 13, UiTheme.OnBackdrop);
+            bool ready = p.Bot || _readyClients.Contains(p.Client);   // nobody waits for a bot
             string state = readyCheck ? (ready ? "READY" : "PICKING") : _mode == MatchManager.HangarMode.Waiting ? "IN LOBBY" : "";
             if (state.Length > 0)
                 Ui.AutoText(col, "State", state, UiTheme.Label, 12, ready ? UiTheme.Confirm : UiTheme.Highlight);
