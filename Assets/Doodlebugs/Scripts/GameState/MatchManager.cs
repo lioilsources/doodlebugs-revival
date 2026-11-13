@@ -66,6 +66,11 @@ public class MatchManager : MonoBehaviour
         public int WinnerKills;
     }
 
+    /// <summary>True when this device hosts a one-device session against bots
+    /// (Prompts/27 WP5). The guard Phase 2 needs before touching
+    /// Time.timeScale; always false on LAN clients.</summary>
+    public bool IsSoloSession { get; private set; }
+
     /// <summary>True between round end and the next round start (results shown).</summary>
     public bool IsIntermission { get; private set; }
 
