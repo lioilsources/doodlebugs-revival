@@ -52,7 +52,7 @@ public class ProfileRecorder : MonoBehaviour
     {
         var nm = NetworkManager.Singleton;
         if (nm == null || clientId != nm.LocalClientId) return false;
-        return !PlayerController.IsBotIdentity(clientId, localPlayerIndex);
+        return !PlayerController.IsAnyBotIdentity(localPlayerIndex);
     }
 
     private void HandleMatchEnded(MatchManager.MatchResult result)

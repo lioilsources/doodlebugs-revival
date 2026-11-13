@@ -320,7 +320,7 @@ public class GameHUD : MonoBehaviour
         var activePlayerIds = new HashSet<string>();
         foreach (var player in players)
         {
-            if (player.IsBot) continue;   // no panel, no roster row, no score row
+            if (player.IsWarmupBot) continue;   // no panel, no roster row, no score row
             activePlayerIds.Add(GetPlayerUniqueId(player));
         }
 
@@ -342,7 +342,7 @@ public class GameHUD : MonoBehaviour
         // Add/update entries for active players
         foreach (var player in players)
         {
-            if (player.IsBot) continue;
+            if (player.IsWarmupBot) continue;
             string uniqueId = GetPlayerUniqueId(player);
 
             if (!_playerEntriesById.ContainsKey(uniqueId))
@@ -366,7 +366,7 @@ public class GameHUD : MonoBehaviour
                 }
 
                 // Name may sync late via NetworkVariable
-                string currentName = player.PlayerName;
+                string currentName = player.DisplayName;
                 if (entry.isLocalPlayer && !string.IsNullOrEmpty(currentName))
                 {
                     currentName = System.Text.RegularExpressions.Regex.Replace(currentName, @"\s*#\d+$", "");
@@ -402,10 +402,12 @@ public class GameHUD : MonoBehaviour
         }
     }
 
-    /// <summary>Planes controlled from this device get the detailed panel.</summary>
+    /// <summary>Planes controlled from this device get the detailed panel.
+    /// The host owns every bot, so ownership alone would give it one
+    /// detailed panel per bot - bots always get the compact opponent row.</summary>
     private static bool IsMine(PlayerController player)
     {
-        return player.IsOwner;
+        return player.IsOwner && !player.IsBot;
     }
 
     private void CreatePlayerHUDEntry(PlayerController player)
@@ -451,7 +453,8 @@ public class GameHUD : MonoBehaviour
         containerLayout.childControlHeight = false;
 
         // --- name + score line ---
-        string baseName = !string.IsNullOrEmpty(player.PlayerName) ? player.PlayerName : $"P{colorIndex + 1}";
+        string displayName = player.DisplayName;
+        string baseName = !string.IsNullOrEmpty(displayName) ? displayName : $"P{colorIndex + 1}";
         if (player.IsLocalPlayer)
         {
             baseName = System.Text.RegularExpressions.Regex.Replace(baseName, @"\s*#\d+$", "");
@@ -762,13 +765,24 @@ public class GameHUD : MonoBehaviour
 
     private string ResolvePlayerName(ulong clientId, int localPlayerIndex)
     {
-        if (PlayerController.IsBotIdentity(clientId, localPlayerIndex)) return PlayerController.BotDisplayName;
+        if (PlayerController.IsWarmupBotIdentity(clientId, localPlayerIndex)) return PlayerController.BotDisplayName;
 
         string uniqueId = GetPlayerUniqueId(clientId, localPlayerIndex);
         if (_playerEntriesById.TryGetValue(uniqueId, out var entry) &&
             !string.IsNullOrEmpty(entry.lastKnownName))
         {
             return entry.lastKnownName;
+        }
+        if (PlayerController.IsCombatBotIdentity(localPlayerIndex))
+        {
+            // Row already gone (bot despawned before the podium): rebuild the
+            // name from a live plane if one still holds the seat.
+            int seat = localPlayerIndex - PlayerController.CombatBotIndexBase;
+            foreach (var p in PlayerController.All)
+            {
+                if (p.IsCombatBot && p.LocalPlayerIndex == localPlayerIndex) return p.DisplayName;
+            }
+            return PlayerController.CombatBotName(MatchManager.Instance != null ? MatchManager.Instance.LastBotTier : 0, seat);
         }
         return $"P{(int)clientId + localPlayerIndex + 1}";
     }
@@ -1132,8 +1146,9 @@ public class GameHUD : MonoBehaviour
 
     // --- run-over podium --------------------------------------------------------
 
-    private void OnRunEnded(ulong winnerClientId)
+    private void OnRunEnded(ulong winnerParticipant)
     {
+        MatchManager.ParticipantIdentity(winnerParticipant, out ulong winnerClientId, out int winnerLocalIdx);
         if (_resultsOverlay != null) _resultsOverlay.SetActive(false);
 
         _podiumOverlay = new GameObject("PodiumOverlay");
@@ -1150,10 +1165,10 @@ public class GameHUD : MonoBehaviour
         CreatePodiumText("Title", "RUN OVER", 34, new Vector2(0, 130), new Color(1f, 0.85f, 0.3f));
 
         Color winnerColor = PlayerColorManager.Instance != null
-            ? PlayerColorManager.Instance.GetColor(winnerClientId, 0)
-            : PlayerColorManager.GetColorByIndex((int)winnerClientId);
+            ? PlayerColorManager.Instance.GetColor(winnerClientId, winnerLocalIdx)
+            : PlayerColorManager.GetColorByIndex((int)winnerClientId + winnerLocalIdx);
         CreatePodiumText("Champion",
-            $"CHAMPION: {ResolvePlayerName(winnerClientId, 0)}", 22, new Vector2(0, 70), winnerColor);
+            $"CHAMPION: {ResolvePlayerName(winnerClientId, winnerLocalIdx)}", 22, new Vector2(0, 70), winnerColor);
 
         // Standings by round wins
         var mm = MatchManager.Instance;
@@ -1165,7 +1180,8 @@ public class GameHUD : MonoBehaviour
             entries.Sort((a, b) => b.Value.CompareTo(a.Value));
             for (int i = 0; i < entries.Count; i++)
             {
-                lines.Add($"{i + 1}. {ResolvePlayerName(entries[i].Key, 0)}  {entries[i].Value} WINS");
+                MatchManager.ParticipantIdentity(entries[i].Key, out ulong cid, out int idx);
+                lines.Add($"{i + 1}. {ResolvePlayerName(cid, idx)}  {entries[i].Value} WINS");
             }
         }
         var standings = CreatePodiumText("Standings", string.Join("\n", lines), 14,
@@ -1241,7 +1257,8 @@ public class GameHUD : MonoBehaviour
         var parts = new List<string>();
         foreach (var pair in entries)
         {
-            parts.Add($"{ColoredName(pair.Key, 0)} {pair.Value}");
+            MatchManager.ParticipantIdentity(pair.Key, out ulong cid, out int idx);
+            parts.Add($"{ColoredName(cid, idx)} {pair.Value}");
         }
         return $"WINS (TO {MatchManager.RoundWinsTarget}): " + string.Join(" · ", parts);
     }

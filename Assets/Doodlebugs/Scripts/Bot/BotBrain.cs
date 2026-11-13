@@ -105,9 +105,14 @@ public class BotBrain : MonoBehaviour, IInputProvider
     private bool _relit;
     private float _relitAt;
 
-    public void Init(PlayerController player)
+    /// <summary>Combat bots (Prompts/27 WP3) fire at anyone - the friendly-fire
+    /// mute is the warm-up bot's manners, not a combat rule.</summary>
+    public bool IsCombat { get; private set; }
+
+    public void Init(PlayerController player, bool combat = false)
     {
         _player = player;
+        IsCombat = combat;
         _rb = player.GetComponent<Rigidbody2D>();
         _seed = Random.Range(0f, 1000f);
         _spawnedAt = Time.time;
@@ -131,6 +136,24 @@ public class BotBrain : MonoBehaviour, IInputProvider
 
         Enter(State.Cruise);
         Debug.Log($"[BotBrain] Init: ground {_groundTop:0.0}, space {_spaceBottom:0.0}, turn radius {_player.EngineOnTurnRadius:0.00}");
+    }
+
+    /// <summary>Server: the plane just died and is about to respawn at a
+    /// cloud - start over (Cruise, the after-spawn fire hold, fresh clocks).</summary>
+    public void ResetAfterDeath()
+    {
+        if (_player == null) return;
+        _h = _v = _hTarget = _vTarget = 0f;
+        _bursting = false;
+        _suppressed = false;
+        float now = Time.time;
+        _spawnedAt = now;
+        _nextBurstAt = now + NoFireAfterSpawnSeconds + Random.Range(BurstGapMin, BurstGapMax);
+        _nextLoopAt = now + Random.Range(LoopIntervalMin, LoopIntervalMax);
+        _nextReverseAt = now + Random.Range(ReverseIntervalMin, ReverseIntervalMax);
+        _nextZoomAt = now + Random.Range(ZoomIntervalMin, ZoomIntervalMax);
+        _prevEngineOff = false;
+        Enter(State.Cruise);
     }
 
     // --- IInputProvider --------------------------------------------------
@@ -399,7 +422,7 @@ public class BotBrain : MonoBehaviour, IInputProvider
             _burstEndsAt = t + Random.Range(BurstMin, BurstMax);
         }
 
-        _suppressed = _bursting && HumanInLineOfFire(dir);
+        _suppressed = _bursting && !IsCombat && HumanInLineOfFire(dir);
     }
 
     /// <summary>The one thing the bot knows about humans: whether one sits
@@ -410,7 +433,7 @@ public class BotBrain : MonoBehaviour, IInputProvider
         if (FriendlyFireConeDegrees <= 0f || FriendlyFireRange <= 0f) return false;
 
         Vector2 from = _player.transform.position;
-        foreach (var other in FindObjectsByType<PlayerController>(FindObjectsSortMode.None))
+        foreach (var other in PlayerController.All)
         {
             if (other == _player || other.IsBot || other.InHangar) continue;
             Vector2 to = (Vector2)other.transform.position - from;

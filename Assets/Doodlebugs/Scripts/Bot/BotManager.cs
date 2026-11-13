@@ -3,8 +3,16 @@ using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
-/// Server-only lifecycle of the warm-up bot: one AI-flown PlaneHolder that
-/// exists while the lobby waits for a second device and nowhere else.
+/// Server-only lifecycle of every AI-flown plane.
+///
+/// Warm-up bot: one scoreless PlaneHolder that exists while the lobby waits
+/// for a second device and nowhere else (Prompts/25).
+///
+/// Combat bots (Prompts/27 WP3): up to PlayerController.MaxCombatBots planes at
+/// seats (0, 90+seat) that play rounds like pilots - they score, respawn
+/// through the normal death path, keep their look for the whole session and
+/// count as participants (MatchManager.ParticipantCount). They live until
+/// ServerDespawnCombat; the phase poll only ever touches the warm-up bot.
 ///
 /// It is an ordinary plane (flight, wrap, death, respawn, smoke, weapon and
 /// element trail all come from PlayerController and friends) that a BotBrain
@@ -13,10 +21,11 @@ using UnityEngine;
 /// parks in the hangar because host-owned planes never do
 /// (MatchManager.ShouldSpawnHiddenInHangar).
 ///
-/// Nothing here can start or block a battle: every phase transition counts
-/// NetworkManager.ConnectedClientsIds, and a spawned object is not a
-/// connection. Keeping it out of scores, the HUD roster, READY and the look
-/// registry is PlayerController.IsBot's job, checked at each of those seams.
+/// The warm-up bot cannot start or block a battle: phase transitions count
+/// connected clients plus COMBAT bots. Keeping it out of scores, the HUD
+/// roster, READY and the look registry is PlayerController.IsWarmupBot's job;
+/// PlayerController.IsBot (any bot) keeps every bot out of READY, haptics,
+/// touch controls and the look registry.
 ///
 /// Created by GameSetup next to MatchManager; ticked from MatchManager.Update
 /// so the phase is polled rather than hooked - no future phase can leave a
@@ -59,6 +68,114 @@ public class BotManager : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    // --- combat roster --------------------------------------------------------
+
+    // Index = seat; null = free seat.
+    private readonly PlayerController[] _combat = new PlayerController[PlayerController.MaxCombatBots];
+    private int _combatTarget;
+    private byte _combatTier;
+
+    /// <summary>Spawned combat bots.</summary>
+    public int CombatCount
+    {
+        get
+        {
+            int n = 0;
+            foreach (var bot in _combat) if (bot != null) n++;
+            return n;
+        }
+    }
+
+    /// <summary>Combat bots asked for (spawned or waiting for the world).</summary>
+    public int CombatTarget => _combatTarget;
+    public byte CombatTier => _combatTier;
+
+    /// <summary>The live combat bots, seat order, nulls skipped.</summary>
+    public IEnumerable<PlayerController> CombatBots
+    {
+        get { foreach (var bot in _combat) if (bot != null) yield return bot; }
+    }
+
+    /// <summary>Server: keep exactly `count` combat bots of `tier`. Spawns or
+    /// despawns from the highest seat; a tier change applies to every bot
+    /// at once (synced, so names update on every client).</summary>
+    public void ServerSetCombatRoster(int count, byte tier)
+    {
+        if (!IsServer) return;
+        _combatTarget = Mathf.Clamp(count, 0, PlayerController.MaxCombatBots);
+        _combatTier = (byte)Mathf.Clamp(tier, 0, PlayerController.BotTierCount - 1);
+        // The warm-up bot is the lobby's screensaver; combat bots replace it.
+        if (_combatTarget > 0) ServerEnsureDespawned();
+        ReconcileCombat();
+    }
+
+    /// <summary>Server: remove every combat bot (session end, freeze to waiting).</summary>
+    public void ServerDespawnCombat()
+    {
+        if (!IsServer) return;
+        _combatTarget = 0;
+        for (int seat = 0; seat < _combat.Length; seat++) DespawnCombat(seat);
+    }
+
+    /// <summary>Server, every frame in every phase: spawn what the roster
+    /// still lacks once the world is ready, and yield shapes humans pick.</summary>
+    public void ServerTickCombat()
+    {
+        if (!IsServer) return;
+        for (int seat = 0; seat < _combat.Length; seat++)
+        {
+            // Despawned from outside (scene teardown, shutdown): free the seat.
+            if (_combat[seat] != null && !_combat[seat].IsSpawned) _combat[seat] = null;
+        }
+        if (CombatCount != _combatTarget) ReconcileCombat();
+        foreach (var bot in _combat) if (bot != null) YieldShapeIfTaken(bot);
+    }
+
+    /// <summary>Server, at every round start before the deploy: per-round
+    /// loadout (Prompts/27 S5: a weapon from the tier's pool).</summary>
+    public void ServerPrepareRound()
+    {
+        if (!IsServer) return;
+        foreach (var bot in _combat)
+        {
+            if (bot == null) continue;
+            bot.GetComponent<Shooting>()?.ServerSetSelectedWeapon(PickRoundWeapon(_combatTier));
+        }
+    }
+
+    // WP4 replaces this with the tier's weapon pool (BotTier).
+    private static int PickRoundWeapon(byte tier) => (int)WeaponType.MG;
+
+    private void ReconcileCombat()
+    {
+        // Too many: drop the highest seats first.
+        for (int seat = _combat.Length - 1; seat >= 0 && CombatCount > _combatTarget; seat--)
+        {
+            DespawnCombat(seat);
+        }
+        foreach (var bot in _combat)
+        {
+            if (bot != null && bot.NetBotTier.Value != _combatTier) bot.NetBotTier.Value = _combatTier;
+        }
+        if (CombatCount >= _combatTarget || !WorldReady()) return;
+        for (int seat = 0; seat < _combat.Length && CombatCount < _combatTarget; seat++)
+        {
+            if (_combat[seat] == null) _combat[seat] = SpawnPlane(seat, _combatTier);
+        }
+    }
+
+    private void DespawnCombat(int seat)
+    {
+        var bot = _combat[seat];
+        _combat[seat] = null;
+        if (bot == null) return;
+        var brain = bot.GetComponent<BotBrain>();
+        if (brain != null) bot.OnServerDeath -= brain.ResetAfterDeath;
+        var netObj = bot.GetComponent<NetworkObject>();
+        if (netObj != null && netObj.IsSpawned) NetworkObjectDespawner.DespawnNetworkObject(netObj);
+        Debug.Log($"[BotManager] Despawned combat bot at seat {seat}");
+    }
+
     /// <summary>Server, every frame while the phase is WaitingForPlayers.</summary>
     public void ServerTickWarmUp()
     {
@@ -79,21 +196,27 @@ public class BotManager : MonoBehaviour
             return;
         }
 
-        // Yield: a human just equipped the bot's shape (their TryClaim succeeds
-        // because the bot holds no claim). Swap in place - the same thing every
-        // client sees when a human changes shape in the hangar.
-        var appearance = _bot.GetComponent<PlaneAppearance>();
+        YieldShapeIfTaken(_bot);
+    }
+
+    // Yield: a human just equipped the bot's shape (their TryClaim succeeds
+    // because no bot holds a claim). Swap in place - the same thing every
+    // client sees when a human changes shape in the hangar.
+    private void YieldShapeIfTaken(PlayerController bot)
+    {
+        var appearance = bot.GetComponent<PlaneAppearance>();
         var skins = PlaneSkinManager.Instance;
         if (appearance != null && skins != null && skins.IsModelTakenByAnyone(appearance.NetModelId.Value))
         {
             int was = appearance.NetModelId.Value;
-            var (modelId, skinId) = PickFreshLook();
+            var (modelId, skinId) = PickFreshLook(bot);
             appearance.ServerSetLookUnclaimed(modelId, skinId);
             Debug.Log($"[BotManager] Yielded shape {PlaneModelCatalog.Get(was).Key} -> {PlaneModelCatalog.Get(modelId).Key}");
         }
     }
 
-    /// <summary>Server, every frame the phase is anything but Waiting.</summary>
+    /// <summary>Server, every frame the phase is anything but Waiting. Only
+    /// the warm-up bot - combat bots outlive every phase.</summary>
     public void ServerEnsureDespawned()
     {
         if (!IsServer) return;
@@ -114,6 +237,16 @@ public class BotManager : MonoBehaviour
 
     private void SpawnBot()
     {
+        var pc = SpawnPlane(-1, 0);
+        if (pc == null) return;
+        pc.OnServerDeath += OnBotDied;
+        _bot = pc;
+        _spawnAt = 0f;
+    }
+
+    // One AI plane: seat -1 = warm-up bot, otherwise a combat seat.
+    private PlayerController SpawnPlane(int combatSeat, byte tier)
+    {
         var prefab = NetworkManager.Singleton.NetworkConfig.PlayerPrefab;
 
         // Behind a cloud like everyone else; a plain sky position if none is free.
@@ -122,23 +255,23 @@ public class BotManager : MonoBehaviour
         Vector3 pos = cloudPos ?? new Vector3(Random.Range(-18f, 18f), 8f, 0f);
 
         var go = NetworkObjectSpawner.SpawnNewNetworkObject(prefab, pos, Quaternion.identity);
-        if (go == null) return;
+        if (go == null) return null;
 
         var pc = go.GetComponent<PlayerController>();
         if (pc == null)
         {
             Debug.LogError("[BotManager] Player prefab has no PlayerController");
             NetworkObjectDespawner.DespawnNetworkObject(go.GetComponent<NetworkObject>());
-            return;
+            return null;
         }
 
         // Everything below happens in this call stack, before the first
         // FixedUpdate: a frame with the flag unset would let the plane claim a
         // look, and a frame without the override would fly it with the host's
         // stick (or a phone's tilt).
-        pc.ServerSetBotIdentity();
+        pc.ServerSetBotIdentity(combatSeat, tier);
 
-        var (modelId, skinId) = PickFreshLook();
+        var (modelId, skinId) = PickFreshLook(pc);
         go.GetComponent<PlaneAppearance>()?.ServerSetLookUnclaimed(modelId, skinId);
 
         // Two seconds of invulnerability, so a fallback-position spawn cannot
@@ -146,14 +279,14 @@ public class BotManager : MonoBehaviour
         pc.PlaneStats?.ResetStats();
 
         var brain = go.AddComponent<BotBrain>();
-        brain.Init(pc);
+        brain.Init(pc, combat: combatSeat >= 0);
         pc.SetInputOverride(brain);
+        // Combat bots respawn through the normal death path; the brain starts over.
+        if (combatSeat >= 0) pc.OnServerDeath += brain.ResetAfterDeath;
 
-        pc.OnServerDeath += OnBotDied;
-
-        _bot = pc;
-        _spawnAt = 0f;
-        Debug.Log($"[BotManager] Spawned bot as {PlaneModelCatalog.Get(modelId).Key} / {PlaneSkinCatalog.Get(skinId).Key} at {pos}");
+        string who = combatSeat >= 0 ? $"combat bot seat {combatSeat} tier {tier}" : "warm-up bot";
+        Debug.Log($"[BotManager] Spawned {who} as {PlaneModelCatalog.Get(modelId).Key} / {PlaneSkinCatalog.Get(skinId).Key} at {pos}");
+        return pc;
     }
 
     private void DespawnBot()
@@ -175,25 +308,35 @@ public class BotManager : MonoBehaviour
     }
 
     /// <summary>
-    /// A random shipped shape no human flies and the bot did not wear last
-    /// time, in a random free livery it did not wear last time. Premium skins
-    /// are excluded on purpose - the bot must not advertise paint the store
-    /// does not sell yet.
+    /// A random shipped shape no human flies, no other bot wears and the
+    /// warm-up bot did not wear last time, in a random free livery it did not
+    /// wear last time. Premium skins are excluded on purpose - the bot must
+    /// not advertise paint the store does not sell yet.
     /// </summary>
-    private (int modelId, int skinId) PickFreshLook()
+    private (int modelId, int skinId) PickFreshLook(PlayerController self)
     {
         var skins = PlaneSkinManager.Instance;
+
+        var otherBots = new HashSet<int>();
+        void Wearing(PlayerController bot)
+        {
+            if (bot == null || bot == self) return;
+            var look = bot.GetComponent<PlaneAppearance>();
+            if (look != null) otherBots.Add(look.NetModelId.Value);
+        }
+        Wearing(_bot);
+        foreach (var bot in _combat) Wearing(bot);
 
         var shapes = new List<int>();
         foreach (int id in PlaneModelCatalog.Available)
         {
             if (skins != null && skins.IsModelTakenByAnyone(id)) continue;
-            if (id == _lastModelId) continue;
+            if (otherBots.Contains(id) || id == _lastModelId) continue;
             shapes.Add(id);
         }
         if (shapes.Count == 0)
         {
-            // Only one free shape left: repeating beats nothing.
+            // Out of free shapes: repeating beats nothing.
             foreach (int id in PlaneModelCatalog.Available)
             {
                 if (skins == null || !skins.IsModelTakenByAnyone(id)) shapes.Add(id);

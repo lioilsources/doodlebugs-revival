@@ -231,3 +231,9 @@ skin.brick_hero=Brick Hero
 skin.arcade_pixel=Arcade Pixel
 skin.retro_wave=Retro Wave
 skin.tiger_stripe=Tiger Stripe
+
+# --- combat bots (Prompts/27 S14): tier name, the HUD adds the seat number ---
+bot.tier.0=ROOKIE
+bot.tier.1=PILOT
+bot.tier.2=ACE
+bot.tier.3=BARON
