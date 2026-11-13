@@ -48,9 +48,19 @@ public class PowerUp : NetworkBehaviour
         new Color(0.9f, 0.55f, 0.15f), // Weapon crate - orange
     };
 
+    /// <summary>Crates in the sky on this peer (bot sensing, no per-tick scene scan).</summary>
+    public static readonly System.Collections.Generic.List<PowerUp> Active =
+        new System.Collections.Generic.List<PowerUp>();
+
+    public PowerUpType Type => (PowerUpType)NetPowerUpType.Value;
+
+    /// <summary>Still up for grabs (not picked, not despawning).</summary>
+    public bool IsAvailable => !_collected;
+
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
+        if (!Active.Contains(this)) Active.Add(this);
 
         _spriteRenderer = GetComponent<SpriteRenderer>();
         _rb = GetComponent<Rigidbody2D>();
@@ -64,6 +74,7 @@ public class PowerUp : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         base.OnNetworkDespawn();
+        Active.Remove(this);
         NetPowerUpType.OnValueChanged -= OnTypeChanged;
     }
 
