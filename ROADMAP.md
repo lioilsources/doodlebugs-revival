@@ -148,7 +148,10 @@ v externí skupině.
 
 ---
 
-### Fáze 1 — Solo-first: bitva proti botům (v3.0) `[ ]` · ~3 týdny
+### Fáze 1 — Solo-first: bitva proti botům (v3.0) `[plan]` · ~3 týdny
+
+Plán: `Prompts/27-CLAUDE-PLAN-solo-first.md` (pořadí prací včetně PR #57 a
+části fáze 0, kterou sólo potřebuje).
 
 **Cíl:** hra se dá hrát sama. Odstranit jediný největší blok retence i
 App Review.
@@ -158,7 +161,7 @@ se snaží mě sestřelit. Když se vedle objeví kamarád, hra mi ho nabídne, 
 nevytrhne mě z kola.
 
 **Práce**
-- **Dotykové ovládání** `[wip]` (Prompts/26): on-screen joystick vpravo
+- **Dotykové ovládání** `[done v2.9.1]` (Prompts/26): on-screen joystick vpravo
   dole (Y = plyn, X = zatáčení, stejné osy jako `IInputProvider`), spouště
   vlevo dole s kruhovým nabíjením podle cooldownu zbraně a ikonou zbraně,
   druhá spoušť připravená pro druhý slot (`Shooting.NetWeaponId2`, hangárový
