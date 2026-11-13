@@ -21,10 +21,27 @@ public static class BotDebugMenu
     [MenuItem(Root + "Remove Combat Bots")]
     private static void Remove() => BotManager.Instance?.ServerDespawnCombat();
 
+    // Soak (Prompts/27 WP4 gates): one bot per tier, no human in the sky.
+    [MenuItem(Root + "Bot Soak: Start (all tiers, x4)")]
+    private static void SoakAll() => BotSoak.Begin(new byte[] { 0, 1, 2, 3 }, 4f);
+
+    [MenuItem(Root + "Bot Soak: Start (2 Rookies vs 2 Pilots, x4)")]
+    private static void SoakLow() => BotSoak.Begin(new byte[] { 0, 0, 1, 1 }, 4f);
+
+    [MenuItem(Root + "Bot Soak: Start (2 Aces vs 2 Barons, x4)")]
+    private static void SoakHigh() => BotSoak.Begin(new byte[] { 2, 2, 3, 3 }, 4f);
+
+    [MenuItem(Root + "Bot Soak: Stop and Report")]
+    private static void SoakStop() => BotSoak.End();
+
     [MenuItem(Root + "Bot Battle: 2 Rookies", true)]
     [MenuItem(Root + "Bot Battle: 2 Pilots", true)]
     [MenuItem(Root + "Bot Battle: 3 Aces", true)]
     [MenuItem(Root + "Remove Combat Bots", true)]
+    [MenuItem(Root + "Bot Soak: Start (all tiers, x4)", true)]
+    [MenuItem(Root + "Bot Soak: Start (2 Rookies vs 2 Pilots, x4)", true)]
+    [MenuItem(Root + "Bot Soak: Start (2 Aces vs 2 Barons, x4)", true)]
+    [MenuItem(Root + "Bot Soak: Stop and Report", true)]
     private static bool CanRun() =>
         Application.isPlaying && MatchManager.Instance != null &&
         Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer;

@@ -396,8 +396,16 @@ public class MatchManager : MonoBehaviour
     /// put `count` combat bots of `tier` in the sky and start a battle now.</summary>
     public void ServerDebugStartBotBattle(int count, byte tier)
     {
+        var tiers = new byte[Mathf.Clamp(count, 0, PlayerController.MaxCombatBots)];
+        for (int i = 0; i < tiers.Length; i++) tiers[i] = tier;
+        ServerDebugStartBotBattle(tiers);
+    }
+
+    /// <summary>Server, debug/soak: one combat bot per entry, each with its own tier.</summary>
+    public void ServerDebugStartBotBattle(byte[] tiers)
+    {
         if (!IsServer() || Phase != GamePhase.WaitingForPlayers) return;
-        BotManager.Instance?.ServerSetCombatRoster(count, tier);
+        BotManager.Instance?.ServerSetCombatRoster(tiers);
         if (_preBattleCoroutine != null)
         {
             StopCoroutine(_preBattleCoroutine);

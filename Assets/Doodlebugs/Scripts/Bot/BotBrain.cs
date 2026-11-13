@@ -20,11 +20,15 @@ using UnityEngine;
 ///
 /// Design notes and the numbers behind every constant:
 /// Prompts/25-CLAUDE-PLAN-warmup-bot.md.
+///
+/// Combat bots (Prompts/27 WP4, BotBrain.Combat.cs) add Pursue, Evade and
+/// Disengage on top; the ground/space overrides and Recover keep priority
+/// over everything, and BotTier decides how well they fight.
 /// </summary>
 [DefaultExecutionOrder(-50)]   // decide before PlayerController.FixedUpdate reads us
-public class BotBrain : MonoBehaviour, IInputProvider
+public partial class BotBrain : MonoBehaviour, IInputProvider
 {
-    private enum State { Cruise, Loop, Reverse, ZoomClimb, Recover }
+    private enum State { Cruise, Loop, Reverse, ZoomClimb, Recover, Pursue, Evade, Disengage }
 
     // --- tunables --------------------------------------------------------
 
@@ -114,6 +118,7 @@ public class BotBrain : MonoBehaviour, IInputProvider
         _player = player;
         IsCombat = combat;
         _rb = player.GetComponent<Rigidbody2D>();
+        _shooting = player.GetComponent<Shooting>();
         _seed = Random.Range(0f, 1000f);
         _spawnedAt = Time.time;
 
@@ -153,6 +158,7 @@ public class BotBrain : MonoBehaviour, IInputProvider
         _nextReverseAt = now + Random.Range(ReverseIntervalMin, ReverseIntervalMax);
         _nextZoomAt = now + Random.Range(ZoomIntervalMin, ZoomIntervalMax);
         _prevEngineOff = false;
+        ResetCombatSenses();
         Enter(State.Cruise);
     }
 
@@ -168,7 +174,13 @@ public class BotBrain : MonoBehaviour, IInputProvider
     private void FixedUpdate()
     {
         if (_player == null) return;
+        long started = IsCombat ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+        Tick();
+        if (IsCombat) RecordTickCost(started);
+    }
 
+    private void Tick()
+    {
         if (_player.InHangar)
         {
             _hTarget = 0f; _vTarget = 0f; _bursting = false;
@@ -219,14 +231,16 @@ public class BotBrain : MonoBehaviour, IInputProvider
         {
             // An aerobatic figure that ran into the edge is abandoned; a cruise
             // just picks up where the override leaves it.
-            if (_state == State.Loop || _state == State.Reverse || _state == State.ZoomClimb)
+            if (IsFigure(_state))
             {
                 _baseHeading = LevelHeading(dir);
                 Enter(State.Cruise);
             }
+            if (IsCombat) SenseCombat(engineOff);
         }
         else
         {
+            if (IsCombat) SelectCombatState(y, r, dir, engineOff);
             switch (_state)
             {
                 case State.Cruise:    TickCruise(heading, y, v, r, engineOff); break;
@@ -234,13 +248,22 @@ public class BotBrain : MonoBehaviour, IInputProvider
                 case State.Reverse:   TickTurn(heading, 180f); break;
                 case State.ZoomClimb: TickZoom(heading); break;
                 case State.Recover:   TickRecover(heading, v, dir, engineOff); break;
+                case State.Pursue:    TickPursue(y, v, r, engineOff, dir); break;
+                case State.Evade:     TickTurn(heading, EvadeTurnDegrees); break;
+                case State.Disengage: TickDisengage(v, dir); break;
             }
         }
 
         _prevHeading = heading;
         Ramp();
-        TickShooting(engineOff, dir);
+        if (IsCombat) TickCombatShooting(engineOff, dir);
+        else TickShooting(engineOff, dir);
     }
+
+    /// <summary>Loop, reversal, zoom climb or a combat break - a figure that
+    /// runs to completion unless an edge override abandons it.</summary>
+    private static bool IsFigure(State s) =>
+        s == State.Loop || s == State.Reverse || s == State.ZoomClimb || s == State.Evade;
 
     private void Ramp()
     {
@@ -285,34 +308,45 @@ public class BotBrain : MonoBehaviour, IInputProvider
 
         if (engineOff) return;   // Recover is about to take over
 
-        // Aerobatics, in priority order, each on its own clock.
+        TryAerobatics(y, v, r, IsCombat ? Tier.AerobaticsChance : 1f);
+    }
+
+    /// <summary>Aerobatics, in priority order, each on its own clock. A due
+    /// figure is flown with probability `chance` (combat tiers), otherwise
+    /// skipped until its next slot.</summary>
+    private bool TryAerobatics(float y, float v, float r, float chance)
+    {
+        float t = Time.time;
         if (t >= _nextLoopAt)
         {
             _nextLoopAt = t + Random.Range(LoopIntervalMin, LoopIntervalMax);
-            if (v >= LoopMinSpeed && TryPickTurnDirection(y, 2f * r, out _turnDir))
+            if (Random.value < chance && v >= LoopMinSpeed && TryPickTurnDirection(y, 2f * r, out _turnDir))
             {
                 Enter(State.Loop);
-                return;
+                return true;
             }
         }
         if (t >= _nextReverseAt)
         {
             _nextReverseAt = t + Random.Range(ReverseIntervalMin, ReverseIntervalMax);
             // A half-turn from level still spans a full 2r vertically.
-            if (v >= LoopMinSpeed && TryPickTurnDirection(y, 2f * r, out _turnDir))
+            if (Random.value < chance && v >= LoopMinSpeed && TryPickTurnDirection(y, 2f * r, out _turnDir))
             {
                 Enter(State.Reverse);
-                return;
+                return true;
             }
         }
         if (t >= _nextZoomAt)
         {
             _nextZoomAt = t + Random.Range(ZoomIntervalMin, ZoomIntervalMax);
-            if (y >= _groundTop + ZoomFloorAboveGround && y <= _spaceBottom - ZoomCeilingBelowSpace)
+            if (Random.value < chance &&
+                y >= _groundTop + ZoomFloorAboveGround && y <= _spaceBottom - ZoomCeilingBelowSpace)
             {
                 Enter(State.ZoomClimb);
+                return true;
             }
         }
+        return false;
     }
 
     /// <summary>Which way to pull a figure of vertical extent `extent`:
@@ -340,7 +374,8 @@ public class BotBrain : MonoBehaviour, IInputProvider
         if (Mathf.Abs(_turned) >= total)
         {
             if (_state == State.Reverse) _baseHeading = _baseHeading == 0f ? 180f : 0f;
-            Debug.Log($"[BotBrain] {_state} done in {Time.time - _stateEnteredAt:0.0}s");
+            if (_state == State.Evade) _baseHeading = LevelHeading(_player.transform.right);
+            if (!IsCombat) Debug.Log($"[BotBrain] {_state} done in {Time.time - _stateEnteredAt:0.0}s");
             Enter(State.Cruise);
         }
     }
@@ -361,6 +396,7 @@ public class BotBrain : MonoBehaviour, IInputProvider
         if (elapsed > RecoverMaxSeconds)
         {
             Debug.LogWarning("[BotBrain] Recover gave up after 6 s");
+            RecoverTimeouts++;
             _baseHeading = LevelHeading(dir);
             Enter(State.Cruise);
             return;
