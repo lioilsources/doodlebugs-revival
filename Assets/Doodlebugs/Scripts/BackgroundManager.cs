@@ -401,6 +401,17 @@ public class BackgroundManager : NetworkBehaviour
     /// </summary>
     public int CurrentBackgroundIndex => _backgroundIndex.Value;
 
+    /// <summary>Name of the current arena (its background sprite), for telemetry.</summary>
+    public string CurrentArenaKey
+    {
+        get
+        {
+            int i = CurrentBackgroundIndex;
+            if (profiles == null || i < 0 || i >= profiles.Length || profiles[i] == null) return "?";
+            return profiles[i].backgroundSprite != null ? profiles[i].backgroundSprite.name : profiles[i].name;
+        }
+    }
+
     /// <summary>
     /// Gets the total number of available backgrounds.
     /// </summary>

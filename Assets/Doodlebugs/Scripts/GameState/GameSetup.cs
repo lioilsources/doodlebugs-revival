@@ -118,6 +118,9 @@ public class GameSetup : MonoBehaviour
         // same canvas (ROADMAP §3.9 - GameHUD stops growing). Both are inert
         // on desktop except the settings overlay itself.
         TouchControls.Create(canvas);
+        SoloControls.Create(canvas);
+        // Home sits above the HUD; SettingsOverlay re-parents itself last on Open.
+        HomeScreen.Create(canvas);
         SettingsOverlay.Create(canvas);
     }
 }

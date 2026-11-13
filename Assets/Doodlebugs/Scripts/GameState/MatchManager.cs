@@ -67,9 +67,32 @@ public class MatchManager : MonoBehaviour
     }
 
     /// <summary>True when this device hosts a one-device session against bots
-    /// (Prompts/27 WP5). The guard Phase 2 needs before touching
+    /// (Prompts/27 WP5): server, armed by ConnectionManager.BeginSolo, and no
+    /// other device connected. The guard Phase 2 needs before touching
     /// Time.timeScale; always false on LAN clients.</summary>
-    public bool IsSoloSession { get; private set; }
+    public bool IsSoloSession =>
+        _soloArmed && IsServer() && NetworkManager.Singleton.ConnectedClientsIds.Count == 1;
+
+    /// <summary>Bots in a quick-play solo session (Prompts/27 S3: 1 human + 2 bots, FFA).</summary>
+    public const int SoloBotCount = 2;
+
+    private bool _soloArmed;
+    private int _soloBots;
+    private Coroutine _soloStartCoroutine;
+
+    /// <summary>Before StartHost (OnServerStarted fires inside it): the next
+    /// host session is solo - straight into battle, no Waiting hangar.</summary>
+    public void ArmSolo(int botCount)
+    {
+        _soloArmed = true;
+        _soloBots = Mathf.Clamp(botCount, 1, PlayerController.MaxCombatBots);
+    }
+
+    public void DisarmSolo() => _soloArmed = false;
+
+    /// <summary>Quick-play tier from the profile (S4 ladder).</summary>
+    private static byte SoloTier =>
+        (byte)Mathf.Clamp(PlayerProfile.Current.solo.tier, 0, PlayerController.BotTierCount - 1);
 
     /// <summary>True between round end and the next round start (results shown).</summary>
     public bool IsIntermission { get; private set; }
@@ -254,8 +277,86 @@ public class MatchManager : MonoBehaviour
         if (!IsServer()) return;
         Phase = GamePhase.WaitingForPlayers;
         BackgroundManager.Instance?.ServerResetWarmUpArena();
+        if (_soloArmed)
+        {
+            Debug.Log("[MatchManager] Solo host started - battle as soon as the world is ready");
+            _soloStartCoroutine = StartCoroutine(SoloStartWhenReady());
+            return;
+        }
         Debug.Log("[MatchManager] Phase -> WaitingForPlayers (host started)");
         StartCoroutine(OpenWaitingHangarDelayed());
+    }
+
+    // Solo skips the Waiting hangar, the PreBattle countdown and the
+    // first-launch skin picker: the first round flies MG in the current look
+    // and the draft appears at the first intermission (Prompts/27 WP5).
+    private IEnumerator SoloStartWhenReady()
+    {
+        float giveUpAt = Time.realtimeSinceStartup + 5f;
+        while (Time.realtimeSinceStartup < giveUpAt)
+        {
+            bool hostPlane = false;
+            foreach (var p in PlayerController.All)
+            {
+                if (p.IsOwner && !p.IsBot) { hostPlane = true; break; }
+            }
+            var skins = PlaneSkinManager.Instance;
+            if (hostPlane && skins != null && skins.IsSpawned) break;
+            yield return null;
+        }
+
+        BotManager.Instance?.ServerSetCombatRoster(_soloBots, SoloTier);
+        float botsBy = Time.realtimeSinceStartup + 2f;
+        while (BotManager.Instance != null && BotManager.Instance.CombatCount < _soloBots &&
+               Time.realtimeSinceStartup < botsBy)
+        {
+            yield return null;
+        }
+        _soloStartCoroutine = null;
+        if (!IsServer() || !_soloArmed || Phase != GamePhase.WaitingForPlayers) yield break;
+        ServerStartBattle();
+    }
+
+    /// <summary>Server: tear the whole session down before NGO shuts down -
+    /// coroutines, ready set, deadlines, run tables, bots, scores, solo flag -
+    /// and reset this device's mirrors. The only way out of a solo session
+    /// (Prompts/27 WP5); idempotent.</summary>
+    public void ServerAbortSession()
+    {
+        StopServerCoroutine(ref _serverRoundFlowCoroutine);
+        StopServerCoroutine(ref _preBattleCoroutine);
+        StopServerCoroutine(ref _soloStartCoroutine);
+        _readyClients.Clear();
+        _lateJoinDeadlines.Clear();
+        _runPoints.Clear();
+        _upgradeLevels.Clear();
+        _roundWins.Clear();
+        _roundEnding = false;
+        if (BotManager.Instance != null)
+        {
+            BotManager.Instance.ServerDespawnCombat();
+            BotManager.Instance.ServerEnsureDespawned();
+        }
+        _soloArmed = false;
+        LocalAbortSession();
+        Debug.Log("[MatchManager] Session aborted");
+    }
+
+    /// <summary>This device leaves its session (client or host): reset the
+    /// local mirrors and every overlay.</summary>
+    public void LocalAbortSession()
+    {
+        ScoreManager.Instance?.ResetMatch();
+        LocalRunPoints = 0;
+        for (int i = 0; i < _localUpgradeLevels.Length; i++) _localUpgradeLevels[i] = 0;
+        HandleLocalSessionEnded();
+    }
+
+    private void StopServerCoroutine(ref Coroutine routine)
+    {
+        if (routine == null) return;
+        StopCoroutine(routine);
+        routine = null;
     }
 
     // Small delay so the host's P1 plane exists before the weapon cards read it
@@ -382,6 +483,11 @@ public class MatchManager : MonoBehaviour
     // despawned by now and must never be deployed into a battle.
     private void DeployAllForRound()
     {
+        // Solo: the S4 ladder may have moved the tier after the last round.
+        if (_soloArmed && BotManager.Instance != null && BotManager.Instance.CombatTier != SoloTier)
+        {
+            BotManager.Instance.ServerSetCombatRoster(_soloBots, SoloTier);
+        }
         try { BotManager.Instance?.ServerPrepareRound(); }
         catch (Exception e) { Debug.LogException(e); }
 
@@ -510,10 +616,10 @@ public class MatchManager : MonoBehaviour
         BotManager.Instance?.ServerTickCombat();
 
         // Waiting lobby: keep the warm-up bot alive unless combat bots took
-        // the sky. (The arena rotates on FLY out of the hangar -
-        // BackgroundManager.ServerOnWarmUpFlyOut - not on a timer here, so
-        // the rebuild never lands mid-flight.)
-        if (Phase == GamePhase.WaitingForPlayers &&
+        // the sky or a solo battle is about to start. (The arena rotates on
+        // FLY out of the hangar - BackgroundManager.ServerOnWarmUpFlyOut -
+        // not on a timer here, so the rebuild never lands mid-flight.)
+        if (Phase == GamePhase.WaitingForPlayers && !_soloArmed &&
             (BotManager.Instance == null || BotManager.Instance.CombatTarget == 0))
         {
             BotManager.Instance?.ServerTickWarmUp();
@@ -684,6 +790,8 @@ public class MatchManager : MonoBehaviour
         // Run points: 1 for playing, +1 for top half, +1 for winning the round
         AwardRunPoints(score, winner);
 
+        if (IsSoloSession) AdvanceSoloLadder(!IsBotParticipant(winner));
+
         // Broadcast through any server-owned player (existing sync pattern)
         BroadcastThroughServerPlayer(p =>
             p.SyncMatchEndClientRpc(winnerClient, winnerLocalIdx, winnerKills, wins, runOver));
@@ -692,6 +800,21 @@ public class MatchManager : MonoBehaviour
 
         // Server drives the actual restart (results -> hangar/podium -> next round)
         _serverRoundFlowCoroutine = StartCoroutine(ServerEndRoundFlow(runOver));
+    }
+
+    // Prompts/27 S4: quick play starts at Rookie, one tier up after a round
+    // win, one down after a loss; the next round's roster picks it up
+    // (DeployAllForRound) so names do not change under the results screen.
+    private void AdvanceSoloLadder(bool humanWon)
+    {
+        var profile = PlayerProfile.Current;
+        int from = profile.solo.tier;
+        int to = Mathf.Clamp(from + (humanWon ? 1 : -1), 0, PlayerController.BotTierCount - 1);
+        profile.solo.tier = to;
+        PlayerProfile.PushSoloResult(humanWon);
+        PlayerProfile.MarkDirty();
+        PlayerProfile.Save();
+        if (to != from) Telemetry.Log("solo_tier_change", ("from", from), ("to", to));
     }
 
     // Rank every plane, take each participant's best placement, hand out points.

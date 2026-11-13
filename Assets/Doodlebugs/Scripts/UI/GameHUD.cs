@@ -1370,6 +1370,18 @@ public class GameHUD : MonoBehaviour
     {
         if (_resultsOverlay != null) _resultsOverlay.SetActive(false);
 
+        // The boot/search screen is HomeScreen's (Prompts/27 WP5): PLAY,
+        // PARTY, SETTINGS, and the PARTY search status. Every other mode is a
+        // real hangar and Home gets out of the way.
+        if (mode == MatchManager.HangarMode.Searching && HomeScreen.Instance != null)
+        {
+            CloseHangar();
+            _hangarMode = mode;
+            HomeScreen.Instance.Show();
+            return;
+        }
+        HomeScreen.Instance?.Hide();
+
         _hangarMode = mode;
         BuildHangarOverlay(mode, seconds);
         _hangarOverlay.SetActive(true);
@@ -1422,8 +1434,8 @@ public class GameHUD : MonoBehaviour
             _podiumCountdownText = null;
         }
 
-        // The host is gone and discovery restarts automatically - back to the
-        // boot screen instead of staring at a dead arena
+        // The session is over (host gone, or this device left): back to the
+        // Home screen - its search view while a PARTY search is still running
         OnHangarOpened(MatchManager.HangarMode.Searching, 0);
     }
 
@@ -1439,7 +1451,8 @@ public class GameHUD : MonoBehaviour
         (_podiumOverlay != null && _podiumOverlay.activeSelf) ||
         (_skinPickerOverlay != null && _skinPickerOverlay.activeSelf) ||
         (_scenePickerOverlay != null && _scenePickerOverlay.activeSelf) ||
-        SettingsOverlay.IsOpen;
+        SettingsOverlay.IsOpen ||
+        HomeScreen.IsOpen;
 
     private void OnClientReadyChanged(ulong clientId)
     {
@@ -1592,6 +1605,15 @@ public class GameHUD : MonoBehaviour
             BuildScenePickerButton();
         }
         BuildSettingsButton();
+        // A way back to Home: the solo intermission (Prompts/27 S10) and the
+        // PARTY host's empty Waiting lobby (the search timed out into it -
+        // App Review must never be stuck there).
+        bool soloIntermission = intermission && MatchManager.Instance != null && MatchManager.Instance.IsSoloSession;
+        bool partyLobby = waiting && NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
+        if (soloIntermission || partyLobby)
+        {
+            SoloControls.AddHangarHomeButton(_hangarOverlay.transform);
+        }
         if (waiting && !_skinPickerAutoShown)
         {
             var owned = FindOwnedPlayer();
@@ -2079,7 +2101,10 @@ public class GameHUD : MonoBehaviour
         _readyButton.targetGraphic = bgImage;
         _readyButton.onClick.AddListener(PressReady);
 
-        _readyButtonText = CreateTextIn(buttonObj.transform, "Label", Loc.T("hangar.ready"), 20,
+        // Solo has nobody to wait for: READY reads NEXT ROUND (Prompts/27 WP5).
+        bool solo = MatchManager.Instance != null && MatchManager.Instance.IsSoloSession;
+        _readyButtonText = CreateTextIn(buttonObj.transform, "Label",
+            solo ? Loc.T("solo.next_round") : Loc.T("hangar.ready"), 20,
             Vector2.zero, Color.white);
     }
 
