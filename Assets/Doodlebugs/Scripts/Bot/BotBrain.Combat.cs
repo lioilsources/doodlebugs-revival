@@ -262,6 +262,10 @@ public partial class BotBrain
     private bool CanFireAtTarget(bool engineOff, Vector2 dir, BotTier tier, float t)
     {
         if (engineOff || _target == null) return false;
+        // Only while a round runs: a LAN bot added in the PreBattle lobby or
+        // flying through the results screen holds fire.
+        var mm = MatchManager.Instance;
+        if (mm == null || mm.Phase != MatchManager.GamePhase.Battle || mm.IsIntermission) return false;
         if (t - _spawnedAt <= NoFireAfterSpawnSeconds) return false;
         if (t - _targetAcquiredAt < tier.ReactionDelay) return false;
         if (_state != State.Pursue && _state != State.Disengage && _state != State.Cruise) return false;

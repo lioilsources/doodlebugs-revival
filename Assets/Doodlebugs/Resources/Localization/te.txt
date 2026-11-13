@@ -212,3 +212,6 @@ home.cancel=రద్దు
 home.loading=ఎగురుతోంది...
 solo.home=హోమ్
 solo.next_round=తదుపరి రౌండ్
+lan.add_bot=+ బాట్
+lan.remove_bot=- బాట్
+lan.nearby_join=సమీపంలో పైలట్ · చేరండి

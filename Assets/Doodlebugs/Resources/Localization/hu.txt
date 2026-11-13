@@ -210,3 +210,6 @@ home.cancel=MÉGSE
 home.loading=FELSZÁLLÁS...
 solo.home=KEZDŐLAP
 solo.next_round=KÖVETKEZŐ KÖR
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILÓTA A KÖZELBEN · CSATLAKOZÁS

@@ -212,3 +212,6 @@ home.cancel=ביטול
 home.loading=ממריאים...
 solo.home=בית
 solo.next_round=הסיבוב הבא
+lan.add_bot=+ בוט
+lan.remove_bot=- בוט
+lan.nearby_join=טייס בקרבת מקום · הצטרף

@@ -210,3 +210,6 @@ home.cancel=AVBRYT
 home.loading=LYFTER...
 solo.home=HEM
 solo.next_round=NÄSTA RUNDA
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOT I NÄRHETEN · GÅ MED

@@ -210,3 +210,6 @@ home.cancel=PREKLIČI
 home.loading=VZLETAMO...
 solo.home=DOMOV
 solo.next_round=NASLEDNJI KROG
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOT V BLIŽINI · PRIDRUŽI SE

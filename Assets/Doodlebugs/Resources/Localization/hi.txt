@@ -212,3 +212,6 @@ home.cancel=रद्द करें
 home.loading=उड़ान...
 solo.home=होम
 solo.next_round=अगला राउंड
+lan.add_bot=+ बॉट
+lan.remove_bot=- बॉट
+lan.nearby_join=पास में पायलट · जुड़ें

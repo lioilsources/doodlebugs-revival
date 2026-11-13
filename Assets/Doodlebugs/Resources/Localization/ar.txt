@@ -212,3 +212,6 @@ home.cancel=إلغاء
 home.loading=جارٍ الإقلاع...
 solo.home=الرئيسية
 solo.next_round=الجولة التالية
+lan.add_bot=+ روبوت
+lan.remove_bot=- روبوت
+lan.nearby_join=طيار قريب · انضم

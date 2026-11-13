@@ -210,3 +210,6 @@ home.cancel=СКАСУВАТИ
 home.loading=ЗЛІТ...
 solo.home=ДОДОМУ
 solo.next_round=НАСТУПНИЙ РАУНД
+lan.add_bot=+ БОТ
+lan.remove_bot=- БОТ
+lan.nearby_join=ПІЛОТ ПОРУЧ · ПРИЄДНАТИСЯ

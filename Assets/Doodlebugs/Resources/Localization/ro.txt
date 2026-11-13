@@ -211,3 +211,6 @@ home.cancel=ANULEAZĂ
 home.loading=DECOLĂM...
 solo.home=ACASĂ
 solo.next_round=RUNDA URMĂTOARE
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOT ÎN APROPIERE · ALĂTURĂ-TE

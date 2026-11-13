@@ -212,3 +212,6 @@ home.cancel=રદ કરો
 home.loading=ઉડાન...
 solo.home=હોમ
 solo.next_round=આગલો રાઉન્ડ
+lan.add_bot=+ બોટ
+lan.remove_bot=- બોટ
+lan.nearby_join=નજીક પાયલટ · જોડાઓ

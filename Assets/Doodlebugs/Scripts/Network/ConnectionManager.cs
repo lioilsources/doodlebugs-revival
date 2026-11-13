@@ -80,6 +80,19 @@ namespace Doodlebugs.Network
             OnSessionChanged?.Invoke(kind);
         }
 
+        /// <summary>A party host was heard while this device plays solo
+        /// (Prompts/27 WP6): the toast offers it, nothing joins on its own.</summary>
+        public event Action<DiscoveryData> OnNearbyHost;
+        private DiscoveryData _nearbyHost;
+
+        // Passive listening is a UDP socket on the broadcast port. Free of any
+        // prompt on desktop and on Android over Wi-Fi; on iOS the broadcast
+        // path needs the multicast entitlement and would raise the Local
+        // Network prompt, so iOS never listens from solo (Prompts/27 WP6).
+        private static bool NearbyListenAllowed =>
+            Application.platform != RuntimePlatform.IPhonePlayer &&
+            (!IsMobile || Application.internetReachability == NetworkReachability.ReachableViaLocalAreaNetwork);
+
         private static bool NetworkRunning =>
             NetworkManager.Singleton != null &&
             (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient);
@@ -210,6 +223,8 @@ namespace Doodlebugs.Network
                     BackgroundManager.Instance?.SelectRandomBackground();
                     LocalPlayerManager.Instance?.OnHostStarted();
                     Debug.Log($"[ConnectionManager] Solo host on {LoopbackAddress}:{port}");
+                    // Hear party hosts nearby without ever answering them.
+                    if (NearbyListenAllowed) _discovery?.StartListening(hostWatch: true);
                     yield break;
                 }
 
@@ -260,6 +275,30 @@ namespace Doodlebugs.Network
             StartDiscovery();
         }
 
+        /// <summary>The toast's JOIN: leave solo, join the host it heard.</summary>
+        public void JoinNearby()
+        {
+            var target = _nearbyHost;
+            if (target == null) return;
+            ReturnHome();
+            _nearbyHost = target;   // ReturnHome forgot it
+            Invoke(nameof(FinishJoinNearby), 0.7f);
+        }
+
+        private void FinishJoinNearby()
+        {
+            var target = _nearbyHost;
+            _nearbyHost = null;
+            if (target == null) return;
+            SetSession(SessionKind.Party);
+            _mode = LocalCoopMode.Lan;
+            UseSceneTransport();
+            if (_sceneTransport != null) _sceneTransport.ConnectionData.ServerListenAddress = LanListenAddress;
+            SetState(ConnectionState.Connecting);
+            SetStatus(Loc.T("status.connecting"));
+            ConnectToHost(target);
+        }
+
         /// <summary>CANCEL on the searching screen: stop pairing, back to Home.</summary>
         public void CancelParty()
         {
@@ -278,7 +317,9 @@ namespace Doodlebugs.Network
             CancelInvoke(nameof(StartDiscovery));
             CancelInvoke(nameof(BeginSoloNow));
             CancelInvoke(nameof(BeginPartyNow));
+            CancelInvoke(nameof(FinishJoinNearby));
             StopAllCoroutines();
+            _nearbyHost = null;
             _yieldingHost = false;
             _yieldTarget = null;
 
@@ -379,7 +420,16 @@ namespace Doodlebugs.Network
             Debug.Log($"[ConnectionManager] Server found at {data.hostAddress}:{data.port}");
 
             // Only a PARTY session pairs. A solo host has an "empty lobby" by the
-            // conflict test below and would yield to any host it hears.
+            // conflict test below and would yield to any host it hears - so a
+            // solo session only reports the host, before that test.
+            if (Session == SessionKind.Solo)
+            {
+                if (data.currentPlayers >= data.maxPlayers) return;
+                bool fresh = _nearbyHost == null || _nearbyHost.instanceId != data.instanceId;
+                _nearbyHost = data;
+                if (fresh) OnNearbyHost?.Invoke(data);
+                return;
+            }
             if (Session != SessionKind.Party) return;
 
             // We are already hosting: this broadcast comes from a competing host
@@ -626,6 +676,14 @@ namespace Doodlebugs.Network
         private void OnClientConnected(ulong clientId)
         {
             Debug.Log($"[ConnectionManager] Client connected: {clientId}");
+            if (Session == SessionKind.Party && NetworkManager.Singleton.IsHost && clientId != NetworkManager.ServerClientId)
+            {
+                Telemetry.Log("lan_pair", ("peers", NetworkManager.Singleton.ConnectedClientsIds.Count), ("transport", _mode));
+            }
+            else if (Session == SessionKind.Party && !NetworkManager.Singleton.IsHost && clientId == NetworkManager.Singleton.LocalClientId)
+            {
+                Telemetry.Log("lan_pair", ("peers", 2), ("transport", _mode), ("role", "client"));
+            }
 
             if (NetworkManager.Singleton.IsHost)
             {

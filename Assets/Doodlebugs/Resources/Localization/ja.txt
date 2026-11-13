@@ -211,3 +211,6 @@ home.cancel=キャンセル
 home.loading=離陸中...
 solo.home=ホーム
 solo.next_round=次のラウンド
+lan.add_bot=+ ボット
+lan.remove_bot=- ボット
+lan.nearby_join=近くにパイロット · 参加

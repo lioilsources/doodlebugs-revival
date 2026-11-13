@@ -210,3 +210,6 @@ home.cancel=CANCELAR
 home.loading=DESPEGANDO...
 solo.home=INICIO
 solo.next_round=SIGUIENTE RONDA
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOTO CERCA · UNIRSE

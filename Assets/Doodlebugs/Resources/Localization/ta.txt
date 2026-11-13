@@ -212,3 +212,6 @@ home.cancel=ரத்து
 home.loading=புறப்படுகிறது...
 solo.home=முகப்பு
 solo.next_round=அடுத்த சுற்று
+lan.add_bot=+ பாட்
+lan.remove_bot=- பாட்
+lan.nearby_join=அருகில் விமானி · சேர்

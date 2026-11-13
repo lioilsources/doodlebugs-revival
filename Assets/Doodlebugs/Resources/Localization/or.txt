@@ -212,3 +212,6 @@ home.cancel=ବାତିଲ୍
 home.loading=ଉଡ଼ାଣ...
 solo.home=ହୋମ୍
 solo.next_round=ପରବର୍ତ୍ତୀ ରାଉଣ୍ଡ
+lan.add_bot=+ ବଟ୍
+lan.remove_bot=- ବଟ୍
+lan.nearby_join=ନିକଟରେ ପାଇଲଟ୍ · ଯୋଗ ଦିଅନ୍ତୁ

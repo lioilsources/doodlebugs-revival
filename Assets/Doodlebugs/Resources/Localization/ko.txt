@@ -211,3 +211,6 @@ home.cancel=취소
 home.loading=이륙 중...
 solo.home=홈
 solo.next_round=다음 라운드
+lan.add_bot=+ 봇
+lan.remove_bot=- 봇
+lan.nearby_join=근처 조종사 · 참가

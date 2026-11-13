@@ -211,3 +211,6 @@ home.cancel=ยกเลิก
 home.loading=กำลังขึ้นบิน...
 solo.home=หน้าแรก
 solo.next_round=รอบถัดไป
+lan.add_bot=+ บอท
+lan.remove_bot=- บอท
+lan.nearby_join=มีนักบินใกล้ๆ · เข้าร่วม

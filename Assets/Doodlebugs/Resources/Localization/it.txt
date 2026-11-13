@@ -210,3 +210,6 @@ home.cancel=ANNULLA
 home.loading=DECOLLO...
 solo.home=HOME
 solo.next_round=PROSSIMO ROUND
+lan.add_bot=+ BOT
+lan.remove_bot=- BOT
+lan.nearby_join=PILOTA VICINO · UNISCITI

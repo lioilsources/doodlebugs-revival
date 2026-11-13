@@ -210,3 +210,6 @@ home.cancel=ОТМЕНА
 home.loading=ВЗЛЁТ...
 solo.home=ДОМОЙ
 solo.next_round=СЛЕДУЮЩИЙ РАУНД
+lan.add_bot=+ БОТ
+lan.remove_bot=- БОТ
+lan.nearby_join=ПИЛОТ РЯДОМ · ВОЙТИ

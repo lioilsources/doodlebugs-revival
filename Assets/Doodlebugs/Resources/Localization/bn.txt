@@ -212,3 +212,6 @@ home.cancel=বাতিল
 home.loading=উড়ছি...
 solo.home=হোম
 solo.next_round=পরের রাউন্ড
+lan.add_bot=+ বট
+lan.remove_bot=- বট
+lan.nearby_join=কাছে পাইলট · যোগ দিন
