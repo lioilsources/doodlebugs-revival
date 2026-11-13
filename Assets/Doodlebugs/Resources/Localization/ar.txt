@@ -202,3 +202,7 @@ skin.brick_hero=بطل الطوب
 skin.arcade_pixel=بكسل الأركيد
 skin.retro_wave=موجة ريترو
 skin.tiger_stripe=خطوط النمر
+bot.tier.0=مبتدئ
+bot.tier.1=طيار
+bot.tier.2=بارع
+bot.tier.3=بارون

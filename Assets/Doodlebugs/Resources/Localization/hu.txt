@@ -200,3 +200,7 @@ skin.brick_hero=Kockahős
 skin.arcade_pixel=Árkád pixel
 skin.retro_wave=Retróhullám
 skin.tiger_stripe=Tigriscsík
+bot.tier.0=ÚJONC
+bot.tier.1=PILÓTA
+bot.tier.2=ÁSZ
+bot.tier.3=BÁRÓ

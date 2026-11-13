@@ -201,3 +201,7 @@ skin.brick_hero=블록 히어로
 skin.arcade_pixel=아케이드 픽셀
 skin.retro_wave=레트로 웨이브
 skin.tiger_stripe=호랑이 줄무늬
+bot.tier.0=신참
+bot.tier.1=조종사
+bot.tier.2=에이스
+bot.tier.3=남작

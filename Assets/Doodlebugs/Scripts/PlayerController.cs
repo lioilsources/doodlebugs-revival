@@ -82,15 +82,60 @@ public class PlayerController : NetworkBehaviour, IDamagable
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server);
 
+    /// <summary>Any AI-flown plane (warm-up or combat). Use it for "not the
+    /// local human's plane" (haptics, touch controls, look claims, RPC
+    /// carriers); use <see cref="IsWarmupBot"/> for "not a participant".</summary>
     public bool IsBot => NetIsBot.Value;
+
+    /// <summary>The scoreless lobby bot (Prompts/25): no score, no row, no feed credit.</summary>
+    public bool IsWarmupBot => NetIsBot.Value && netLocalPlayerIndex.Value == BotLocalPlayerIndex;
+
+    /// <summary>A bot that plays the round like a pilot (Prompts/27 WP3): it
+    /// scores, has a compact HUD row and its own run state.</summary>
+    public bool IsCombatBot => NetIsBot.Value && IsCombatBotIdentity(netLocalPlayerIndex.Value);
 
     public const int BotLocalPlayerIndex = 99;
     public const string BotDisplayName = "BOT";
 
-    /// <summary>Whether a (clientId, localPlayerIndex) pair names the bot -
-    /// the shape bullets and score calls carry the attacker in.</summary>
-    public static bool IsBotIdentity(ulong clientId, int localPlayerIndex) =>
+    // Combat bots are host-owned like the warm-up bot; their couch index is a
+    // reserved seat 90..97, so (0, 90+seat) never collides with a real pilot
+    // (0-3) or with the warm-up bot (99).
+    public const int CombatBotIndexBase = 90;
+    public const int MaxCombatBots = 8;
+    public const int BotTierCount = 4;
+
+    /// <summary>Whether a (clientId, localPlayerIndex) pair names the warm-up
+    /// bot - the shape bullets and score calls carry the attacker in.</summary>
+    public static bool IsWarmupBotIdentity(ulong clientId, int localPlayerIndex) =>
         localPlayerIndex == BotLocalPlayerIndex;
+
+    /// <summary>Whether a local index is a combat-bot seat.</summary>
+    public static bool IsCombatBotIdentity(int localPlayerIndex) =>
+        localPlayerIndex >= CombatBotIndexBase && localPlayerIndex < CombatBotIndexBase + MaxCombatBots;
+
+    /// <summary>Any bot identity (warm-up or combat).</summary>
+    public static bool IsAnyBotIdentity(int localPlayerIndex) =>
+        localPlayerIndex == BotLocalPlayerIndex || IsCombatBotIdentity(localPlayerIndex);
+
+    /// <summary>Combat bot difficulty (0 Rookie .. 3 Baron), server-write. Synced so
+    /// every client builds the bot's name in its own language (Prompts/27 S6).</summary>
+    public NetworkVariable<byte> NetBotTier = new NetworkVariable<byte>(0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server);
+
+    /// <summary>Every spawned plane on this peer (humans and bots), for the
+    /// bot brain's sensing and the HUD - no FindObjectsByType per tick.</summary>
+    public static readonly System.Collections.Generic.List<PlayerController> All =
+        new System.Collections.Generic.List<PlayerController>();
+
+    /// <summary>"ACE 2": tier name in the local language plus the seat number.</summary>
+    public static string CombatBotName(int tier, int seat) =>
+        $"{Loc.T("bot.tier." + Mathf.Clamp(tier, 0, BotTierCount - 1))} {seat + 1}";
+
+    /// <summary>The name to show for this plane on this device.</summary>
+    public string DisplayName => IsCombatBot
+        ? CombatBotName(NetBotTier.Value, netLocalPlayerIndex.Value - CombatBotIndexBase)
+        : PlayerName;
 
     // Set by BotManager on the host; consulted before any device provider so
     // a host-owned bot never mirrors the host's own stick and trigger.
@@ -105,11 +150,16 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// NetIsBot goes first so the claim coroutine and the index-change
     /// handler already see it. Not SetLocalPlayerIndex - that would name
     /// the plane "P100" for a frame.</summary>
-    public void ServerSetBotIdentity()
+    public void ServerSetBotIdentity() => ServerSetBotIdentity(-1, 0);
+
+    /// <summary>Server, right after Spawn(): seat -1 = the warm-up bot,
+    /// 0..MaxCombatBots-1 = a combat bot at that seat with that tier.</summary>
+    public void ServerSetBotIdentity(int combatSeat, byte tier)
     {
         if (!IsServer) return;
         NetIsBot.Value = true;
-        netLocalPlayerIndex.Value = BotLocalPlayerIndex;
+        NetBotTier.Value = tier;
+        netLocalPlayerIndex.Value = combatSeat >= 0 ? CombatBotIndexBase + combatSeat : BotLocalPlayerIndex;
         // Owner-write, and the server IS the owner of a server-spawned object.
         netPlayerName.Value = new Unity.Collections.FixedString64Bytes(BotDisplayName);
     }
@@ -261,6 +311,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
+        if (!All.Contains(this)) All.Add(this);
 
         // Subscribe to local player index changes to update color when set
         netLocalPlayerIndex.OnValueChanged += OnLocalPlayerIndexChanged;
@@ -449,6 +500,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     public override void OnNetworkDespawn()
     {
         base.OnNetworkDespawn();
+        All.Remove(this);
         netLocalPlayerIndex.OnValueChanged -= OnLocalPlayerIndexChanged;
         if (appearance != null)
         {
@@ -652,9 +704,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
     [ServerRpc]
     private void RequestRespawnServerRpc()
     {
-        // Player flew out of bounds - record death (the bot is not a player)
+        // Player flew out of bounds - record death (the warm-up bot is not a player)
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
-        if (!IsBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+        if (!IsWarmupBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
         SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.OutOfBounds);
         HandleDeathAndRespawn();
     }
@@ -858,14 +910,15 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// </summary>
     private void HandleCombatDeath(KillCause cause)
     {
-        // Record death for this player (the bot is not a player)
+        // Record death for this player (the warm-up bot is not a player)
         int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
-        if (!IsBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+        if (!IsWarmupBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
 
-        // Attribute kill to last attacker (only recent hits count). A bot
-        // kill stays credited for the feed line but never scores.
+        // Attribute kill to last attacker (only recent hits count). A warm-up
+        // bot kill stays credited for the feed line but never scores; combat
+        // bots score and are scored on like anyone else.
         bool credited = _hasLastAttacker && Time.time - _lastAttackerTime <= KillAttributionWindow;
-        if (credited && !IsBot && !IsBotIdentity(_lastAttackerClientId, _lastAttackerLocalPlayerIndex))
+        if (credited && !IsWarmupBot && !IsWarmupBotIdentity(_lastAttackerClientId, _lastAttackerLocalPlayerIndex))
         {
             ScoreManager.Instance?.AddScore(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
         }
@@ -874,9 +927,9 @@ public class PlayerController : NetworkBehaviour, IDamagable
         SyncKillFeedClientRpc(OwnerClientId, localIdx,
             _lastAttackerClientId, _lastAttackerLocalPlayerIndex, credited, (byte)cause);
 
-        // Spawn power-up at death position - not for the bot, or the warm-up
-        // sky fills with crates nobody earned
-        if (PowerUpManager.Instance != null && !IsBot)
+        // Spawn power-up at death position - not for the warm-up bot, or the
+        // warm-up sky fills with crates nobody earned
+        if (PowerUpManager.Instance != null && !IsWarmupBot)
         {
             PowerUpManager.Instance.SpawnPowerUp(transform.position);
         }
@@ -1068,7 +1121,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         {
             // Crashed into ground/obstacle - instant kill, no power-up drop
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
-            if (!IsBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+            if (!IsWarmupBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
             SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.Ground);
             HandleDeathAndRespawn();
         }
@@ -1078,7 +1131,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
             // Collided with another plane - instant kill, drops power-up.
             // The human half of a bot collision still counts, on its own object.
             int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
-            if (!IsBot) ScoreManager.Instance?.AddPlaneCollision(OwnerClientId, localIdx);
+            if (!IsWarmupBot) ScoreManager.Instance?.AddPlaneCollision(OwnerClientId, localIdx);
             HandleCombatDeath(KillCause.Collision);
         }
 

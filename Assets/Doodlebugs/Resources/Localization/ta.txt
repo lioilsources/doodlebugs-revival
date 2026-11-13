@@ -202,3 +202,7 @@ skin.brick_hero=செங்கல் ஹீரோ
 skin.arcade_pixel=ஆர்கேட் பிக்சல்
 skin.retro_wave=ரெட்ரோ அலை
 skin.tiger_stripe=புலிக் கோடுகள்
+bot.tier.0=புதியவர்
+bot.tier.1=விமானி
+bot.tier.2=ஏஸ்
+bot.tier.3=பாரன்

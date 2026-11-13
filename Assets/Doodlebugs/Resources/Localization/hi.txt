@@ -202,3 +202,7 @@ skin.brick_hero=ब्लॉक हीरो
 skin.arcade_pixel=आर्केड पिक्सेल
 skin.retro_wave=रेट्रो लहर
 skin.tiger_stripe=बाघ की धारियाँ
+bot.tier.0=नौसिखिया
+bot.tier.1=पायलट
+bot.tier.2=इक्का
+bot.tier.3=बैरन

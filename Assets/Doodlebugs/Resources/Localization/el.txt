@@ -200,3 +200,7 @@ skin.brick_hero=Ήρωας από τουβλάκια
 skin.arcade_pixel=Pixel arcade
 skin.retro_wave=Ρετρό κύμα
 skin.tiger_stripe=Ρίγες τίγρη
+bot.tier.0=ΑΡΧΑΡΙΟΣ
+bot.tier.1=ΠΙΛΟΤΟΣ
+bot.tier.2=ΑΣΟΣ
+bot.tier.3=ΒΑΡΟΝΟΣ

@@ -201,3 +201,7 @@ skin.brick_hero=Anh hùng gạch
 skin.arcade_pixel=Pixel arcade
 skin.retro_wave=Sóng retro
 skin.tiger_stripe=Vằn hổ
+bot.tier.0=TÂN BINH
+bot.tier.1=PHI CÔNG
+bot.tier.2=ÁT CHỦ BÀI
+bot.tier.3=NAM TƯỚC

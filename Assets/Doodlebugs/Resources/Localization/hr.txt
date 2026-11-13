@@ -200,3 +200,7 @@ skin.brick_hero=Kockasti junak
 skin.arcade_pixel=Arkadni piksel
 skin.retro_wave=Retro val
 skin.tiger_stripe=Tigrove pruge
+bot.tier.0=NOVAK
+bot.tier.1=PILOT
+bot.tier.2=AS
+bot.tier.3=BARUN

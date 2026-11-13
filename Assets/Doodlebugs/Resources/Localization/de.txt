@@ -200,3 +200,7 @@ skin.brick_hero=Steinchenheld
 skin.arcade_pixel=Arcade-Pixel
 skin.retro_wave=Retrowelle
 skin.tiger_stripe=Tigerstreifen
+bot.tier.0=NEULING
+bot.tier.1=PILOT
+bot.tier.2=ASS
+bot.tier.3=BARON

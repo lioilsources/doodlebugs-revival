@@ -202,3 +202,7 @@ skin.brick_hero=ਇੱਟ ਹੀਰੋ
 skin.arcade_pixel=ਆਰਕੇਡ ਪਿਕਸਲ
 skin.retro_wave=ਰੈਟਰੋ ਲਹਿਰ
 skin.tiger_stripe=ਸ਼ੇਰ ਧਾਰੀਆਂ
+bot.tier.0=ਨਵਾਂ
+bot.tier.1=ਪਾਇਲਟ
+bot.tier.2=ਏਸ
+bot.tier.3=ਬੈਰਨ

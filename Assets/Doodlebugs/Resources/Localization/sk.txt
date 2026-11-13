@@ -200,3 +200,7 @@ skin.brick_hero=Kockový hrdina
 skin.arcade_pixel=Arkádový pixel
 skin.retro_wave=Retro vlna
 skin.tiger_stripe=Tigrie pruhy
+bot.tier.0=NOVÁČIK
+bot.tier.1=PILOT
+bot.tier.2=ESO
+bot.tier.3=BARÓN

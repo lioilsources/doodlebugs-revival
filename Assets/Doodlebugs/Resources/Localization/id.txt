@@ -200,3 +200,7 @@ skin.brick_hero=Pahlawan Balok
 skin.arcade_pixel=Piksel Arkade
 skin.retro_wave=Gelombang Retro
 skin.tiger_stripe=Belang Harimau
+bot.tier.0=PEMULA
+bot.tier.1=PILOT
+bot.tier.2=JAGOAN
+bot.tier.3=BARON

@@ -202,3 +202,7 @@ skin.brick_hero=ব্লক হিরো
 skin.arcade_pixel=আর্কেড পিক্সেল
 skin.retro_wave=রেট্রো ঢেউ
 skin.tiger_stripe=বাঘের ডোরা
+bot.tier.0=নবিশ
+bot.tier.1=পাইলট
+bot.tier.2=এস
+bot.tier.3=ব্যারন

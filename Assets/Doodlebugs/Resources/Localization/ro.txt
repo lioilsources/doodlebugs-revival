@@ -201,3 +201,7 @@ skin.brick_hero=Erou din cărămizi
 skin.arcade_pixel=Pixel arcade
 skin.retro_wave=Val retro
 skin.tiger_stripe=Dungi de tigru
+bot.tier.0=ÎNCEPĂTOR
+bot.tier.1=PILOT
+bot.tier.2=AS
+bot.tier.3=BARON

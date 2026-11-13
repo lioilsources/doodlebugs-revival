@@ -200,3 +200,7 @@ skin.brick_hero=Klockowy bohater
 skin.arcade_pixel=Piksel arcade
 skin.retro_wave=Fala retro
 skin.tiger_stripe=Tygrysie paski
+bot.tier.0=NOWICJUSZ
+bot.tier.1=PILOT
+bot.tier.2=AS
+bot.tier.3=BARON
