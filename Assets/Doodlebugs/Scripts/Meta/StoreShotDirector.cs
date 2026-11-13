@@ -43,6 +43,10 @@ public class StoreShotDirector : MonoBehaviour
         yield return Shot("01_boot");
 
         var cm = Doodlebugs.Network.ConnectionManager.Instance;
+        // Home no longer pairs at boot: PARTY starts the search, HostNow ends it
+        // at once - the Waiting hangar with every tab, as before.
+        cm?.BeginParty();
+        yield return null;
         if (cm == null || !cm.HostNow()) Log("HostNow refused, waiting for discovery to host on its own");
         yield return Until(() => NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer
                                  && Mode() == MatchManager.HangarMode.Waiting, 40f);
