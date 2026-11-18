@@ -77,4 +77,7 @@ public class GadgetProfile
         IconCache[Type] = s;
         return s;
     }
+
+    /// <summary>Glyph without the disc (Prompts/31), or null.</summary>
+    public Sprite LoadGlyph() => Resources.Load<Sprite>("Sprites/Weapons/" + IconSpriteName + "_glyph");
 }

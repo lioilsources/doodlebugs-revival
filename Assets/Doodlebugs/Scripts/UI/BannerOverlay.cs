@@ -32,6 +32,7 @@ public class BannerOverlay : MonoBehaviour
             _instance.Build();
         }
         _instance.transform.SetAsLastSibling();
+        _instance._text.font = UiTheme.Display;   // the theme may have changed since Build
         _instance.Play(text, color, worldX);
     }
 
@@ -51,7 +52,8 @@ public class BannerOverlay : MonoBehaviour
         _text.horizontalOverflow = HorizontalWrapMode.Overflow;
         _text.raycastTarget = false;
         var shadow = r.gameObject.AddComponent<Shadow>();
-        shadow.effectColor = UiTheme.Ink;
+        var bs = UiTheme.BackdropShadow;
+        shadow.effectColor = bs.a > 0f ? bs : new Color(0f, 0f, 0f, 0.6f);
         shadow.effectDistance = new Vector2(0f, -4f);
 
         _arrow = Ui.Node(transform, "Arrow");

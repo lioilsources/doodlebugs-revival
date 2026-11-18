@@ -90,12 +90,16 @@ the relevant one before touching flight, weapons or hangar UI. Summary:
   fonts, min text 12, min touch 48; `UiAudit` warns in dev builds).
   `UI/HangarScreen.cs` owns every hangar mode + plane/arena pickers;
   `GameHUD` keeps HUD, kill feed, results, podium only.
-- **Plan 31 (`[plan]`, not implemented):** ten UI themes over the same hangar
-  layout - `Prompts/31-CLAUDE-PLAN-ui-themes.md`, mockup next to it.
+- **Plan 31 (`[wip]`, implemented, device test pending):** ten UI themes over
+  the same hangar layout - `Prompts/31-CLAUDE-PLAN-ui-themes.md`, mockup next
+  to it. `UiTheme` is a facade over `UI/Kit/UiThemeCatalog` (`Ink` = text on
+  paper, `Line` = outlines, `OnBackdrop` = text on the arena); screens rebuild
+  on `UiTheme.Changed`. Art in `Resources/Sprites/UiThemes/<key>/`, fonts via
+  `tools/ui_themes/fetch_fonts.py`.
   `tools/ui_themes/tokens.py` = palettes + WCAG contrast gate (mirror of the
   future `UiThemeCatalog`), `prompts.py` = art prompts (schnell for textless
   art, Qwen-Image only for the wordmark).
-- **Plan 32 (`[plan]`, not implemented):** LEAN, a tilt assist on top of
+- **Plan 32 (`[wip]`, wave 1 implemented):** LEAN, a tilt assist on top of
   POINT/RATE - `Prompts/32-CLAUDE-PLAN-lean-hybrid.md`. Rolling the phone
   into a turn adds up to 15 % turn rate; the meter rewards motion and leaks,
   a held pose earns nothing. `tools/flight/lean_sim.py --check` guards the

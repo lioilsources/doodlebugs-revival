@@ -129,3 +129,9 @@ tools/weapons/review/
 tools/weapons/index.html
 tools/weapons/effects.html
 tools/weapons/sfx.html
+
+# UI theme art: renders, post-processed seeds, review sheets (picks go to Assets)
+tools/ui_themes/out/
+
+# Python venv for tools (fonttools)
+.venv/

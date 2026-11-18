@@ -19,8 +19,11 @@ public class FlightLabOverlay : MonoBehaviour
         ("TurnRate", 10f), ("CornerSpeed", 0.5f), ("CruiseSpeed", 0.5f), ("MaxSpeed", 0.5f),
         ("MinSpeed", 0.25f), ("EnvAtMin", 0.05f), ("EnvAtMax", 0.05f), ("TurnAttack", 0.01f),
         ("SnapBoost", 0.1f), ("TurnDrag", 0.1f), ("ThrottleRate", 0.5f), ("BoostSpeed", 0.5f),
+        ("LeanBonus", 0.01f), ("LeanTau", 0.1f), ("LeanFullDeg", 1f),
     };
-    private static readonly float[] StickSteps = { 0.02f, 2f, 0.1f, 0.02f };
+    private static readonly float[] StickSteps = { 0.02f, 2f, 0.1f, 0.02f, 2f };
+
+    private Text _leanLive;
 
     private RectTransform _list;
     private Text _status;
@@ -46,7 +49,7 @@ public class FlightLabOverlay : MonoBehaviour
     private void Build()
     {
         var dim = gameObject.AddComponent<Image>();
-        dim.color = new Color(UiTheme.Ink.r, UiTheme.Ink.g, UiTheme.Ink.b, 0.92f);
+        dim.color = new Color(0.05f, 0.09f, 0.19f, 0.92f);   // dev tool: always dark
 
         var title = Ui.Text(transform, "Title", "FLIGHT LAB", UiTheme.Display, UiTheme.SizeTitle, Color.white);
         Ui.TopBand(title.rectTransform, 8f, 36f, 20f, 20f);
@@ -76,7 +79,7 @@ public class FlightLabOverlay : MonoBehaviour
 
         // Scrolling list of rows
         var view = Ui.Node(transform, "View");
-        Ui.Inset(view, 20f, 16f, 200f, 70f);
+        Ui.Inset(view, 20f, 46f, 200f, 70f);
         view.gameObject.AddComponent<RectMask2D>();
         var hit = view.gameObject.AddComponent<Image>();
         hit.color = Color.clear;
@@ -96,6 +99,23 @@ public class FlightLabOverlay : MonoBehaviour
         lv.childForceExpandHeight = false;
         _list.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         scroll.content = _list;
+
+        // LEAN live row (Prompts/32 §9): a clockwise roll must read + swing
+        _leanLive = Ui.Text(transform, "LeanLive", "", UiTheme.Label, 15, UiTheme.Highlight, TextAnchor.MiddleLeft);
+        Ui.BottomBand(_leanLive.rectTransform, 12f, 28f, 20f, 200f);
+    }
+
+    private void Update()
+    {
+        if (_leanLive == null) return;
+        var touch = InputManager.Instance?.TouchProvider;
+        var sensor = touch?.LeanSensor;
+        if (sensor == null) { _leanLive.text = "LEAN: no touch input on this device"; return; }
+        if (!sensor.Available) { _leanLive.text = "LEAN: no gyroscope or gravity sensor"; return; }
+        string src = sensor.HasGyroscope ? "gyro" : "gravity";
+        _leanLive.text = sensor.Enabled
+            ? $"LEAN [{src}]  gyro z {sensor.RawGyroZ,6:0} deg/s   rate {sensor.Rate,6:0}   swing {sensor.Swing,5:0.0}   lean {sensor.Lean,5:0.00}"
+            : $"LEAN [{src}] off (switch it on in SETTINGS, POINT or RATE)";
     }
 
     private static void AddSideButton(RectTransform parent, string label, Color face, System.Action onClick)

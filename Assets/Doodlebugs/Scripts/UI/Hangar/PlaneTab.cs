@@ -75,12 +75,12 @@ public class PlaneTab : MonoBehaviour
         hl.childControlHeight = false;
         hl.childForceExpandWidth = false;
         hl.childAlignment = TextAnchor.MiddleLeft;
-        Ui.AutoText(head, "Title", "PAINT", UiTheme.Label, 15, Color.white);
+        Ui.AutoText(head, "Title", "PAINT", UiTheme.Label, 15, UiTheme.OnBackdrop);
         foreach (Filter f in System.Enum.GetValues(typeof(Filter)))
         {
             string text = f == Filter.All ? "All " + PlaneSkinCatalog.Count
                         : f == Filter.Free ? "Free" : "Premium · soon";
-            var (r, bg, label) = Ui.Pill(head, "F_" + f, text, UiTheme.GlassLight, Color.white, 22f);
+            var (r, bg, label) = Ui.Pill(head, "F_" + f, text, UiTheme.GlassLight, UiTheme.OnBackdrop, 22f);
             var captured = f;
             bg.raycastTarget = true;
             Ui.Press(bg, () => { _filter = captured; Refresh(); });
@@ -119,8 +119,8 @@ public class PlaneTab : MonoBehaviour
         {
             bool on = (int)_filter == i;
             var bg = _filterPills[i].go.GetComponent<Image>();
-            bg.color = on ? UiTheme.Paper : UiTheme.GlassLight;
-            _filterPills[i].label.color = on ? UiTheme.Ink : Color.white;
+            bg.color = on ? UiTheme.TabOn : UiTheme.GlassLight;
+            _filterPills[i].label.color = on ? UiTheme.TabOnText : UiTheme.OnBackdrop;
         }
     }
 
@@ -136,19 +136,20 @@ public class PlaneTab : MonoBehaviour
             bool taken = !mine && mgr != null && mgr.IsModelTaken(id, me, myIdx);
 
             var card = Ui.Card(_shapeContent, "Shape_" + def.Key,
-                mine ? UiTheme.Highlight : taken ? UiTheme.PaperDim : UiTheme.Paper, UiTheme.RadiusCard, 5f);
+                mine ? UiTheme.Pick : taken ? UiTheme.PaperDim : UiTheme.Paper, UiTheme.RadiusCard, 5f);
             card.Root.sizeDelta = new Vector2(128f, 112f);
 
             var img = Ui.Sprite(card.Face.transform, "Plane", PlaneModelCatalog.LoadSprite(id, skin));
             Ui.Place(img.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -4f), new Vector2(64f, 64f));
             if (taken) img.color = new Color(1f, 1f, 1f, 0.35f);
+            else img.color = UiTheme.Active.ArtTint;
 
-            var name = Ui.Text(card.Face.transform, "Name", def.DisplayName, UiTheme.Display, 18, UiTheme.Ink, TextAnchor.MiddleCenter);
+            var name = Ui.Text(card.Face.transform, "Name", def.DisplayName, UiTheme.Display, 18, mine ? UiTheme.OnPick : UiTheme.Ink, TextAnchor.MiddleCenter);
             Ui.TopBand(name.rectTransform, 66f, 20f);
             name.horizontalOverflow = HorizontalWrapMode.Overflow;
             var el = ElementProfile.Get(def.Element);
             var elem = Ui.Text(card.Face.transform, "Element", el.DisplayName, UiTheme.Label, UiTheme.SizeSmall,
-                UiTheme.TextDim, TextAnchor.MiddleCenter);
+                mine ? UiTheme.OnPick : UiTheme.TextDim, TextAnchor.MiddleCenter);
             Ui.TopBand(elem.rectTransform, 86f, 16f);
 
             string chip = mine ? "YOURS" : taken ? WhoFlies(id) : null;
@@ -217,10 +218,10 @@ public class PlaneTab : MonoBehaviour
 
             var r = Ui.Node(_paintContent, "Paint_" + def.Key);
             r.sizeDelta = new Vector2(48f, 48f);
-            var shadow = Ui.Round(r, "Shadow", UiTheme.Ink, 12f);
+            var shadow = Ui.Round(r, "Shadow", UiTheme.Active.ShadowColor, 12f);
             shadow.rectTransform.offsetMin = new Vector2(0f, -4f);
             shadow.rectTransform.offsetMax = new Vector2(0f, -4f);
-            var ring = Ui.Round(r, "Ring", mine ? UiTheme.Highlight : UiTheme.Ink, 12f);
+            var ring = Ui.Round(r, "Ring", mine ? UiTheme.Pick : UiTheme.Line, 12f);
             var face = Ui.Round(r, "Face", Color.white, 9f, true);
             Ui.Inset(face.rectTransform, mine ? 4f : 3f, mine ? 4f : 3f, mine ? 4f : 3f, mine ? 4f : 3f);
 

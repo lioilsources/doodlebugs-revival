@@ -128,8 +128,8 @@ THEMES = {
         tab_on=["#FFFFFF", "#C3DBFA"], tab_on_text="#12325C",
         glass=("#0E2A52", .80), glass_light=("#FFFFFF", .30),
         veil_top=("#4096EB", .30), veil_bottom=("#0A2C6E", .86),
-        fonts=dict(display="LilitaOne-Regular", label="Fredoka-SemiBold",
-                   body="Fredoka-Medium", strong="Fredoka-SemiBold"),
+        fonts=dict(display="PaytoneOne-Regular", label="Rubik-SemiBold",
+                   body="Rubik-Medium", strong="Rubik-SemiBold"),
         sizes=dict(title=32, card=23, name=25, cta=30, slot=15, tab=16),
         tracking=dict(display=.03, label=.03), case="upper",
         shape=dict(panel="gloss", radius_card=16, radius_button=14, radius_cta=27, outline=2,
@@ -258,10 +258,23 @@ THEMES = {
     ),
 }
 
+# Face of a selected / owned tile (plane shapes, arena tiles, scheme buttons)
+# and the text on it. Added with the C# kit: Highlight doubles as text on
+# glass, which forced it dark in the light themes, so selection got its own.
+PICK = {
+    "skyposter": ("#FFD23F", "#0D1730"), "phosphor": ("#FFC857", "#031006"),
+    "coinop": ("#FFE14D", "#07061A"), "chrome": ("#FFD23F", "#11161D"),
+    "aqua": ("#FFE45C", "#12325C"), "flat": ("#FFC107", "#212121"),
+    "clay": ("#FFE08A", "#3B2A5C"), "lightfield": ("#FFE29C", "#12142C"),
+    "cockpit": ("#FFD23F", "#0A0F18"), "canopy": ("#FFE27A", "#3A2010"),
+    "solaria": ("#F7E7B5", "#0F3B3A"),
+}
+
 # Font files the themes need (Resources/Fonts/<file>.ttf). All OFL-1.1
 # (checked in google/fonts on 2026-11-18, Roboto included); every family
 # covers Latin + Latin Extended, so Czech and the other Latin-script locales
-# render in the theme's own face.
+# render in the theme's own face (checked per glyph on 2026-11-18: Fredoka and
+# Lilita One lack ě č ř ů and were replaced).
 # `static=False`: Google ships only a variable TTF - Unity's dynamic font
 # has no axis support, so cut static instances (fonttools varLib.instancer).
 FONTS = {
@@ -274,9 +287,9 @@ FONTS = {
     "RussoOne-Regular": dict(family="Russo One", static=True),
     "SairaCondensed-SemiBold": dict(family="Saira Condensed", static=True),
     "SairaCondensed-Bold": dict(family="Saira Condensed", static=True),
-    "LilitaOne-Regular": dict(family="Lilita One", static=True),
-    "Fredoka-Medium": dict(family="Fredoka", static=False, wght=500),
-    "Fredoka-SemiBold": dict(family="Fredoka", static=False, wght=600),
+    "PaytoneOne-Regular": dict(family="Paytone One", static=True),
+    "Rubik-Medium": dict(family="Rubik", static=False, wght=500),
+    "Rubik-SemiBold": dict(family="Rubik", static=False, wght=600),
     "Montserrat-ExtraBold": dict(family="Montserrat", static=False, wght=800),
     "Roboto-Regular": dict(family="Roboto", static=False, wght=400),
     "Roboto-Medium": dict(family="Roboto", static=False, wght=500),
@@ -341,6 +354,8 @@ def check(key, t):
     yield pair("band label / band", t["band_text"], t["band"], 4.5)
     yield pair("CTA label / confirm (large)", t["on_confirm"], t["confirm"], 3.0)
     yield pair("active tab / tab (large bold)", t["tab_on_text"], t["tab_on"], 3.0)
+    pick, on_pick = PICK[key]
+    yield pair("selected tile text / pick", on_pick, pick, 4.5)
 
     # Glass pills and pilot chips: glass over (veil over the arena), both extremes.
     g_hex, g_a = t["glass"]

@@ -1,7 +1,14 @@
 # Motivy rozhraní — deset kabátů pro hangár (plán implementace)
 
-Status (2026-11-18): **plán, neimplementováno.** Rozhodnutí v §2 mají výchozí
-hodnotu, takže Opus může začít hned; vlastník je může kdykoli změnit.
+Status (2026-11-18): **implementováno** (vlny 0–3 v kódu, výtvarné podklady z
+L40S), kompilace ověřena Roslynem, editor ani zařízení ne. Původně: plán;
+rozhodnutí v §2 mají výchozí hodnotu.
+
+Odchylky od plánu: filtry arény běží na CPU (blit do malé RenderTexture a
+zpět), ne ve shaderech, takže na zařízení nemůže nic selhat při překladu;
+Lightfield nemá sklo nad rozmazanou kopií, rozmazané je celé pozadí; pro Aqua
+jsou písma Paytone One + Rubik (Fredoka a Lilita One nemají ě č ř ů); písma
+mají 1,67 MB. Generátor běžel na L40S (FLUX.1-schnell fp8 a Qwen-Image fp8).
 Implementuje Opus podle tohoto dokumentu, mockupu
 `Prompts/31-ui-themes-mockup.html` a dvou katalogů v `tools/ui_themes/`.
 

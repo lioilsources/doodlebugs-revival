@@ -55,19 +55,19 @@ MODELS = {
     # + DualCLIPLoader(type flux) + ae VAE + EmptySD3LatentImage + KSampler.
     "schnell": dict(
         license="Apache-2.0",
-        comfy=dict(unet="flux1-schnell.safetensors", clip=("clip_l.safetensors", "t5xxl_fp16.safetensors"),
-                   vae="ae.safetensors", steps=4, cfg=1.0, sampler="euler", scheduler="simple"),
+        # L40S (profile D) ships the single-file fp8 checkpoint; SPARK has the split
+        # UNET/CLIP/VAE set (flux1-schnell.safetensors + clip_l + t5xxl_fp16 + ae).
+        comfy=dict(ckpt="flux1-schnell-fp8.safetensors", steps=4, cfg=1.0, sampler="euler", scheduler="simple"),
         nim=dict(service="flux-schnell", steps=4, side_min=768, side_max=1344, side_step=64,
                  note="txt2img only, seed < 2**32, answers a JPEG named .png, no negative prompt"),
     ),
-    # File names are the stock ComfyUI Qwen-Image set and are NOT verified on
-    # SPARK: check them against /object_info before the first batch (a
-    # missing input makes ComfyUI drop the node and still report success).
+    # Stock ComfyUI Qwen-Image set; verified on the L40S box (profile D) on
+    # 2026-11-18. On SPARK check them against /object_info first.
     "qwen": dict(
         license="Apache-2.0",
         comfy=dict(unet="qwen_image_fp8_e4m3fn.safetensors", clip="qwen_2.5_vl_7b_fp8_scaled.safetensors",
                    clip_type="qwen_image", vae="qwen_image_vae.safetensors", shift=3.1,
-                   steps=20, cfg=2.5, sampler="euler", scheduler="simple", verify=True),
+                   steps=20, cfg=2.5, sampler="euler", scheduler="simple"),
     ),
 }
 
@@ -95,8 +95,8 @@ GLOW_FRAME = (
 WORDMARK_SOLID = (
     "one horizontal line, centred, all ten letters fully visible with a wide "
     "empty margin on every side, correct spelling D-O-O-D-L-E-B-U-G-S, the "
-    "lettering is the only element in the image, on a flat plain light grey "
-    "background"
+    "lettering is the only element in the image, isolated on a plain flat pure "
+    "white background"
 )
 WORDMARK_GLOW = (
     "one horizontal line, centred, all ten letters fully visible with a wide "

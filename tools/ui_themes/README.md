@@ -42,7 +42,17 @@ Nový motiv nebo změna barvy musí bránou projít dřív, než se propíše do
   postavy ani typické rekvizity.
 - Rozměry pro schnell drží obálku NIM (strany 768–1344 po 64).
 
-## Co chybí
+## Výtvarné podklady a písma
 
-`generate_theme_art.py`, `compose_frames.py` a `fetch_fonts.py` popisuje plán
-v §5 a §7. SPARK jen přes `sparkctl`.
+```bash
+ssh -N -L 18188:127.0.0.1:8188 tcloud     # L40S, profil D, okno přes qctl (požádat L40S session)
+COMFY=http://127.0.0.1:18188 python3 tools/ui_themes/generate_theme_art.py render
+python3 tools/ui_themes/generate_theme_art.py post     # klíčování, bezešvé dlaždice, bez GPU
+python3 tools/ui_themes/generate_theme_art.py sheet    # out/sheets/<motiv>.jpg
+python3 tools/ui_themes/generate_theme_art.py apply    # picks.json (nebo seed 0) -> Assets
+.venv/bin/python tools/ui_themes/fetch_fonts.py        # statické řezy, latinka + latin-ext
+```
+
+`picks.json` = vybraný seed na asset (`"canopy.backdrop": 2`, `-1` = nepoužít).
+Na L40S jen FLUX.1-schnell a Qwen-Image (Apache), nikdy FLUX-dev.
+`compose_frames.py` (9-slice rámy z dlaždic) zatím není: rámy kreslí kód.

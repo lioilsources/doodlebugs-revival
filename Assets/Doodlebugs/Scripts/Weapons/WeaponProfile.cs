@@ -366,6 +366,11 @@ public class WeaponProfile
         return sprite;
     }
 
+    /// <summary>The icon's glyph without its disc (Prompts/31: the UI theme
+    /// draws the badge), or null when only the full badge exists.</summary>
+    public Sprite LoadGlyph() =>
+        string.IsNullOrEmpty(IconSpriteName) ? null : Resources.Load<Sprite>("Sprites/Weapons/" + IconSpriteName + "_glyph");
+
     public static WeaponProfile Get(WeaponType type)
     {
         int idx = (int)type;

@@ -30,7 +30,7 @@ public class ArenaSheet : MonoBehaviour
     private void Build(RectTransform root, BackgroundManager mgr)
     {
         var dim = root.gameObject.AddComponent<Image>();
-        dim.color = new Color(UiTheme.Ink.r, UiTheme.Ink.g, UiTheme.Ink.b, 0.72f);   // swallows touches
+        dim.color = UiTheme.WithAlpha(UiTheme.Active.VeilBottom, 0.78f);   // swallows touches
 
         foreach (int i in mgr.SceneOrder) { _order.Add(i); _on.Add(i); }
         for (int i = 0; i < mgr.BackgroundCount; i++)
@@ -73,7 +73,7 @@ public class ArenaSheet : MonoBehaviour
             bool on = _on.Contains(idx);
             if (on) slot++;
 
-            var tile = Ui.Card(_grid, "Arena_" + idx, on ? UiTheme.Highlight : UiTheme.PaperDim, 12f, 4f);
+            var tile = Ui.Card(_grid, "Arena_" + idx, on ? UiTheme.Pick : UiTheme.PaperDim, 12f, 4f);
             var sky = Ui.Round(tile.Face.transform, "Sky", Color.white, 9f);
             Ui.Inset(sky.rectTransform, 3, 3, 3, 3);
             sky.gameObject.AddComponent<Mask>().showMaskGraphic = true;
@@ -90,7 +90,7 @@ public class ArenaSheet : MonoBehaviour
 
             string name = profile.backgroundSprite != null ? profile.backgroundSprite.name : profile.name;
             var (pill, _, _) = Ui.Pill(tile.Face.transform, "Name", (on ? slot + ". " : "") + name.ToUpperInvariant(),
-                UiTheme.Glass, Color.white, 22f, 12, UiTheme.Label);
+                UiTheme.Glass, UiTheme.OnBackdrop, 22f, 12, UiTheme.Label);
             pill.anchorMin = pill.anchorMax = new Vector2(0f, 0f);
             pill.pivot = new Vector2(0f, 0f);
             pill.anchoredPosition = new Vector2(6f, 6f);
