@@ -1,6 +1,8 @@
 # Letový pocit — dynamická odezva letadla (plán implementace)
 
-Status (2026-11-18): **plán, neimplementováno.** Vlastník téhož dne rozhodl
+Status (2026-11-18): **implementováno** (oba PR v jednom), kompilace ověřena
+Roslynem, editor ani zařízení ne.
+Původní stav plánu: **plán, neimplementováno.** Vlastník téhož dne rozhodl
 D3 (postih ovladatelnosti nerušit, zjemnit) a D4 (POINT výchozí); ostatní
 rozhodnutí v §2 mají výchozí hodnotu a dá se začít hned.
 Implementuje Opus podle tohoto dokumentu. Sourozenecké plány ze stejného

@@ -158,7 +158,7 @@ se snaží mě sestřelit. Když se vedle objeví kamarád, hra mi ho nabídne, 
 nevytrhne mě z kola.
 
 **Práce**
-- **Dotykové ovládání** `[wip]` (Prompts/26): on-screen joystick vpravo
+- **Dotykové ovládání** `[wip]` (Prompts/26, schéma POINT a nový letový model v Prompts/28): on-screen joystick vpravo
   dole (Y = plyn, X = zatáčení, stejné osy jako `IInputProvider`), spouště
   vlevo dole s kruhovým nabíjením podle cooldownu zbraně a ikonou zbraně,
   druhá spoušť připravená pro druhý slot (`Shooting.NetWeaponId2`, hangárový
@@ -361,10 +361,10 @@ kosmetiku přijatelný, pro ranked by potřeboval backend.
 
 ---
 
-### Průřezové plány z hraní na telefonu (2026-11-18) `[plan]`
+### Průřezové plány z hraní na telefonu (2026-11-18) `[wip]`
 
-Tři plány mimo pořadí fází; každý je vydatelný sám a žádný nepotřebuje fázi 0.
-Doporučené pořadí: 28 PR 1 → 30 PR 1 → 29 vlna 1 → zbytek.
+Tři plány mimo pořadí fází; implementovány najednou (28 celý, 29 vlny 1–2,
+30 celý), čekají na test na zařízení. Vlna 3 plánu 29 zůstává otevřená.
 
 | Plán | Co řeší | Dotýká se fází |
 |---|---|---|

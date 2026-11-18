@@ -53,6 +53,10 @@ public class HybridInputProvider : IInputProvider
         return gamepad.GetShootInput() || keyboard.GetShootInput();
     }
 
+    public bool GetShootInput(int slot) => gamepad.GetShootInput(slot) || keyboard.GetShootInput(slot);
+
+    public bool GetShootHeld(int slot) => gamepad.GetShootHeld(slot) || keyboard.GetShootHeld(slot);
+
     public void UpdateInput()
     {
         // Update both providers

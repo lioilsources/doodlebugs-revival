@@ -59,37 +59,37 @@ public class GamepadInputProvider : IInputProvider
         return ApplyDeadzone(raw) * THROTTLE_SENSITIVITY;
     }
 
-    public bool GetShootInput()
+    public bool GetShootInput() => GetShootInput(0);
+
+    /// <summary>Slot 0 = face buttons, right shoulder, right trigger;
+    /// slot 1 (gadget, Prompts/29) = left shoulder, left trigger.</summary>
+    public bool GetShootInput(int slot)
     {
         var gamepad = GetGamepad();
         if (gamepad == null) return false;
 
-        // Face buttons (A/B/X/Y or Cross/Circle/Square/Triangle)
-        if (gamepad.buttonNorth.wasPressedThisFrame ||
-            gamepad.buttonSouth.wasPressedThisFrame ||
-            gamepad.buttonEast.wasPressedThisFrame ||
-            gamepad.buttonWest.wasPressedThisFrame)
+        if (slot == 0)
         {
-            return true;
+            if (gamepad.buttonNorth.wasPressedThisFrame ||
+                gamepad.buttonSouth.wasPressedThisFrame ||
+                gamepad.buttonEast.wasPressedThisFrame ||
+                gamepad.buttonWest.wasPressedThisFrame ||
+                gamepad.rightShoulder.wasPressedThisFrame)
+            {
+                return true;
+            }
+            float rightTrigger = gamepad.rightTrigger.ReadValue();
+            if (rightTrigger > 0.3f && !_rightTriggerPressed)
+            {
+                _rightTriggerPressed = true;
+                return true;
+            }
+            if (rightTrigger < 0.1f) _rightTriggerPressed = false;
+            return false;
         }
 
-        // Shoulder buttons
-        if (gamepad.leftShoulder.wasPressedThisFrame ||
-            gamepad.rightShoulder.wasPressedThisFrame)
-        {
-            return true;
-        }
-
-        // Right trigger with edge detection
-        float rightTrigger = gamepad.rightTrigger.ReadValue();
-        if (rightTrigger > 0.3f && !_rightTriggerPressed)
-        {
-            _rightTriggerPressed = true;
-            return true;
-        }
-        if (rightTrigger < 0.1f) _rightTriggerPressed = false;
-
-        // Left trigger with edge detection
+        if (slot != 1) return false;
+        if (gamepad.leftShoulder.wasPressedThisFrame) return true;
         float leftTrigger = gamepad.leftTrigger.ReadValue();
         if (leftTrigger > 0.3f && !_leftTriggerPressed)
         {
@@ -97,8 +97,20 @@ public class GamepadInputProvider : IInputProvider
             return true;
         }
         if (leftTrigger < 0.1f) _leftTriggerPressed = false;
-
         return false;
+    }
+
+    public bool GetShootHeld(int slot)
+    {
+        var gamepad = GetGamepad();
+        if (gamepad == null) return false;
+        if (slot == 0)
+        {
+            return gamepad.buttonNorth.isPressed || gamepad.buttonSouth.isPressed ||
+                   gamepad.buttonEast.isPressed || gamepad.buttonWest.isPressed ||
+                   gamepad.rightShoulder.isPressed || gamepad.rightTrigger.ReadValue() > 0.3f;
+        }
+        return slot == 1 && (gamepad.leftShoulder.isPressed || gamepad.leftTrigger.ReadValue() > 0.3f);
     }
 
     public void UpdateInput()

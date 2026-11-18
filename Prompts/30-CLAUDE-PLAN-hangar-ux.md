@@ -1,6 +1,8 @@
 # Hangár a vizuální směr — výběr zbraně, letadla, nátěru a arén (plán implementace)
 
-Status (2026-11-18): **plán, neimplementováno.** Vlastník téhož dne rozhodl
+Status (2026-11-18): **implementováno** (oba PR v jednom, směr A),
+kompilace ověřena Roslynem, editor ani zařízení ne.
+Původní stav plánu: **plán, neimplementováno.** Vlastník téhož dne rozhodl
 D1: **směr A — Sky Poster**; ostatní rozhodnutí v §2 mají výchozí hodnotu.
 Implementuje Opus podle tohoto dokumentu a
 mockupu `Prompts/30-hangar-mockup.html`. Sourozenecké plány: `Prompts/28`

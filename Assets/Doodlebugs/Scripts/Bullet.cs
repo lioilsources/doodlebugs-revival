@@ -15,6 +15,24 @@ public class Bullet : NetworkBehaviour
 
     private float _spawnTime;
 
+    /// <summary>Seconds since spawn (local clock).</summary>
+    public float Age => Time.time - _spawnTime;
+
+    // Server-only behaviour state (Prompts/29)
+    private bool _pierce;                // fully charged Lance Mk II
+    private readonly HashSet<PlayerController> _pierced = new();
+    private float _detonateAt = -1f;     // remote detonation scheduled
+    private bool _thrustKilled;          // EMP
+    private bool _homingInit;
+    private PlayerController _homingTarget;
+
+    // Client visuals
+    private bool _spawnFxPending;
+    private SpriteRenderer _radiusRing;
+    private SpriteRenderer _impactMarker;
+    private float _nextMarkerAt, _nextBeepAt;
+    private Vector3 _prevPos;
+
     // Optional lifetime for short-range weapons (0 = unlimited). Server-only.
     private float _lifetime;
 
@@ -109,21 +127,62 @@ public class Bullet : NetworkBehaviour
         _spawnTime = Time.time;
         _terrainBitten = false;
 
+        _pierced.Clear();
+        _detonateAt = -1f;
+        _thrustKilled = false;
+        _homingInit = false;
+        _homingTarget = null;
+        _prevPos = transform.position;
+
         _weaponId.OnValueChanged += OnWeaponChanged;
         _elementId.OnValueChanged += OnElementChanged;
+        _shooterClientId.OnValueChanged += OnShooterChanged;
+        _shooterLocalPlayerIndex.OnValueChanged += OnShooterIdxChanged;
         ApplyVisual();
         ApplyTrail();
 
-        // Bullet replicates to every client - this doubles as the shot sound
-        SfxManager.PlayShoot(Element, Profile.Type);
+        // Sound + muzzle flash wait one frame: weapon, element and shooter
+        // are set right after Spawn and arrive with the next delta.
+        _spawnFxPending = true;
     }
+
+    private void OnShooterChanged(ulong prev, ulong next) => ApplyTrail();
+    private void OnShooterIdxChanged(int prev, int next) => ApplyTrail();
+
+    private void PlaySpawnFx()
+    {
+        var profile = Profile;
+        // Bullet replicates to every client - this doubles as the shot sound
+        SfxManager.PlayShoot(Element, profile.Type);
+        if (profile.ForceMultiplier > 0f && profile.Category != WeaponCategory.Child)
+        {
+            WorldFx.Muzzle(transform.position, ElementProfile.Get(Element).Tint);
+        }
+        if (profile.Type == WeaponType.BigOne) SfxManager.PlayNamed("siren", 0.7f, 0f);
+        else if (profile.GravityScale > 0f && profile.Category != WeaponCategory.Child) SfxManager.PlayNamed("whistle", 0.35f, 0.05f);
+
+        // Radius you can read: mine trigger once armed, airburst blast all the way
+        if (IsMineLike(profile) || profile.RemoteDetonate)
+        {
+            _radiusRing = WorldFx.AttachRing(transform, profile.ExplosionRadius,
+                new Color(1f, 0.35f, 0.25f, profile.RemoteDetonate ? 0.45f : 0f), 0.08f);
+        }
+    }
+
+    private static bool IsMineLike(WeaponProfile p) => p.LinearDrag > 0f && p.ArmDelay > 0f;
 
     public override void OnNetworkDespawn()
     {
         base.OnNetworkDespawn();
         _weaponId.OnValueChanged -= OnWeaponChanged;
         _elementId.OnValueChanged -= OnElementChanged;
+        _shooterClientId.OnValueChanged -= OnShooterChanged;
+        _shooterLocalPlayerIndex.OnValueChanged -= OnShooterIdxChanged;
         ReleaseTrail();
+        if (_radiusRing != null) Destroy(_radiusRing.gameObject);
+        if (_impactMarker != null) Destroy(_impactMarker.gameObject);
+        _radiusRing = null;
+        _impactMarker = null;
     }
 
     /// <summary>Assign the weapon profile driving this projectile. Server-only.</summary>
@@ -162,7 +221,22 @@ public class Bullet : NetworkBehaviour
         if (_trail != null) Destroy(_trail.gameObject);
         var sr = GetComponent<SpriteRenderer>();
         int order = sr != null ? sr.sortingOrder - 1 : 0;   // behind the projectile
-        _trail = EffectAssets.CreateTrailSystem(transform, ElementProfile.Get(Element).Trail, order);
+        var preset = ElementProfile.Get(Element).Trail;
+        if (preset != null)
+        {
+            // Whose shot is it (Prompts/29 D9): a white core for yours, the
+            // shooter's colour for everyone else's. The element keeps its sprite.
+            preset = preset.Clone();
+            var nm = NetworkManager.Singleton;
+            bool mine = nm != null && _shooterClientId.Value == nm.LocalClientId &&
+                        _shooterLocalPlayerIndex.Value != PlayerController.BotLocalPlayerIndex;
+            Color c = mine ? Color.white
+                : PlayerColorManager.Instance != null
+                    ? PlayerColorManager.Instance.GetColor(_shooterClientId.Value, Mathf.Max(0, _shooterLocalPlayerIndex.Value))
+                    : preset.ColorStart;
+            preset.ColorStart = Color.Lerp(preset.ColorStart, c, 0.7f);
+        }
+        _trail = EffectAssets.CreateTrailSystem(transform, preset, order);
     }
 
     /// <summary>
@@ -343,14 +417,156 @@ public class Bullet : NetworkBehaviour
         }
     }
 
+    /// <summary>Server: pierce the first plane and clouds (full-charge Lance Mk II).</summary>
+    public void SetPierce(bool pierce)
+    {
+        if (IsServer) _pierce = pierce;
+    }
+
+    public bool IsFrom(ulong clientId, int localPlayerIndex) =>
+        _shooterClientId.Value == clientId && _shooterLocalPlayerIndex.Value == localPlayerIndex;
+
+    /// <summary>Server: burst now (remote detonation).</summary>
+    public void ServerDetonate()
+    {
+        if (!IsServer || _exploded || !IsSpawned) return;
+        if (Profile.ExplosionRadius > 0f) Explode();
+        NetworkObject.Despawn();
+    }
+
+    /// <summary>Server: burst at a given time (a tap still flies the minimum fuse).</summary>
+    public void DetonateAt(float time)
+    {
+        if (IsServer) _detonateAt = time;
+    }
+
+    /// <summary>Server: removed without a blast (Thunderclap wipes it).</summary>
+    public void ServerFizzle()
+    {
+        if (!IsServer || !IsSpawned) return;
+        FizzleClientRpc(transform.position);
+        NetworkObject.Despawn();
+    }
+
+    [ClientRpc]
+    private void FizzleClientRpc(Vector3 pos) => WorldFx.Puff(pos, new Color(0.8f, 0.9f, 1f), 5, 0.8f);
+
+    /// <summary>Server: EMP - rockets and seekers lose thrust and homing.</summary>
+    public void ServerKillThrust()
+    {
+        if (!IsServer) return;
+        _thrustKilled = true;
+        _homingTarget = null;
+        if (_rb != null) _rb.gravityScale = Mathf.Max(_rb.gravityScale, 1f);
+    }
+
     private void Update()
     {
-        if (!IsServer || _lifetime <= 0f) return;
-
-        if (Time.time - _spawnTime >= _lifetime && NetworkObject != null && NetworkObject.IsSpawned)
+        if (_spawnFxPending)
         {
+            _spawnFxPending = false;
+            PlaySpawnFx();
+        }
+        UpdateClientVisuals();
+
+        if (!IsServer || !IsSpawned) return;
+
+        if (_detonateAt > 0f && Time.time >= _detonateAt)
+        {
+            ServerDetonate();
+            return;
+        }
+
+        if (_lifetime > 0f && Time.time - _spawnTime >= _lifetime)
+        {
+            if (Profile.ExplodeOnExpire && Profile.ExplosionRadius > 0f) Explode();
             NetworkObject.Despawn();
         }
+    }
+
+    // --- client-side readability (Prompts/29 §6) -------------------------------
+
+    private void UpdateClientVisuals()
+    {
+        var profile = Profile;
+        Vector3 pos = transform.position;
+        Vector3 vel = Time.deltaTime > 0f ? (pos - _prevPos) / Time.deltaTime : Vector3.zero;
+        _prevPos = pos;
+
+        if (_radiusRing != null)
+        {
+            if (IsMineLike(profile))
+            {
+                // Armed mine: pulsing trigger radius; beeps faster as YOUR plane nears
+                if (IsArmed)
+                {
+                    float pulse = 0.35f + 0.25f * Mathf.Sin(Time.time * 6f);
+                    _radiusRing.color = new Color(1f, 0.3f, 0.2f, pulse);
+                    BeepIfLocalPlaneNear(pos, profile);
+                }
+            }
+            WorldFx.SetRadius(_radiusRing, profile.ExplosionRadius);
+        }
+
+        // Where the bomb will land, for everyone
+        if (profile.GravityScale > 0f && profile.ArmDelay <= 0f && Time.time >= _nextMarkerAt)
+        {
+            _nextMarkerAt = Time.time + 0.1f;
+            UpdateImpactMarker(pos, IsServer && _rb != null ? (Vector3)_rb.linearVelocity : vel, profile);
+        }
+    }
+
+    private void BeepIfLocalPlaneNear(Vector3 pos, WeaponProfile profile)
+    {
+        if (Time.time < _nextBeepAt) return;
+        var nm = NetworkManager.Singleton;
+        if (nm == null) return;
+        float best = float.MaxValue;
+        foreach (var p in FindObjectsByType<PlayerController>(FindObjectsSortMode.None))
+        {
+            if (!p.IsOwner || p.IsBot || p.InHangar) continue;
+            if (IsShootersOwnPlane(p)) continue;
+            best = Mathf.Min(best, Vector2.Distance(p.transform.position, pos));
+        }
+        if (best > 4f) return;
+        SfxManager.PlayNamed("beep", 0.4f, 0f);
+        _nextBeepAt = Time.time + Mathf.Lerp(0.12f, 0.6f, best / 4f);
+    }
+
+    private void UpdateImpactMarker(Vector3 pos, Vector3 vel, WeaponProfile profile)
+    {
+        float g = Physics2D.gravity.y * profile.GravityScale;
+        int mask = 1 << LayerMask.NameToLayer("Foreground");
+        float groundY = ArenaBounds.Ground != null ? ArenaBounds.Ground.bounds.max.y : -100f;
+        Vector2 p = pos, v = vel;
+        Vector2? hit = null;
+        const float step = 0.06f;
+        for (int i = 0; i < 60 && hit == null; i++)
+        {
+            Vector2 next = p + v * step + 0.5f * g * step * step * Vector2.up;
+            var h = Physics2D.Linecast(p, next, mask);
+            if (h.collider != null) hit = h.point;
+            else if (next.y <= groundY) hit = new Vector2(next.x, groundY);
+            v += g * step * Vector2.up;
+            p = next;
+        }
+        if (hit == null)
+        {
+            if (_impactMarker != null) _impactMarker.enabled = false;
+            return;
+        }
+        if (_impactMarker == null)
+        {
+            var go = new GameObject("ImpactMarker");
+            _impactMarker = go.AddComponent<SpriteRenderer>();
+            _impactMarker.sprite = UiSprites.Ring(0.05f);
+            _impactMarker.sortingOrder = WorldFx.Order - 6;
+        }
+        _impactMarker.enabled = true;
+        _impactMarker.transform.position = hit.Value;
+        float r = profile.ExplosionRadius * (0.85f + 0.15f * Mathf.Sin(Time.time * 12f));
+        _impactMarker.transform.localScale = new Vector3(r * 2f / 1.28f, r * 0.7f / 1.28f, 1f);
+        _impactMarker.color = new Color(1f, 0.3f, 0.2f, 0.75f);
     }
 
     private void FixedUpdate()
@@ -359,11 +575,39 @@ public class Bullet : NetworkBehaviour
 
         var profile = Profile;
 
+        // Homing: lock once at launch, steer at the profile's turn rate; a
+        // target hiding in a cloud breaks the lock for good.
+        if (profile.HomingTurnRate > 0f && !_thrustKilled)
+        {
+            if (!_homingInit) { _homingInit = true; AcquireTarget(profile); }
+            if (_homingTarget != null)
+            {
+                if (Age > profile.HomingSeconds || !_homingTarget.IsSpawned || _homingTarget.InHangar ||
+                    InsideCloud(_homingTarget.transform.position))
+                {
+                    _homingTarget = null;
+                }
+                else
+                {
+                    Vector2 v = _rb.linearVelocity;
+                    Vector2 want = ((Vector2)_homingTarget.transform.position - _rb.position).normalized;
+                    Vector2 turned = Vector3.RotateTowards(v.sqrMagnitude > 0.01f ? v.normalized : (Vector2)transform.right,
+                        want, profile.HomingTurnRate * Mathf.Deg2Rad * Time.fixedDeltaTime, 0f);
+                    _rb.linearVelocity = turned * v.magnitude;
+                }
+            }
+        }
+
         // Rocket thrust along the projectile's facing
-        if (profile.Acceleration > 0f)
+        if (profile.Acceleration > 0f && !_thrustKilled)
         {
             _rb.AddForce((Vector2)transform.right * profile.Acceleration * Time.fixedDeltaTime,
                 ForceMode2D.Impulse);
+        }
+
+        if (profile.MaxSpeed > 0f && _rb.linearVelocity.sqrMagnitude > profile.MaxSpeed * profile.MaxSpeed)
+        {
+            _rb.linearVelocity = _rb.linearVelocity.normalized * profile.MaxSpeed;
         }
 
         // Bombs tip nose-down, rockets keep facing their flight path
@@ -433,11 +677,15 @@ public class Bullet : NetworkBehaviour
 
         // Clouds block bullets (cover), but a falling bomb drops through and
         // a mine drifts inside one - that's where it hides.
-        if ((Profile.GravityScale > 0f || Profile.ArmDelay > 0f) &&
+        if ((Profile.GravityScale > 0f || Profile.ArmDelay > 0f || _pierce) &&
             other.GetComponent<Cloud>() != null)
         {
             return;
         }
+
+        // Supply crate: remember who shot it - its blast credits them
+        var crate = other.GetComponent<PowerUp>();
+        if (crate != null) crate.SetLastShooter(_shooterClientId.Value, _shooterLocalPlayerIndex.Value);
 
         var damagable = other.gameObject.GetComponent<IDamagable>();
         if (damagable != null)
@@ -454,11 +702,14 @@ public class Bullet : NetworkBehaviour
             if (Profile.ExplosionRadius > 0f)
             {
                 // The direct target sits inside the blast radius - the
-                // explosion damages it, no separate direct hit.
+                // explosion damages it, no separate direct hit. Anything
+                // damagable that is not a plane (supply crate) takes the hit.
+                if (targetPlayer == null) damagable.Hit(_damage.Value);
                 Explode();
             }
             else
             {
+                if (targetPlayer != null && _pierced.Contains(targetPlayer)) return;
                 if (targetPlayer != null && !IsShootersOwnPlane(targetPlayer))
                 {
                     targetPlayer.SetLastAttacker(_shooterClientId.Value, _shooterLocalPlayerIndex.Value);
@@ -466,7 +717,17 @@ public class Bullet : NetworkBehaviour
                 damagable.Hit(_damage.Value);
                 // A plain hit on a plane used to draw nothing - the victim's
                 // own shield/hull flash said something was hit, never by what.
-                PlayHitFxClientRpc(transform.position, _elementId.Value);
+                bool shield = targetPlayer != null && targetPlayer.PlaneStats != null &&
+                              targetPlayer.PlaneStats.LastDamageAbsorbedByShield;
+                PlayHitFxClientRpc(transform.position, _elementId.Value, _shooterClientId.Value,
+                    _shooterLocalPlayerIndex.Value, _damage.Value, shield, targetPlayer != null);
+
+                // A pierce round goes through its first plane
+                if (_pierce && targetPlayer != null && _pierced.Count == 0)
+                {
+                    _pierced.Add(targetPlayer);
+                    return;
+                }
             }
         }
         else
@@ -478,7 +739,7 @@ public class Bullet : NetworkBehaviour
             }
             else
             {
-                PlayHitFxClientRpc(transform.position, _elementId.Value);
+                PlayHitFxClientRpc(transform.position, _elementId.Value, 0, 0, 0, false, false);
             }
         }
 
@@ -508,6 +769,7 @@ public class Bullet : NetworkBehaviour
         float radius = Profile.ExplosionRadius;
         Vector3 pos = transform.position;
 
+        var profile = Profile;
         var hitPlanes = new HashSet<PlayerController>();
         foreach (var col in Physics2D.OverlapCircleAll(pos, radius))
         {
@@ -522,6 +784,47 @@ public class Bullet : NetworkBehaviour
                 player.SetLastAttacker(_shooterClientId.Value, _shooterLocalPlayerIndex.Value);
             }
             player.Hit(_damage.Value);
+            bool shield = player.PlaneStats != null && player.PlaneStats.LastDamageAbsorbedByShield;
+            if (!ownPlane)
+            {
+                PlayHitFxClientRpc(player.transform.position, -1, _shooterClientId.Value,
+                    _shooterLocalPlayerIndex.Value, _damage.Value, shield, true);
+            }
+        }
+
+        // Knockback (Prompts/29 D3): reaches 1.6 x the blast, falls off
+        // linearly; the planes it throws into the ground are kills.
+        if (profile.Knockback > 0f)
+        {
+            float reach = radius * 1.6f;
+            foreach (var player in FindObjectsByType<PlayerController>(FindObjectsSortMode.None))
+            {
+                if (player.InHangar) continue;
+                Vector2 d = (Vector2)player.transform.position - (Vector2)pos;
+                float dist = d.magnitude;
+                if (dist > reach) continue;
+                bool ownPlane = IsShootersOwnPlane(player);
+                if (ownPlane && Time.time - _spawnTime < SelfHitGracePeriod) continue;
+                Vector2 dir = dist > 0.01f ? d / dist : Vector2.up;
+                float k = 1f - dist / reach;
+                float spin = Mathf.Sign(Vector3.Cross(player.transform.right, dir).z) * profile.Knockback * 1.5f * k;
+                player.ServerApplyImpulse(dir * profile.Knockback * k, spin,
+                    _shooterClientId.Value, _shooterLocalPlayerIndex.Value, !ownPlane);
+            }
+        }
+
+        // Cluster: bomblets fan out of the blast
+        if (profile.SplitInto.HasValue && profile.SplitCount > 0 && Shooting.SharedBulletPrefab != null)
+        {
+            var child = WeaponProfile.Get(profile.SplitInto.Value);
+            for (int i = 0; i < profile.SplitCount; i++)
+            {
+                float a = Mathf.Lerp(55f, 125f, profile.SplitCount > 1 ? (float)i / (profile.SplitCount - 1) : 0.5f);
+                Vector2 v = new Vector2(Mathf.Cos(a * Mathf.Deg2Rad), Mathf.Sin(a * Mathf.Deg2Rad)) * 6f;
+                Shooting.SpawnProjectile(Shooting.SharedBulletPrefab, pos + Vector3.up * 0.4f,
+                    Quaternion.Euler(0f, 0f, a), v, 0f, _shooterClientId.Value, _shooterLocalPlayerIndex.Value,
+                    child.Damage, child, _elementId.Value);
+            }
         }
 
         ExplodeClientRpc(pos, radius, _elementId.Value);
@@ -540,13 +843,82 @@ public class Bullet : NetworkBehaviour
 
         // Element art if it exists, the old explosion prefab if it does not.
         EffectLibrary.SpawnExplosion(element, position, radius, hitEffect);
+
+        // The blast's true reach, readable (Prompts/29 §6)
+        WorldFx.Ring(position, radius, new Color(1f, 0.95f, 0.8f, 0.9f), 0.25f, 0.14f);
     }
 
     [ClientRpc]
-    private void PlayHitFxClientRpc(Vector3 position, int elementId)
+    private void PlayHitFxClientRpc(Vector3 position, int elementId, ulong shooterClientId,
+        int shooterLocalIdx, int damage, bool shieldHit, bool hitPlane)
     {
-        var element = (ProjectileElement)elementId;
-        SfxManager.PlayImpact(element);
-        EffectLibrary.SpawnImpact(element, position, hitEffect);
+        if (elementId >= 0)
+        {
+            var element = (ProjectileElement)elementId;
+            SfxManager.PlayImpact(element);
+            EffectLibrary.SpawnImpact(element, position, hitEffect);
+        }
+
+        // Hit confirm for the shooter only: a white cross + the damage dealt
+        // (blue = shield, orange = hull).
+        var nm = NetworkManager.Singleton;
+        if (!hitPlane || nm == null || shooterClientId != nm.LocalClientId ||
+            shooterLocalIdx == PlayerController.BotLocalPlayerIndex) return;
+        WorldFx.HitMarker(position);
+        WorldFx.Text(position + Vector3.up * 0.6f, "-" + damage,
+            shieldHit ? new Color(0.45f, 0.75f, 1f) : new Color(1f, 0.6f, 0.2f), 0.55f);
+    }
+
+    // --- homing ----------------------------------------------------------------
+
+    private void AcquireTarget(WeaponProfile profile)
+    {
+        Vector2 from = transform.position;
+        Vector2 dir = _rb != null && _rb.linearVelocity.sqrMagnitude > 0.01f ? _rb.linearVelocity.normalized : (Vector2)transform.right;
+        float best = float.MaxValue;
+        PlayerController target = null;
+        foreach (var p in FindObjectsByType<PlayerController>(FindObjectsSortMode.None))
+        {
+            if (p.InHangar || IsShootersOwnPlane(p)) continue;
+            Vector2 to = (Vector2)p.transform.position - from;
+            float d = to.magnitude;
+            if (d > profile.HomingRange || Vector2.Angle(dir, to) > profile.HomingConeDeg) continue;
+            if (d < best) { best = d; target = p; }
+        }
+        _homingTarget = target;
+        if (target != null) LockWarnClientRpc(target.NetworkObjectId);
+    }
+
+    private static readonly Collider2D[] _pointHits = new Collider2D[8];
+
+    private static bool InsideCloud(Vector2 point)
+    {
+        int n = Physics2D.OverlapPoint(point, new ContactFilter2D().NoFilter(), _pointHits);
+        for (int i = 0; i < n; i++)
+        {
+            if (_pointHits[i] != null && _pointHits[i].GetComponent<Cloud>() != null) return true;
+        }
+        return false;
+    }
+
+    [ClientRpc]
+    private void LockWarnClientRpc(ulong targetObjectId)
+    {
+        var nm = NetworkManager.Singleton;
+        if (nm == null || !nm.SpawnManager.SpawnedObjects.TryGetValue(targetObjectId, out var obj)) return;
+        var target = obj.GetComponent<PlayerController>();
+        if (target == null) return;
+        if (target.IsOwner && !target.IsBot)
+        {
+            // You are being hunted
+            SfxManager.PlayNamed("lock", 0.8f, 0f);
+            SfxManager.Haptic(HapticKind.Medium);
+            WorldFx.Text(target.transform.position + Vector3.up * 1.4f, "!", new Color(1f, 0.3f, 0.2f), 0.9f, 1f);
+        }
+        else if (_shooterClientId.Value == nm.LocalClientId &&
+                 _shooterLocalPlayerIndex.Value != PlayerController.BotLocalPlayerIndex)
+        {
+            WorldFx.Ring(target.transform.position, 1.6f, new Color(0.6f, 1f, 0.6f), 0.35f, 0.12f);
+        }
     }
 }

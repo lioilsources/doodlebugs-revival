@@ -1,6 +1,8 @@
 # Arzenál — zbraně, gadgety, bedny a čitelnost střel (plán implementace)
 
-Status (2026-11-18): **plán, neimplementováno.** Vlastník téhož dne rozhodl
+Status (2026-11-18): **implementovány vlny 1 a 2**, vlna 3 otevřená;
+kompilace ověřena Roslynem, editor ani zařízení ne.
+Původní stav plánu: **plán, neimplementováno.** Vlastník téhož dne rozhodl
 D3 (odhození ano) a D5 (Repair zůstává); ostatní rozhodnutí v §2 mají výchozí
 hodnotu. Implementuje Opus po vlnách (§10). Navazuje na `Prompts/28`
 (letový model: `BoostSpeed`, výkrut) a `Prompts/30` (karty draftu); první vlna

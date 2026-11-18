@@ -12,7 +12,8 @@ using UnityEngine.InputSystem;
 public class DesktopInputProvider : IInputProvider
 {
     // Smoothing settings
-    private float smoothingSpeed = 2f;
+    // Faster than the old 2/s: the plane now turns ~4x faster (Prompts/28)
+    private float smoothingSpeed = 6f;
 
     // Current smoothed values
     private float smoothedHorizontal = 0f;
@@ -27,6 +28,7 @@ public class DesktopInputProvider : IInputProvider
     private Key upKey;
     private Key downKey;
     private Key shootKey;
+    private Key gadgetKey;   // second slot (Prompts/29 gadget)
 
     public DesktopInputProvider(int playerIndex = 0)
     {
@@ -44,6 +46,7 @@ public class DesktopInputProvider : IInputProvider
                 upKey = Key.W;
                 downKey = Key.S;
                 shootKey = Key.Space;
+                gadgetKey = Key.E;
                 break;
 
             case 1: // P2: J/L, I/K, H
@@ -52,6 +55,7 @@ public class DesktopInputProvider : IInputProvider
                 upKey = Key.I;
                 downKey = Key.K;
                 shootKey = Key.H;
+                gadgetKey = Key.U;
                 break;
 
             case 2: // P3: Arrows, / (slash)
@@ -60,6 +64,7 @@ public class DesktopInputProvider : IInputProvider
                 upKey = Key.UpArrow;
                 downKey = Key.DownArrow;
                 shootKey = Key.Slash;
+                gadgetKey = Key.RightShift;
                 break;
 
             case 3: // P4: O/P, [/], ; (semicolon)
@@ -68,6 +73,7 @@ public class DesktopInputProvider : IInputProvider
                 upKey = Key.LeftBracket;
                 downKey = Key.RightBracket;
                 shootKey = Key.Semicolon;
+                gadgetKey = Key.Quote;
                 break;
 
             default:
@@ -77,6 +83,7 @@ public class DesktopInputProvider : IInputProvider
                 upKey = Key.W;
                 downKey = Key.S;
                 shootKey = Key.Space;
+                gadgetKey = Key.E;
                 break;
         }
 
@@ -99,6 +106,22 @@ public class DesktopInputProvider : IInputProvider
         if (keyboard == null) return false;
 
         return keyboard[shootKey].wasPressedThisFrame;
+    }
+
+    public bool GetShootInput(int slot)
+    {
+        var keyboard = Keyboard.current;
+        if (keyboard == null) return false;
+        if (slot == 0) return keyboard[shootKey].wasPressedThisFrame;
+        return slot == 1 && keyboard[gadgetKey].wasPressedThisFrame;
+    }
+
+    public bool GetShootHeld(int slot)
+    {
+        var keyboard = Keyboard.current;
+        if (keyboard == null) return false;
+        if (slot == 0) return keyboard[shootKey].isPressed;
+        return slot == 1 && keyboard[gadgetKey].isPressed;
     }
 
     public void UpdateInput()
