@@ -361,6 +361,19 @@ kosmetiku přijatelný, pro ranked by potřeboval backend.
 
 ---
 
+### Průřezové plány z hraní na telefonu (2026-11-18) `[plan]`
+
+Tři plány mimo pořadí fází; každý je vydatelný sám a žádný nepotřebuje fázi 0.
+Doporučené pořadí: 28 PR 1 → 30 PR 1 → 29 vlna 1 → zbytek.
+
+| Plán | Co řeší | Dotýká se fází |
+|---|---|---|
+| `Prompts/28` — letový pocit | letadlo zatáčí 4× rychleji, obálka zatáčení podle rychlosti, schéma POINT, náklon a výkrut spritu, Flight Lab; ruší mrtvý systém maturity | 1 (ovládání), 2 (juice) |
+| `Prompts/29` — arzenál | slot gadgetu (nitro, výkrut, rázová vlna), odhození výbuchem a kill nárazem do země, Mk II pro každou zbraň, nové zbraně, zásobovací shoz, čitelnost střel | 1, 2, 4 (loadout) |
+| `Prompts/30` — hangár a vizuál | MenuCanvas pro telefon, směr „Sky Poster“, velké karty výběru, hangár ven z `GameHUD`; dodá tween util fáze 0 | 0, 2, 4 |
+
+---
+
 ## 5. Časová osa
 
 Při nárazovém tempu; každá fáze je samostatně vydatelná.

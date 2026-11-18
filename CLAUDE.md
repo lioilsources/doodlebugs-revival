@@ -65,6 +65,13 @@ code; ROADMAP.md status markers move `[ ]` → `[plan]` → `[wip]` → `[done v
 `CHANGELOG.md` stopped at 31/03/2026 and does not track tags - GitHub
 Releases are the release record until it is revived or formally retired.
 
+**Open plans (2026-11-18, `[plan]`, nothing implemented):** `Prompts/28`
+flight feel (flight model v2, POINT stick scheme, Flight Lab), `Prompts/29`
+arsenal (gadget slot, knockback, new weapons, supply drops), `Prompts/30`
+hangar UX (phone-first `MenuCanvas`, visual direction, hangar out of
+`GameHUD`; `Prompts/30-hangar-mockup.html` is the size spec). Read the
+relevant one before touching flight, weapons or hangar UI.
+
 ## Tech Stack
 
 - Unity 6000.3.13f1
