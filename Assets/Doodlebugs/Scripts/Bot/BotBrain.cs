@@ -157,7 +157,7 @@ public class BotBrain : MonoBehaviour, IInputProvider
         float y = _player.transform.position.y;
         float v = _rb != null ? _rb.linearVelocity.magnitude : _player.Speed;
         bool engineOff = _player.IsEngineOff;
-        float r = _player.EngineOnTurnRadius;
+        float r = _player.TurnRadiusAt(Mathf.Max(v, _player.MinFlightSpeed));
         Vector2 dir = _player.transform.right;
 
         // Engine just cut, for whatever reason: recovery pre-empts everything.

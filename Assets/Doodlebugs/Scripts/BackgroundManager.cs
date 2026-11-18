@@ -406,6 +406,9 @@ public class BackgroundManager : NetworkBehaviour
     /// </summary>
     public int BackgroundCount => profiles?.Length ?? 0;
 
+    /// <summary>The round's arena (or the next one, in the intermission hangar).</summary>
+    public BackgroundProfile CurrentProfile => BackgroundIndex >= 0 ? GetProfile(BackgroundIndex) : null;
+
     /// <summary>Profile at an index, for the hangar's scene picker.</summary>
     public BackgroundProfile GetProfile(int index) =>
         profiles != null && index >= 0 && index < profiles.Length ? profiles[index] : null;

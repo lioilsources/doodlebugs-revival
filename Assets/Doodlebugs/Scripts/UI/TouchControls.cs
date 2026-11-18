@@ -26,11 +26,16 @@ public class TouchControls : MonoBehaviour
 
     // Canvas units (reference 1920x1080, match 0.5 - an iPhone 12 mini is
     // 2119x978 of them).
-    private const float StickTravel = 90f;
-    private const float StickBaseSize = 260f;
-    private const float StickKnobSize = 110f;
-    private const float StickDeadZone = 0.12f;
-    private const float StickExpo = 1.3f;
+    // RATE tuning (Prompts/28 §4): the plane turns ~3x faster than when these
+    // were 90 / 0.12 / 1.3, so a steeper expo keeps half-stick at the old full
+    // rate, and throttle gets its own wider dead zone so a diagonal thumb
+    // while turning does not change speed.
+    private const float StickTravel = 110f;
+    private const float StickBaseSize = 290f;
+    private const float StickKnobSize = 120f;
+    // turn dead zone / expo live in FlightTuning (tunable in the Flight Lab)
+    private const float ThrottleDeadZone = 0.28f;
+    private const float ThrottleExpo = 1.3f;
     // Right half up to 80 % height: the top strip stays free for the corner
     // HANGAR button (TouchControls sits above GameHUD and would swallow it).
     private const float ZoneWidthFrac = 0.50f;
@@ -41,7 +46,7 @@ public class TouchControls : MonoBehaviour
     private const float PrimarySize = 200f;
     private const float SecondarySize = 170f;
     private const float RingWidthFrac = 0.07f;
-    private const float IconFrac = 0.55f;
+    private const float IconFrac = 0.72f;   // badge icons (Prompts/29 §7)
     private const float PunchScale = 1.12f;
     private const float PunchSeconds = 0.12f;
     private static readonly Vector2 PrimaryPos = new Vector2(150f, 150f);
@@ -176,7 +181,7 @@ public class TouchControls : MonoBehaviour
 
     private void ApplyScheme(ControlScheme scheme)
     {
-        if (_stick != null) _stick.gameObject.SetActive(scheme == ControlScheme.Joystick);
+        if (_stick != null) _stick.gameObject.SetActive(scheme != ControlScheme.Gyro);
         _stick?.Release();
         Provider?.ReleaseAll();
     }
@@ -250,13 +255,16 @@ public class TouchControls : MonoBehaviour
         var provider = Provider;
         if (provider == null) return;
 
-        // Stick up = turn left (rotation -1), down = turn right, right = more
-        // throttle, left = less. Per-axis curve, no circular normalisation: a
-        // thumb in the corner means full throttle AND full turn (the knob is
-        // clamped to the ring, the axes are not).
+        // POINT reads the raw vector (where the thumb points).
+        provider.SetRawStick(raw);
+
+        // RATE: stick up = turn left (rotation -1), down = turn right, right =
+        // more throttle, left = less. Per-axis curve, no circular
+        // normalisation: a thumb in the corner means full throttle AND full
+        // turn (the knob is clamped to the ring, the axes are not).
         provider.SetStick(new Vector2(
-            -MobileInputProvider.Curve(raw.y, StickDeadZone, 1f, StickExpo),
-            MobileInputProvider.Curve(raw.x, StickDeadZone, 1f, StickExpo)));
+            -MobileInputProvider.Curve(raw.y, FlightTuning.RateTurnDeadZone, 1f, FlightTuning.RateTurnExpo),
+            MobileInputProvider.Curve(raw.x, ThrottleDeadZone, 1f, ThrottleExpo)));
     }
 
     /// <summary>Floating stick (D7): the base jumps to where the thumb lands,
@@ -423,7 +431,30 @@ public class TouchControls : MonoBehaviour
             new Vector2(0.5f, 0.5f), Vector2.zero, Color.white, new Vector2(size, 30));
         fallback.enabled = false;
 
+        // Special ammo dots under the trigger, Mk II chip on its rim
+        var dotsGo = new GameObject("Ammo");
+        dotsGo.transform.SetParent(go.transform, false);
+        var dotsRect = UiKit.Rect(dotsGo, new Vector2(0.5f, 0f), new Vector2(0.5f, 1f), new Vector2(0f, -6f), new Vector2(size, 18f));
+        var dots = new Image[3];
+        for (int i = 0; i < dots.Length; i++)
+        {
+            var d = new GameObject("Dot" + i);
+            d.transform.SetParent(dotsRect, false);
+            UiKit.Rect(d, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2((i - 1) * 22f, 0f), new Vector2(14f, 14f));
+            dots[i] = d.AddComponent<Image>();
+            dots[i].sprite = UiSprites.Disc;
+            dots[i].color = UiTheme.Special;
+            dots[i].raycastTarget = false;
+            dots[i].enabled = false;
+        }
+        var mk = UiKit.Label(go.transform, "MkII", "MK II", 18, new Vector2(1f, 1f), new Vector2(-10f, -6f),
+            UiTheme.Highlight, new Vector2(90f, 26f));
+        mk.font = UiTheme.Label;
+        mk.enabled = false;
+
         var trigger = go.AddComponent<Trigger>();
+        trigger.Ammo = dots;
+        trigger.MkII = mk;
         trigger.Slot = slot;
         trigger.Fill = fill;
         trigger.Icon = icon;
@@ -458,18 +489,32 @@ public class TouchControls : MonoBehaviour
             if (charged && !t.WasCharged) StartCoroutine(Punch(t.transform));
             t.WasCharged = charged;
 
-            int weaponId = _shooting != null ? _shooting.GetWeaponId(slot) : (int)WeaponType.MG;
-            if (weaponId != t.WeaponId)
+            int key = _shooting != null ? _shooting.GetSlotKey(slot) : (int)WeaponType.MG;
+            if (key != t.WeaponId)
             {
-                t.WeaponId = weaponId;
-                SetIcon(t, WeaponProfile.Get(weaponId));
+                t.WeaponId = key;
+                SetIcon(t, slot);
+                StartCoroutine(Punch(t.transform));
             }
+
+            // Ring colour by category; special ammo as dots; Mk II chip
+            bool gadget = _shooting != null && _shooting.IsGadgetSlot(slot);
+            bool special = slot == 0 && _shooting != null && _shooting.HasSpecial;
+            if (!charged) t.Fill.color = gadget ? UiTheme.Gadget : special ? UiTheme.Special : ChargingColor;
+            int ammo = special ? _shooting.SpecialAmmo : 0;
+            for (int i = 0; i < t.Ammo.Length; i++) t.Ammo[i].enabled = i < ammo;
+            t.MkII.enabled = !gadget && !special && _shooting != null &&
+                             _shooting.GetWeapon(slot).Category == WeaponCategory.Upgrade;
         }
     }
 
-    private static void SetIcon(Trigger t, WeaponProfile weapon)
+    private void SetIcon(Trigger t, int slot)
     {
-        var sprite = weapon.LoadIcon(out var tint);
+        Sprite sprite;
+        Color tint;
+        string label;
+        if (_shooting != null) sprite = _shooting.GetSlotIcon(slot, out tint, out label);
+        else { var w = WeaponProfile.Get(WeaponType.MG); sprite = w.LoadIcon(out tint); label = w.DisplayName; }
         if (sprite != null)
         {
             t.Icon.sprite = sprite;
@@ -480,7 +525,7 @@ public class TouchControls : MonoBehaviour
         else
         {
             t.Icon.enabled = false;
-            t.Fallback.text = weapon.DisplayName;
+            t.Fallback.text = label;
             t.Fallback.enabled = true;
         }
     }
@@ -530,6 +575,8 @@ public class TouchControls : MonoBehaviour
         public Text Fallback;
         public bool WasCharged;
         public int WeaponId;
+        public Image[] Ammo;
+        public Text MkII;
         public System.Action<int, bool> OnHeld;
 
         private int _pointer = int.MinValue;

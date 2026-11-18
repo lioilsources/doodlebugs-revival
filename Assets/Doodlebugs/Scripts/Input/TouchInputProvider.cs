@@ -19,6 +19,7 @@ public class TouchInputProvider : IInputProvider
     private readonly MobileInputProvider _gyro;
     private ControlScheme _scheme;
     private Vector2 _stick;
+    private Vector2 _rawStick;   // unshaped stick vector, -1..1 per axis (POINT)
     private readonly bool[] _held = new bool[Slots];
 
     public TouchInputProvider(MobileInputProvider gyro, ControlScheme scheme)
@@ -36,6 +37,7 @@ public class TouchInputProvider : IInputProvider
     {
         _scheme = scheme;
         _stick = Vector2.zero;
+        _rawStick = Vector2.zero;
 
         // The sensor only runs when someone flies by it - a joystick player
         // should not pay for gravity sampling.
@@ -49,6 +51,12 @@ public class TouchInputProvider : IInputProvider
     /// <summary>Stick axes, already through the response curve, -1..1 each.</summary>
     public void SetStick(Vector2 axes) => _stick = axes;
 
+    /// <summary>The stick as the thumb holds it, before any curve (POINT).</summary>
+    public void SetRawStick(Vector2 raw) => _rawStick = raw;
+
+    /// <summary>The on-screen stick is shown in RATE and POINT.</summary>
+    public bool UsesStick => _scheme != ControlScheme.Gyro;
+
     public void SetHeld(int slot, bool held)
     {
         if ((uint)slot < Slots) _held[slot] = held;
@@ -58,6 +66,7 @@ public class TouchInputProvider : IInputProvider
     public void ReleaseAll()
     {
         _stick = Vector2.zero;
+        _rawStick = Vector2.zero;
         for (int i = 0; i < Slots; i++) _held[i] = false;
     }
 
@@ -72,6 +81,23 @@ public class TouchInputProvider : IInputProvider
     public bool GetShootInput() => _held[0];
 
     public bool GetShootInput(int slot) => (uint)slot < Slots && _held[slot];
+
+    public bool GetShootHeld(int slot) => GetShootInput(slot);
+
+    public bool TryGetHeadingIntent(out float headingDeg, out float push)
+    {
+        headingDeg = 0f;
+        push = 0f;
+        if (_scheme != ControlScheme.Pointer) return false;
+
+        float m = Mathf.Clamp01(_rawStick.magnitude);
+        if (m >= FlightTuning.PointDeadZone)
+        {
+            headingDeg = Mathf.Atan2(_rawStick.y, _rawStick.x) * Mathf.Rad2Deg;
+            push = Mathf.Max(0.001f, Mathf.InverseLerp(FlightTuning.PointDeadZone, 1f, m));
+        }
+        return true;
+    }
 
     public void UpdateInput()
     {

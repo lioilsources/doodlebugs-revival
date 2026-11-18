@@ -4,13 +4,14 @@ using UnityEngine;
 /// <summary>How a phone flies the plane.</summary>
 public enum ControlScheme
 {
-    Joystick = 0,
+    Joystick = 0,   // "RATE" in the UI: the stick sets the turn rate
     Gyro = 1,
+    Pointer = 2,    // "POINT": the stick points where to fly (Prompts/28 D4)
 }
 
 /// <summary>
-/// The touch control scheme (Prompts/26 D1): joystick by default, gyro as an
-/// opt-in from the settings overlay. Persisted in PlayerPrefs until
+/// The touch control scheme (Prompts/26 D1): POINT by default for new installs
+/// (Prompts/28 D4), RATE and gyro as an opt-in from the settings overlay. Persisted in PlayerPrefs until
 /// PlayerProfile (ROADMAP Phase 0) lands - the profile migration reads
 /// <see cref="SchemeKey"/>. Desktop never reads this: keyboard and gamepad
 /// are picked by InputManager from the devices present.
@@ -27,10 +28,10 @@ public static class ControlSettings
         {
             if (_scheme == null)
             {
-                int raw = PlayerPrefs.GetInt(SchemeKey, (int)ControlScheme.Joystick);
+                int raw = PlayerPrefs.GetInt(SchemeKey, (int)ControlScheme.Pointer);
                 _scheme = Enum.IsDefined(typeof(ControlScheme), raw)
                     ? (ControlScheme)raw
-                    : ControlScheme.Joystick;
+                    : ControlScheme.Pointer;
             }
             return _scheme.Value;
         }

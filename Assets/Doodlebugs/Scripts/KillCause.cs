@@ -7,5 +7,7 @@ public enum KillCause : byte
     Shot = 0,        // bullet kill (killer credited)
     Collision = 1,   // plane-vs-plane midair
     Ground = 2,      // crashed into ground/obstacle
-    OutOfBounds = 3  // left the play area
+    OutOfBounds = 3, // left the play area
+    Slammed = 4,     // knocked into the ground (killer credited, Prompts/29)
+    Rammed = 5       // rammed (killer credited)
 }

@@ -44,6 +44,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        # The runner's global git config sets core.hooksPath to a hook
+        # dispatcher (added on the M2 after v2.9.3), and `git lfs install
+        # --local` inside checkout refuses to touch its pre-push hook:
+        # "Hook already exists: pre-push". Point hooksPath back at the
+        # repo's own .git/hooks for this step only; the machine's global
+        # config stays as it is.
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.hooksPath
+          GIT_CONFIG_VALUE_0: .git/hooks
         with:
           lfs: true
           # clean:false keeps the gitignored Library/ folder between runs. The

@@ -158,7 +158,7 @@ se snaží mě sestřelit. Když se vedle objeví kamarád, hra mi ho nabídne, 
 nevytrhne mě z kola.
 
 **Práce**
-- **Dotykové ovládání** `[wip]` (Prompts/26): on-screen joystick vpravo
+- **Dotykové ovládání** `[wip]` (Prompts/26, schéma POINT a nový letový model v Prompts/28): on-screen joystick vpravo
   dole (Y = plyn, X = zatáčení, stejné osy jako `IInputProvider`), spouště
   vlevo dole s kruhovým nabíjením podle cooldownu zbraně a ikonou zbraně,
   druhá spoušť připravená pro druhý slot (`Shooting.NetWeaponId2`, hangárový
@@ -358,6 +358,19 @@ host-authority modelu. Matchmaking až po datech. Velká položka; startuje
 jen když D30 a poptávka („kde je online?“ v recenzích) ukážou, že LAN +
 boti nestačí. Trust model z `IAPManager` (host peer nic nevaliduje) je pro
 kosmetiku přijatelný, pro ranked by potřeboval backend.
+
+---
+
+### Průřezové plány z hraní na telefonu (2026-11-18) `[wip]`
+
+Tři plány mimo pořadí fází; implementovány najednou (28 celý, 29 vlny 1–2,
+30 celý), čekají na test na zařízení. Vlna 3 plánu 29 zůstává otevřená.
+
+| Plán | Co řeší | Dotýká se fází |
+|---|---|---|
+| `Prompts/28` — letový pocit | letadlo zatáčí 4× rychleji, obálka zatáčení podle rychlosti, schéma POINT, náklon a výkrut spritu, Flight Lab; ruší mrtvý systém maturity | 1 (ovládání), 2 (juice) |
+| `Prompts/29` — arzenál | slot gadgetu (nitro, výkrut, rázová vlna), odhození výbuchem a kill nárazem do země, Mk II pro každou zbraň, nové zbraně, zásobovací shoz, čitelnost střel | 1, 2, 4 (loadout) |
+| `Prompts/30` — hangár a vizuál | MenuCanvas pro telefon, směr „Sky Poster“, velké karty výběru, hangár ven z `GameHUD`; dodá tween util fáze 0 | 0, 2, 4 |
 
 ---
 

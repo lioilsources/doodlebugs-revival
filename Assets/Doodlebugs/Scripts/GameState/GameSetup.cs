@@ -118,6 +118,13 @@ public class GameSetup : MonoBehaviour
         // same canvas (ROADMAP §3.9 - GameHUD stops growing). Both are inert
         // on desktop except the settings overlay itself.
         TouchControls.Create(canvas);
-        SettingsOverlay.Create(canvas);
+
+        // Phone-first menus (Prompts/30): own canvas, own scale
+        MenuCanvas.Create();
+        HangarScreen.Create();
+        SettingsOverlay.Create();
+
+        FlightTuning.Boot();
+        WeaponProfile.Validate();
     }
 }
