@@ -369,7 +369,7 @@ public class HangarScreen : MonoBehaviour
         }
 
         _content = Ui.Node(_layer, "Content");
-        Ui.Inset(_content, 286f, 80f, 16f, 122f);
+        Ui.Inset(_content, 286f, 72f, 16f, 122f);
     }
 
     private void BuildBottom()

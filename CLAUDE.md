@@ -323,6 +323,10 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   no GPU); `WeaponProfile.IconSpriteName` names them and `LoadIcon` falls
   back to `Sprites/Projectiles/metal/<form>` tinted, then to the weapon name.
   Ring/disc/knob sprites are generated at runtime by `UI/UiSprites.cs`.
+- RECOVER combo (stall assist): with the engine dead, double-tap the stick
+  (desktop: throttle-down key twice, gamepad: left stick click) and
+  `PlayerController` flies the flip into the relight window and the pull-out
+  to level itself (`IInputProvider.ConsumeRecover`, timeout 4 s).
 - iOS `deferSystemGesturesMode` = bottom edge (ProjectSettings) so a thumb on
   the triggers does not summon the home indicator.
 

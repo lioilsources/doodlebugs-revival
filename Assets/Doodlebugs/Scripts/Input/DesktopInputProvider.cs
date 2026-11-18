@@ -30,6 +30,11 @@ public class DesktopInputProvider : IInputProvider
     private Key shootKey;
     private Key gadgetKey;   // second slot (Prompts/29 gadget)
 
+    // RECOVER combo: throttle-down key twice within this window
+    private const float DoubleTapSeconds = 0.3f;
+    private float _lastDownPress = -1f;
+    private bool _recover;
+
     public DesktopInputProvider(int playerIndex = 0)
     {
         this.playerIndex = playerIndex;
@@ -124,6 +129,13 @@ public class DesktopInputProvider : IInputProvider
         return slot == 1 && keyboard[gadgetKey].isPressed;
     }
 
+    public bool ConsumeRecover()
+    {
+        bool r = _recover;
+        _recover = false;
+        return r;
+    }
+
     public void UpdateInput()
     {
         var keyboard = Keyboard.current;
@@ -137,6 +149,13 @@ public class DesktopInputProvider : IInputProvider
         if (keyboard[rightKey].isPressed) targetHorizontal += 1f;
         if (keyboard[upKey].isPressed) targetVertical += 1f;
         if (keyboard[downKey].isPressed) targetVertical -= 1f;
+
+        if (keyboard[downKey].wasPressedThisFrame)
+        {
+            float now = Time.unscaledTime;
+            if (now - _lastDownPress <= DoubleTapSeconds) { _recover = true; _lastDownPress = -1f; }
+            else _lastDownPress = now;
+        }
 
         // Smoothly move towards target
         smoothedHorizontal = Mathf.MoveTowards(smoothedHorizontal, targetHorizontal, smoothingSpeed * Time.deltaTime);

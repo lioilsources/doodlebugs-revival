@@ -55,6 +55,14 @@ public interface IInputProvider
     float GetLean() => 0f;
 
     /// <summary>
+    /// RECOVER combo (stall assist): true once after the player asked for an
+    /// assisted stall recovery - double-tap on the stick, double-tap of the
+    /// throttle-down key, or the left stick click. Latched in UpdateInput and
+    /// cleared by the read, so FixedUpdate never misses a frame-edge.
+    /// </summary>
+    bool ConsumeRecover() => false;
+
+    /// <summary>
     /// Called every frame to update input state (for touch tracking)
     /// </summary>
     void UpdateInput();

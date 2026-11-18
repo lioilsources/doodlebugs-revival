@@ -81,6 +81,18 @@ public class TouchInputProvider : IInputProvider
     /// <summary>The on-screen stick is shown in RATE and POINT.</summary>
     public bool UsesStick => _scheme != ControlScheme.Gyro;
 
+    private bool _recover;
+
+    /// <summary>Double-tap on the stick (TouchControls).</summary>
+    public void RequestRecover() => _recover = true;
+
+    public bool ConsumeRecover()
+    {
+        bool r = _recover;
+        _recover = false;
+        return r;
+    }
+
     public void SetHeld(int slot, bool held)
     {
         if ((uint)slot < Slots) _held[slot] = held;
@@ -92,6 +104,7 @@ public class TouchInputProvider : IInputProvider
         _stick = Vector2.zero;
         _rawStick = Vector2.zero;
         for (int i = 0; i < Slots; i++) _held[i] = false;
+        _recover = false;
         _lean.Reset();
     }
 

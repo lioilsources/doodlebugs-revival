@@ -69,10 +69,18 @@ public class TouchControls : MonoBehaviour
 
     private const float PlaneLookupInterval = 0.5f;
 
+    // RECOVER combo: double-tap on the stick while the engine is dead. The
+    // hint banner names it on the first stalls until the player has used it.
+    private const string RecoverUsedKey = "recover.used";
+    private const string RecoverHintsKey = "recover.hints";
+    private const int RecoverMaxHints = 3;
+    private bool _wasEngineOff;
+
     private Canvas _canvas;
     private RectTransform _root;
     private Rect _appliedSafeArea = new Rect(-1, -1, -1, -1);
     private Vector2Int _appliedScreen;
+    private float _appliedScale;
 
     private StickZone _stick;
     private Image _leanArc;
@@ -136,6 +144,40 @@ public class TouchControls : MonoBehaviour
 
         RefreshTriggers();
         RefreshLean();
+        RefreshRecoverHint();
+    }
+
+    // --- RECOVER combo -------------------------------------------------------------
+
+    private void OnStickDoubleTap()
+    {
+        var provider = Provider;
+        if (provider == null || _plane == null || !_plane.IsEngineOff) return;
+        provider.RequestRecover();
+        if (PlayerPrefs.GetInt(RecoverUsedKey, 0) == 0)
+        {
+            PlayerPrefs.SetInt(RecoverUsedKey, 1);
+            PlayerPrefs.Save();
+        }
+    }
+
+    /// <summary>On a fresh stall, name the combo - only the first few times
+    /// and never once the player has used it.</summary>
+    private void RefreshRecoverHint()
+    {
+        bool off = _plane != null && _plane.IsEngineOff && !_plane.IsRecovering;
+        if (off && !_wasEngineOff && Provider != null && Provider.UsesStick
+            && PlayerPrefs.GetInt(RecoverUsedKey, 0) == 0)
+        {
+            int shown = PlayerPrefs.GetInt(RecoverHintsKey, 0);
+            if (shown < RecoverMaxHints)
+            {
+                PlayerPrefs.SetInt(RecoverHintsKey, shown + 1);
+                PlayerPrefs.Save();
+                BannerOverlay.Show("STALL! DOUBLE-TAP STICK", UiTheme.Danger);
+            }
+        }
+        _wasEngineOff = off;
     }
 
     // --- visibility ------------------------------------------------------------
@@ -203,12 +245,14 @@ public class TouchControls : MonoBehaviour
     {
         var safe = Screen.safeArea;
         var screen = new Vector2Int(Screen.width, Screen.height);
-        if (safe == _appliedSafeArea && screen == _appliedScreen) return;
+        // Overlay canvas: pixels / scaleFactor = canvas units. The scaler sets
+        // scaleFactor after the first frame, so a change of it re-applies too.
+        float s = _canvas != null && _canvas.scaleFactor > 0f ? _canvas.scaleFactor : 1f;
+        if (safe == _appliedSafeArea && screen == _appliedScreen && Mathf.Approximately(s, _appliedScale)) return;
         _appliedSafeArea = safe;
         _appliedScreen = screen;
+        _appliedScale = s;
 
-        // Overlay canvas: pixels / scaleFactor = canvas units.
-        float s = _canvas != null && _canvas.scaleFactor > 0f ? _canvas.scaleFactor : 1f;
         _root.offsetMin = new Vector2(safe.xMin, safe.yMin) / s;
         _root.offsetMax = new Vector2(safe.xMax - screen.x, safe.yMax - screen.y) / s;
     }
@@ -259,6 +303,7 @@ public class TouchControls : MonoBehaviour
         _stick.BaseGroup = baseGroup;
         _stick.Travel = StickTravel;
         _stick.OnAxes = OnStickAxes;
+        _stick.OnDoubleTap = OnStickDoubleTap;
         _stick.IdleAlpha = StickIdleAlpha;
         _stick.Rest();
     }
@@ -354,7 +399,16 @@ public class TouchControls : MonoBehaviour
         public CanvasGroup BaseGroup;
         public float Travel;
         public System.Action<Vector2> OnAxes;
+        public System.Action OnDoubleTap;
         public float IdleAlpha;
+
+        // Double-tap: a short, still tap followed by a press within the window
+        private const float TapMaxSeconds = 0.25f;
+        private const float DoubleTapWindow = 0.30f;
+        private const float TapMaxTravel = 0.35f;   // of Travel
+        private float _downAt;
+        private float _tapUpAt = -1f;
+        private bool _moved;
 
         private RectTransform _rect;
         private int _pointer = int.MinValue;
@@ -383,6 +437,15 @@ public class TouchControls : MonoBehaviour
             if (_pointer != int.MinValue) return;   // one finger owns the stick
             if (!ToLocal(e, out var local)) return;
 
+            float now = Time.unscaledTime;
+            if (_tapUpAt >= 0f && now - _tapUpAt <= DoubleTapWindow)
+            {
+                _tapUpAt = -1f;
+                OnDoubleTap?.Invoke();
+            }
+            _downAt = now;
+            _moved = false;
+
             _pointer = e.pointerId;
             _touchId = TouchIdOf(e);
             _pressFrame = Time.frameCount;
@@ -401,6 +464,7 @@ public class TouchControls : MonoBehaviour
             if (!ToLocal(e, out var local)) return;
 
             var delta = local - _origin;
+            if (delta.magnitude > Travel * TapMaxTravel) _moved = true;
             Knob.anchoredPosition = Vector2.ClampMagnitude(delta, Travel);
             OnAxes?.Invoke(new Vector2(
                 Mathf.Clamp(delta.x / Travel, -1f, 1f),
@@ -416,6 +480,8 @@ public class TouchControls : MonoBehaviour
         public void Release()
         {
             bool wasHeld = _pointer != int.MinValue;
+            if (wasHeld)
+                _tapUpAt = !_moved && Time.unscaledTime - _downAt <= TapMaxSeconds ? Time.unscaledTime : -1f;
             _pointer = int.MinValue;
             _touchId = NoTouch;
             OnAxes?.Invoke(Vector2.zero);

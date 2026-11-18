@@ -65,10 +65,12 @@ public class PlaneTab : MonoBehaviour
 
     private void BuildLayout(RectTransform root)
     {
-        _shapeContent = Strip(root, "Shapes", 0f, 122f, 10f);
+        // Fits a content column of ~184 units (iPhone with the home
+        // indicator inset); the paint row must stay clear of the CTA below.
+        _shapeContent = Strip(root, "Shapes", 0f, 104f, 10f);
 
         var head = Ui.Node(root, "PaintHead");
-        Ui.TopBand(head, 128f, 22f);
+        Ui.TopBand(head, 108f, 22f);
         var hl = head.gameObject.AddComponent<HorizontalLayoutGroup>();
         hl.spacing = 8f;
         hl.childControlWidth = true;
@@ -87,7 +89,7 @@ public class PlaneTab : MonoBehaviour
             _filterPills.Add((r.gameObject, label));
         }
 
-        _paintContent = Strip(root, "Paints", 154f, 58f, 8f);
+        _paintContent = Strip(root, "Paints", 134f, 52f, 8f);
     }
 
     private void Update()
@@ -137,20 +139,20 @@ public class PlaneTab : MonoBehaviour
 
             var card = Ui.Card(_shapeContent, "Shape_" + def.Key,
                 mine ? UiTheme.Pick : taken ? UiTheme.PaperDim : UiTheme.Paper, UiTheme.RadiusCard, 5f);
-            card.Root.sizeDelta = new Vector2(128f, 112f);
+            card.Root.sizeDelta = new Vector2(128f, 96f);
 
             var img = Ui.Sprite(card.Face.transform, "Plane", PlaneModelCatalog.LoadSprite(id, skin));
-            Ui.Place(img.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -4f), new Vector2(64f, 64f));
+            Ui.Place(img.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -3f), new Vector2(52f, 52f));
             if (taken) img.color = new Color(1f, 1f, 1f, 0.35f);
             else img.color = UiTheme.Active.ArtTint;
 
             var name = Ui.Text(card.Face.transform, "Name", def.DisplayName, UiTheme.Display, 18, mine ? UiTheme.OnPick : UiTheme.Ink, TextAnchor.MiddleCenter);
-            Ui.TopBand(name.rectTransform, 66f, 20f);
+            Ui.TopBand(name.rectTransform, 55f, 20f);
             name.horizontalOverflow = HorizontalWrapMode.Overflow;
             var el = ElementProfile.Get(def.Element);
             var elem = Ui.Text(card.Face.transform, "Element", el.DisplayName, UiTheme.Label, UiTheme.SizeSmall,
                 mine ? UiTheme.OnPick : UiTheme.TextDim, TextAnchor.MiddleCenter);
-            Ui.TopBand(elem.rectTransform, 86f, 16f);
+            Ui.TopBand(elem.rectTransform, 75f, 16f);
 
             string chip = mine ? "YOURS" : taken ? WhoFlies(id) : null;
             if (chip != null)
