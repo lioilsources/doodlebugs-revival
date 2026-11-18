@@ -27,6 +27,7 @@ public class MenuCanvas : MonoBehaviour
 
     private Rect _appliedSafe = new Rect(-1, -1, -1, -1);
     private Vector2Int _appliedScreen;
+    private float _appliedScale;
 
     public static MenuCanvas Create()
     {
@@ -72,9 +73,14 @@ public class MenuCanvas : MonoBehaviour
     {
         var safe = Screen.safeArea;
         var screen = new Vector2Int(Screen.width, Screen.height);
-        if (safe == _appliedSafe && screen == _appliedScreen) return;
+        // The CanvasScaler sets scaleFactor on its first update, after Create
+        // ran: until then it is 1 and the safe-area insets would be taken in
+        // pixels (2-3x too wide - the hangar sat squeezed in the middle).
+        float s = Canvas != null ? Canvas.scaleFactor : 1f;
+        if (safe == _appliedSafe && screen == _appliedScreen && Mathf.Approximately(s, _appliedScale)) return;
         _appliedSafe = safe;
         _appliedScreen = screen;
+        _appliedScale = s;
         UiKit.FitSafeArea(Root, Canvas);
     }
 

@@ -19,8 +19,10 @@ public enum ControlScheme
 public static class ControlSettings
 {
     public const string SchemeKey = "settings.controlScheme";
+    public const string LeanKey = "settings.lean";
 
     private static ControlScheme? _scheme;
+    private static bool? _lean;
 
     public static ControlScheme Scheme
     {
@@ -54,7 +56,43 @@ public static class ControlSettings
         Changed?.Invoke(scheme);
     }
 
-    /// <summary>Boot-time event: which scheme this session starts on.</summary>
-    public static void LogBoot() =>
+    // --- LEAN (Prompts/32 D4/D5) ----------------------------------------------
+
+    /// <summary>LEAN default: on wherever the device has a gyroscope (D5).
+    /// The bonus only adds, so nobody loses by having it on.</summary>
+    public static bool LeanDefault => UnityEngine.InputSystem.Gyroscope.current != null;
+
+    /// <summary>LEAN on (POINT / RATE only - the Gyro scheme ignores it).</summary>
+    public static bool Lean
+    {
+        get
+        {
+            if (_lean == null)
+                _lean = PlayerPrefs.HasKey(LeanKey) ? PlayerPrefs.GetInt(LeanKey) != 0 : LeanDefault;
+            return _lean.Value;
+        }
+    }
+
+    public static bool IsLeanSaved => PlayerPrefs.HasKey(LeanKey);
+
+    /// <summary>Raised after LEAN was switched and saved.</summary>
+    public static event Action<bool> LeanChanged;
+
+    public static void SetLean(bool on, string source = "settings")
+    {
+        if (on == Lean && IsLeanSaved) return;
+
+        _lean = on;
+        PlayerPrefs.SetInt(LeanKey, on ? 1 : 0);
+        PlayerPrefs.Save();
+        Telemetry.Log("input_lean_set", ("on", on), ("source", source));
+        LeanChanged?.Invoke(on);
+    }
+
+    /// <summary>Boot-time events: which scheme and LEAN state this session starts on.</summary>
+    public static void LogBoot()
+    {
         Telemetry.Log("input_scheme_set", ("scheme", Scheme), ("source", IsSaved ? "saved" : "default"));
+        Telemetry.Log("input_lean_set", ("on", Lean), ("source", IsLeanSaved ? "saved" : "default"));
+    }
 }

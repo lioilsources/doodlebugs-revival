@@ -120,11 +120,13 @@ public class GameSetup : MonoBehaviour
         TouchControls.Create(canvas);
 
         // Phone-first menus (Prompts/30): own canvas, own scale
+        ThemeSettings.Boot();      // Prompts/31: the saved UI theme, before any screen is built
         MenuCanvas.Create();
         HangarScreen.Create();
         SettingsOverlay.Create();
 
         FlightTuning.Boot();
         WeaponProfile.Validate();
+        UiThemeCatalog.Validate();
     }
 }

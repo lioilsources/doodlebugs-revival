@@ -6,6 +6,7 @@ using UnityEngine.UI;
 /// the phone-first MenuCanvas (Prompts/30). CONTROLS: POINT / RATE / GYRO
 /// (Prompts/28 D4) with RECENTER for gyro. Phase 2's shake / music / SFX /
 /// haptics rows belong here. Five taps on the title open the Flight Lab.
+/// THEME opens the UI theme picker (Prompts/31).
 /// </summary>
 public class SettingsOverlay : MonoBehaviour
 {
@@ -33,11 +34,32 @@ public class SettingsOverlay : MonoBehaviour
         return go.AddComponent<SettingsOverlay>();
     }
 
-    private void Awake() => Instance = this;
+    private void Awake()
+    {
+        Instance = this;
+        UiTheme.Changed += OnThemeChanged;
+    }
 
     private void OnDestroy()
     {
         if (Instance == this) Instance = null;
+        UiTheme.Changed -= OnThemeChanged;
+    }
+
+    /// <summary>Prompts/31: rebuild in the new theme, stay open.</summary>
+    private void OnThemeChanged(UiThemeDef _)
+    {
+        if (_panel == null) return;
+        bool open = _panel.activeSelf;
+        Destroy(_panel);
+        _panel = null;
+        _leanToggle = null;
+        _hint = null;
+        if (!open) return;
+        Build();
+        Refresh();
+        _panel.SetActive(true);
+        transform.SetAsLastSibling();
     }
 
     public void Open()
@@ -65,7 +87,7 @@ public class SettingsOverlay : MonoBehaviour
         _panel.transform.SetParent(transform, false);
         UiKit.Stretch(_panel);
         var dim = _panel.AddComponent<Image>();
-        dim.color = new Color(UiTheme.Ink.r, UiTheme.Ink.g, UiTheme.Ink.b, 0.8f);   // swallows touches
+        dim.color = UiTheme.WithAlpha(UiTheme.Active.VeilBottom, 0.85f);   // swallows touches
 
         var card = Ui.Card(_panel.transform, "Card", UiTheme.Paper);
         _card = card.Root;
@@ -78,6 +100,16 @@ public class SettingsOverlay : MonoBehaviour
         var tap = title.gameObject.AddComponent<Button>();
         tap.transition = Selectable.Transition.None;
         tap.onClick.AddListener(TitleTap);
+
+        // THEME (Prompts/31 §3.5): the picker sheet
+        var theme = Ui.Card(face, "Theme", UiTheme.Frame, UiTheme.RadiusButton, 4f);
+        Ui.Place(theme.Root, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -10f), new Vector2(230f, 48f));
+        var themeLabel = Ui.Text(theme.Face.transform, "Label", "THEME · " + UiTheme.Active.Name, UiTheme.Label, 16,
+            UiTheme.FrameText, TextAnchor.MiddleCenter);
+        themeLabel.resizeTextForBestFit = true;
+        themeLabel.resizeTextMinSize = UiTheme.MinText;
+        themeLabel.resizeTextMaxSize = themeLabel.fontSize;
+        Ui.Press(theme.Face, () => ThemeSheet.Open(transform));
 
         bool mobile = InputManager.Instance != null && InputManager.Instance.IsMobile();
         if (mobile)
@@ -110,6 +142,8 @@ public class SettingsOverlay : MonoBehaviour
             recenter.Label.fontSize = 20;
             Ui.Place(recenter.Panel.Root, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(20f, 18f), new Vector2(170f, 48f));
             _recenter = recenter.Panel.Root.gameObject;
+
+            BuildLeanRow(face);
         }
         else
         {
@@ -144,8 +178,9 @@ public class SettingsOverlay : MonoBehaviour
         for (int i = 0; i < Schemes.Length; i++)
         {
             bool on = Schemes[i] == scheme;
-            _options[i].SetFace(on ? UiTheme.Highlight : UiTheme.Paper);
+            _options[i].SetFace(on ? UiTheme.Pick : UiTheme.Paper);
             _options[i].SetShadow(on ? 6f : 3f);
+            _optionLabels[i].color = on ? UiTheme.OnPick : UiTheme.Ink;
         }
         _hint.text = scheme switch
         {
@@ -154,12 +189,62 @@ public class SettingsOverlay : MonoBehaviour
             _ => "GYRO: tilt to fly. RECENTER takes your current hold as level.",
         };
         _recenter.SetActive(scheme == ControlScheme.Gyro);
+        RefreshLeanRow();
     }
 
     private void Select(ControlScheme scheme)
     {
         ControlSettings.Set(scheme);
         Refresh();
+        SfxManager.Haptic(HapticKind.Light);
+    }
+
+    // --- LEAN toggle (Prompts/32 §4.9) ---------------------------------------------
+
+    private Ui.Panel _leanToggle;
+    private Text _leanLabel;
+    private Text _leanHint;
+
+    /// <summary>LEAN ON / OFF under the scheme row, with one line of help.
+    /// Greyed with the reason in GYRO (same hand motion) and without a sensor.</summary>
+    private void BuildLeanRow(Transform face)
+    {
+        _leanToggle = Ui.Card(face, "Lean", UiTheme.Paper, UiTheme.RadiusButton, 4f);
+        Ui.Place(_leanToggle.Root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(20f, -204f), new Vector2(150f, 48f));
+        _leanLabel = Ui.Text(_leanToggle.Face.transform, "Label", "LEAN", UiTheme.Display, 22,
+            UiTheme.Ink, TextAnchor.MiddleCenter);
+        Ui.Press(_leanToggle.Face, ToggleLean);
+
+        _leanHint = Ui.Text(face, "LeanHint", "", UiTheme.Body, 13, UiTheme.TextDim, TextAnchor.MiddleLeft);
+        Ui.TopBand(_leanHint.rectTransform, 204f, 48f, 184f, 20f);
+    }
+
+    private static bool LeanSensorAvailable =>
+        InputManager.Instance?.TouchProvider?.LeanSensor.Available ?? false;
+
+    private void RefreshLeanRow()
+    {
+        if (_leanToggle == null) return;
+        bool gyro = ControlSettings.Scheme == ControlScheme.Gyro;
+        bool sensor = LeanSensorAvailable;
+        bool usable = !gyro && sensor;
+        bool on = usable && ControlSettings.Lean;
+
+        _leanToggle.SetFace(!usable ? UiTheme.PaperDim : on ? UiTheme.Pick : UiTheme.Paper);
+        _leanToggle.SetShadow(on ? 6f : 3f);
+        _leanLabel.text = on ? "LEAN ON" : "LEAN OFF";
+        _leanLabel.color = !usable ? UiTheme.TextDim : on ? UiTheme.OnPick : UiTheme.Ink;
+        int pct = Mathf.RoundToInt(FlightTuning.Active.LeanBonus * 100f);
+        _leanHint.text = !sensor ? "LEAN needs a motion sensor - this device has none."
+            : gyro ? "LEAN is off in GYRO: both read the same hand motion."
+            : $"Roll the phone the way the plane turns: up to +{pct} % turn rate.";
+    }
+
+    private void ToggleLean()
+    {
+        if (ControlSettings.Scheme == ControlScheme.Gyro || !LeanSensorAvailable) return;
+        ControlSettings.SetLean(!ControlSettings.Lean);
+        RefreshLeanRow();
         SfxManager.Haptic(HapticKind.Light);
     }
 

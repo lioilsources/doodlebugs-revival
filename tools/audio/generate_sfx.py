@@ -201,11 +201,17 @@ def tab():
     return tones([(880, 0.03)], vol=0.3)
 
 
+def lean_full():
+    # LEAN meter full (Prompts/32 §5): a short bright double click, up a fifth
+    return mix(tones([(1175, 0.025), (0, 0.015), (1760, 0.05)], tri, vol=0.45),
+               noise_sweep(0.03, 1, 1, vol=0.2, seed=19, attack=0.001))
+
+
 CLIPS = {
     "whoosh": whoosh, "stall": stall, "relight": relight, "confirm": confirm,
     "whistle": whistle, "beep": beep, "lock": lock, "siren": siren, "emp": emp,
     "nitro": nitro, "roll": roll, "clap": clap, "supply": supply,
-    "special": special, "tab": tab,
+    "special": special, "tab": tab, "lean_full": lean_full,
 }
 
 

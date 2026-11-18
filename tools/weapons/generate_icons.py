@@ -266,9 +266,18 @@ def render(key):
     return img.resize((BADGE * SCALE, BADGE * SCALE), Image.NEAREST)
 
 
+def render_glyph(key):
+    """The glyph alone, no disc (Prompts/31: the UI theme draws the badge)."""
+    draw, _ = spec(key)
+    glyph = Image.new("RGBA", (GRID, GRID), (0, 0, 0, 0))
+    draw(ImageDraw.Draw(glyph))
+    return glyph.resize((GRID * SCALE, GRID * SCALE), Image.NEAREST)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--glyphs", action="store_true", help="with --apply: also write <name>_glyph.png")
     args = ap.parse_args()
 
     icons = {key: render(key) for key in ICONS}
@@ -291,6 +300,10 @@ def main():
             icon.save(png)
             write_meta(png, "sprite")
             print(f"wrote {png.relative_to(ROOT)}")
+            if args.glyphs:
+                gpng = png.with_name(png.stem + "_glyph.png")
+                render_glyph(key).save(gpng)
+                write_meta(gpng, "sprite")
     print(f"-> {OUT / 'icons.png'}")
 
 

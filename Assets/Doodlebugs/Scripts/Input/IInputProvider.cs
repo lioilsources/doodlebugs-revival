@@ -47,6 +47,22 @@ public interface IInputProvider
     }
 
     /// <summary>
+    /// LEAN (Prompts/32): the phone-roll meter, -1..1, + = clockwise (same
+    /// sign as the rotation input). It never turns the plane by itself - it
+    /// only adds turn rate in the stick's direction. Only the touch provider
+    /// has one; gamepad, keyboard and the bot stay at 0 (D6).
+    /// </summary>
+    float GetLean() => 0f;
+
+    /// <summary>
+    /// RECOVER combo (stall assist): true once after the player asked for an
+    /// assisted stall recovery - double-tap on the stick, double-tap of the
+    /// throttle-down key, or the left stick click. Latched in UpdateInput and
+    /// cleared by the read, so FixedUpdate never misses a frame-edge.
+    /// </summary>
+    bool ConsumeRecover() => false;
+
+    /// <summary>
     /// Called every frame to update input state (for touch tracking)
     /// </summary>
     void UpdateInput();

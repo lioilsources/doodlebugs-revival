@@ -113,9 +113,21 @@ public class GamepadInputProvider : IInputProvider
         return slot == 1 && (gamepad.leftShoulder.isPressed || gamepad.leftTrigger.ReadValue() > 0.3f);
     }
 
+    private bool _recover;
+
+    public bool ConsumeRecover()
+    {
+        bool r = _recover;
+        _recover = false;
+        return r;
+    }
+
     public void UpdateInput()
     {
-        // No smoothing needed - analog sticks provide natural smoothing
+        // No smoothing needed - analog sticks provide natural smoothing.
+        // RECOVER combo: left stick click.
+        var gamepad = GetGamepad();
+        if (gamepad != null && gamepad.leftStickButton.wasPressedThisFrame) _recover = true;
     }
 
     private float ApplyDeadzone(float value)

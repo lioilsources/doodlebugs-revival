@@ -1,30 +1,101 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Direction A "Sky Poster" (Prompts/30 D1): the one place colours, type
-/// sizes and fonts live. Pixel art stays with what flies and shoots; the
-/// frame around it is bold, flat and light. Units are MenuCanvas units
-/// (~0.94 pt on an iPhone mini) - minimum text 12, minimum touch target 48.
+/// The one place colours, type sizes and fonts are read from (Prompts/30,
+/// themed by Prompts/31). Every value comes from the active
+/// <see cref="UiThemeDef"/>; the default is Sky Poster, whose values are
+/// exactly what this class held as constants before themes existed.
+///
+/// <see cref="Ink"/> is the colour of TEXT on a paper face - most callers use
+/// it that way. Outlines and hard shadows read <see cref="Line"/>. Text that
+/// sits straight on the arena reads <see cref="OnBackdrop"/>.
+///
+/// Switching a theme (<see cref="Apply"/>) raises <see cref="Changed"/>; the
+/// screens tear down and rebuild, so nothing has to know how to recolour.
+/// Units are MenuCanvas units - minimum text 12, minimum touch 48.
 /// </summary>
 public static class UiTheme
 {
-    // --- colours ---------------------------------------------------------
-    public static readonly Color Ink = Hex(0x0D1730);
-    public static readonly Color Paper = Hex(0xF2F6FB);
-    public static readonly Color PaperDim = Hex(0xD5DEE9);
-    public static readonly Color TextDim = Hex(0x33425E);
-    public static readonly Color Weapon = Hex(0xFF8A1F);
-    public static readonly Color Gadget = Hex(0x22C7DB);
-    public static readonly Color Special = Hex(0xE0489A);
-    public static readonly Color Highlight = Hex(0xFFD23F);
-    public static readonly Color Confirm = Hex(0x3DDC68);
-    public static readonly Color Danger = Hex(0xFF5A4A);
-    public static readonly Color Glass = new Color(13f / 255f, 23f / 255f, 48f / 255f, 0.74f);
-    public static readonly Color GlassLight = new Color(1f, 1f, 1f, 0.16f);
-    public static readonly Color SkyTop = new Color(13f / 255f, 23f / 255f, 48f / 255f, 0.30f);
-    public static readonly Color SkyBottom = new Color(13f / 255f, 23f / 255f, 48f / 255f, 0.92f);
+    private static UiThemeDef _active;
 
-    // --- sizes -----------------------------------------------------------
+    public static UiThemeDef Active => _active ??= UiThemeCatalog.Default;
+
+    /// <summary>Raised after the active theme changed.</summary>
+    public static event Action<UiThemeDef> Changed;
+
+    public static void Apply(UiThemeDef def)
+    {
+        if (def == null || def == Active) return;
+        _active = def;
+        // one failing screen must not leave the others half rebuilt
+        if (Changed == null) return;
+        foreach (var h in Changed.GetInvocationList())
+        {
+            try { ((Action<UiThemeDef>)h)(def); }
+            catch (Exception e) { Debug.LogException(e); }
+        }
+    }
+
+    /// <summary>Build something under another theme (theme picker previews).</summary>
+    public static void With(UiThemeDef def, Action build)
+    {
+        var prev = Active;
+        _active = def ?? prev;
+        try { build(); }
+        finally { _active = prev; }
+    }
+
+    // --- colours ---------------------------------------------------------
+    public static Color Ink => Active.Text;
+    public static Color Line => Active.Line;
+    public static Color Paper => Active.Paper;
+    public static Color PaperDim => Active.PaperDim;
+    public static Color TextDim => Active.TextDim;
+    public static Color Frame => Active.Frame;
+    public static Color FrameText => Active.FrameText;
+    public static Color OnBackdrop => Active.OnBackdrop;
+    public static Color BackdropShadow => Active.BackdropShadow;
+    public static Color Weapon => Active.Weapon;
+    public static Color Gadget => Active.Gadget;
+    public static Color Special => Active.Special;
+    public static Color Highlight => Active.Highlight;
+    public static Color Confirm => Active.Confirm;
+    public static Color OnConfirm => Active.OnConfirm;
+    public static Color Danger => Active.Danger;
+    public static Color Pick => Active.Pick;
+    public static Color OnPick => Active.OnPick;
+    public static Color TabOn => Active.TabOn;
+    public static Color TabOnText => Active.TabOnText;
+    public static Color BandText => Active.BandText;
+    public static Color BarFill => Active.BarFill;
+    public static Color Glass => Active.Glass;
+    public static Color GlassLight => Active.GlassLight;
+    public static Color SkyTop => Active.VeilTop;
+    public static Color SkyBottom => Active.VeilBottom;
+
+    /// <summary>Band colour of a card: the theme's band, or the category colour.</summary>
+    public static Color BandFor(Color category) => Active.Band.a > 0f ? Active.Band : category;
+
+    /// <summary>Second stop of a vertical gradient for a face colour, if the
+    /// theme paints that colour as a gradient (alpha 0 = flat).</summary>
+    public static Color GradientFor(Color face)
+    {
+        var t = Active;
+        if (Same(face, t.Paper)) return t.PaperB;
+        if (Same(face, t.Frame)) return t.FrameB;
+        if (Same(face, t.Confirm)) return t.ConfirmB;
+        if (Same(face, t.TabOn)) return t.TabOnB;
+        if (t.Band.a > 0f && Same(face, t.Band)) return t.BandB;
+        return new Color(0f, 0f, 0f, 0f);
+    }
+
+    private static bool Same(Color a, Color b) =>
+        Mathf.Abs(a.r - b.r) < 0.002f && Mathf.Abs(a.g - b.g) < 0.002f &&
+        Mathf.Abs(a.b - b.b) < 0.002f && Mathf.Abs(a.a - b.a) < 0.002f;
+
+    // --- sizes (Sky Poster units; Ui.Text scales by the font role) --------
     public const int SizeTitle = 30;
     public const int SizeCardTitle = 25;
     public const int SizeTab = 17;
@@ -34,30 +105,62 @@ public static class UiTheme
     public const int MinText = 12;
     public const float MinTouch = 48f;
 
-    public const float Outline = 3f;
+    /// <summary>Outline width of the active theme (0 = none).</summary>
+    public static float Outline => Active.Outline;
+
+    // Sky Poster radii; Ui scales them by Active.RadiusScale.
     public const float RadiusCard = 14f;
     public const float RadiusButton = 12f;
     public const float RadiusCta = 16f;
 
     // --- fonts -----------------------------------------------------------
-    private static Font _display, _label, _body, _bodyStrong;
+    private static readonly Dictionary<string, Font> _fonts = new();
 
-    /// <summary>Barlow Condensed ExtraBold Italic - titles, card names, CTA.</summary>
-    public static Font Display => _display != null ? _display : _display = Load("BarlowCondensed-ExtraBoldItalic");
+    /// <summary>Titles, card names, CTA.</summary>
+    public static Font Display => Load(Active.FontDisplay);
 
-    /// <summary>Barlow Condensed Bold - tabs, labels, caps.</summary>
-    public static Font Label => _label != null ? _label : _label = Load("BarlowCondensed-Bold");
+    /// <summary>Tabs, labels, caps.</summary>
+    public static Font Label => Load(Active.FontLabel);
 
-    /// <summary>Barlow Medium - running text.</summary>
-    public static Font Body => _body != null ? _body : _body = Load("Barlow-Medium");
+    /// <summary>Running text.</summary>
+    public static Font Body => Load(Active.FontBody);
 
-    /// <summary>Barlow SemiBold - emphasised text.</summary>
-    public static Font BodyStrong => _bodyStrong != null ? _bodyStrong : _bodyStrong = Load("Barlow-SemiBold");
+    /// <summary>Emphasised text.</summary>
+    public static Font BodyStrong => Load(Active.FontStrong);
+
+    /// <summary>Size multiplier of a font in the active theme (fonts run at
+    /// very different widths: Press Start 2P vs Barlow Condensed).</summary>
+    public static float ScaleFor(Font f)
+    {
+        if (f == null) return 1f;
+        var t = Active;
+        // A theme may reuse one face for several roles: body wins over label,
+        // so running text never inherits label tracking.
+        if (f == Display) return t.ScaleDisplay;
+        if (f == Body || f == BodyStrong) return t.ScaleBody;
+        if (f == Label) return t.ScaleLabel;
+        return 1f;
+    }
+
+    /// <summary>Letter spacing in em for a font in the active theme.</summary>
+    public static float TrackFor(Font f)
+    {
+        if (f == null) return 0f;
+        if (f == Display) return Active.TrackDisplay;
+        if (f == Body || f == BodyStrong) return 0f;
+        if (f == Label) return Active.TrackLabel;
+        return 0f;
+    }
 
     private static Font Load(string name)
     {
-        var f = Resources.Load<Font>("Fonts/" + name);
-        return f != null ? f : UiKit.PixelFont;
+        if (string.IsNullOrEmpty(name)) return UiKit.PixelFont;
+        if (_fonts.TryGetValue(name, out var f) && f != null) return f;
+        f = Resources.Load<Font>("Fonts/" + name);
+        if (f == null) f = Resources.Load<Font>("Fonts/BarlowCondensed-Bold");
+        if (f == null) f = UiKit.PixelFont;
+        _fonts[name] = f;
+        return f;
     }
 
     public static Color Hex(int rgb, float a = 1f) =>

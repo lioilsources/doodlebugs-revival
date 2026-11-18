@@ -95,8 +95,150 @@ public static class UiSprites
         }
     }
 
-    /// <summary>pixelsPerUnitMultiplier giving a corner radius in canvas units.</summary>
-    public static float RoundMultiplier(float radius) => RoundRadiusPx / Mathf.Max(1f, radius);
+    /// <summary>pixelsPerUnitMultiplier giving a corner radius in canvas units
+    /// (Sky Poster units: the active theme scales them, 0 = square).</summary>
+    public static float RoundMultiplier(float radius) =>
+        RoundRadiusPx / Mathf.Max(1f, radius * UiTheme.Active.RadiusScale);
+
+    /// <summary>Panel sprite of the active theme: rounded or chamfered.</summary>
+    public static Sprite Panel => UiTheme.Active.Shape == UiPanelShape.Chamfer ? Chamfer : RoundedRect;
+
+    // --- theme shapes (Prompts/31) -------------------------------------------
+
+    private static Sprite _chamfer, _soft, _hex, _arch, _archLine, _scan, _grid, _vignette, _leaf, _softDisc;
+
+    /// <summary>9-sliced rectangle with the top-left and bottom-right corners
+    /// cut at 45 degrees (cut = 32 px, same multiplier as RoundedRect).</summary>
+    public static Sprite Chamfer => _chamfer != null ? _chamfer : _chamfer = Sliced(RoundRadiusPx * 2 + 4, RoundRadiusPx + 1,
+        (x, y, n) =>
+        {
+            float c = RoundRadiusPx;
+            float tl = (n - y) + x - c;          // distance past the top-left cut line
+            float br = y + (n - x) - c;          // bottom-right
+            return Mathf.Clamp01(Mathf.Min(tl, br) / 1.4f + 0.5f);
+        });
+
+    /// <summary>Blurred rounded rectangle for soft shadows and glows. Its
+    /// visible edge sits <see cref="SoftPad"/> units inside the sprite rect.</summary>
+    public static Sprite SoftRect => _soft != null ? _soft : _soft = Sliced(96, 47, (x, y, n) =>
+    {
+        const float pad = 22f, r = 18f;
+        float cx = Mathf.Clamp(x, pad + r, n - pad - r), cy = Mathf.Clamp(y, pad + r, n - pad - r);
+        float d = Mathf.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) - r;
+        return Mathf.Clamp01(0.5f - d / (pad * 1.6f));
+    });
+
+    public const float SoftPad = 22f;
+
+    /// <summary>Soft round blob (glows, bokeh, colour blobs).</summary>
+    public static Sprite SoftDisc => _softDisc != null ? _softDisc : _softDisc = Plain(64, 64, (x, y, n, m) =>
+    {
+        float dx = x / n - 0.5f, dy = y / m - 0.5f;
+        float d = Mathf.Sqrt(dx * dx + dy * dy) * 2f;
+        return Mathf.Clamp01(1f - d) * Mathf.Clamp01(1f - d);
+    });
+
+    /// <summary>Flat-topped hexagon (Cockpit badges).</summary>
+    public static Sprite Hex => _hex != null ? _hex : _hex = Glyph((x, y) =>
+    {
+        float dx = Mathf.Abs(x - 0.5f), dy = Mathf.Abs(y - 0.5f);
+        return dy < 0.43f && dx < 0.48f - dy * 0.577f;
+    });
+
+    /// <summary>Leaf for the Solaria bar.</summary>
+    public static Sprite Leaf => _leaf != null ? _leaf : _leaf = Glyph((x, y) =>
+    {
+        float u = (x + y) * 0.7071f - 0.7071f, v = (y - x) * 0.7071f;
+        return v * v * 9f + u * u * 2.2f < 0.2f;
+    });
+
+    /// <summary>Card with a tall arch on top (Solaria): top corners 64 px,
+    /// bottom 18 px; 1 px = 1 unit at multiplier 1.</summary>
+    public static Sprite Arch => _arch != null ? _arch : _arch = ArchSprite(false);
+
+    /// <summary>The arch as a 1 px hairline (the gold inner line).</summary>
+    public static Sprite ArchLine => _archLine != null ? _archLine : _archLine = ArchSprite(true);
+
+    private static Sprite ArchSprite(bool line)
+    {
+        const int top = 64, bottom = 18, w = top * 2 + 4, h = top + bottom + 4;
+        var tex = NewTex(w, h);
+        var px = new Color32[w * h];
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            float fx = x + 0.5f, fy = y + 0.5f;
+            float r = fy > h / 2f ? top : bottom;
+            // corner centre: the top arcs span the top 64 px, the bottom ones 18 px
+            float cx = Mathf.Clamp(fx, r, w - r);
+            float cy = fy > h / 2f ? Mathf.Min(fy, h - top) : Mathf.Max(fy, bottom);
+            float d = Mathf.Sqrt((fx - cx) * (fx - cx) + (fy - cy) * (fy - cy));
+            float a = Mathf.Clamp01(r - d + 0.5f);              // inside = r - d
+            if (line) a *= Mathf.Clamp01(d - r + 2f);           // only the outer 1.5 px
+            px[y * w + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+        }
+        tex.SetPixels32(px);
+        tex.Apply(false, true);
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f, 0,
+            SpriteMeshType.FullRect, new Vector4(top + 1, bottom + 1, top + 1, top + 1));
+    }
+
+    /// <summary>Scanlines: 3 px period, 1 dark row. Use Image.Type.Tiled.</summary>
+    public static Sprite Scanlines => _scan != null ? _scan : _scan = Tile(2, 3, (x, y) => y == 0 ? 0.32f : 0f, Color.black);
+
+    /// <summary>40 px grid of 1 px lines. Use Image.Type.Tiled.</summary>
+    public static Sprite Grid => _grid != null ? _grid : _grid = Tile(40, 40, (x, y) => x == 0 || y == 0 ? 1f : 0f, Color.white);
+
+    /// <summary>Dark edges, clear centre.</summary>
+    public static Sprite Vignette => _vignette != null ? _vignette : _vignette = Plain(64, 64, (x, y, n, m) =>
+    {
+        float dx = x / n - 0.5f, dy = y / m - 0.5f;
+        float d = Mathf.Sqrt(dx * dx + dy * dy) * 1.6f;
+        return Mathf.Clamp01((d - 0.45f) / 0.55f);
+    }, Color.black);
+
+    private static Sprite Sliced(int n, int border, System.Func<float, float, int, float> alpha)
+    {
+        var tex = NewTex(n, n);
+        var px = new Color32[n * n];
+        for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++)
+            px[y * n + x] = new Color32(255, 255, 255, (byte)(Mathf.Clamp01(alpha(x + 0.5f, y + 0.5f, n)) * 255f));
+        tex.SetPixels32(px);
+        tex.Apply(false, true);
+        return Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), 100f, 0,
+            SpriteMeshType.FullRect, new Vector4(border, border, border, border));
+    }
+
+    private static Sprite Plain(int w, int h, System.Func<float, float, float, float, float> alpha, Color? tint = null)
+    {
+        var tex = NewTex(w, h);
+        var c = tint ?? Color.white;
+        var px = new Color32[w * h];
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            float a = Mathf.Clamp01(alpha(x + 0.5f, y + 0.5f, w, h));
+            px[y * w + x] = new Color(c.r, c.g, c.b, a);
+        }
+        tex.SetPixels32(px);
+        tex.Apply(false, true);
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f);
+    }
+
+    private static Sprite Tile(int w, int h, System.Func<int, int, float> alpha, Color tint)
+    {
+        var tex = NewTex(w, h);
+        tex.wrapMode = TextureWrapMode.Repeat;
+        tex.filterMode = FilterMode.Point;
+        var px = new Color32[w * h];
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            px[y * w + x] = new Color(tint.r, tint.g, tint.b, alpha(x, y));
+        tex.SetPixels32(px);
+        tex.Apply(false, true);
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+    }
 
     /// <summary>White vertical gradient, alpha 1 at the top, 0 at the bottom
     /// (tint the Image; for a two-colour gradient stack two).</summary>

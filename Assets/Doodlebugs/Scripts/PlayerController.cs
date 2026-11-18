@@ -46,7 +46,38 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// <summary>Owner-side, 0..1: how hard the plane is turning right now.</summary>
     public float TurnLoad01 => Mathf.Clamp01(Mathf.Abs(_omega) / Mathf.Max(1f, P.TurnRate));
 
+    // LEAN (Prompts/32): owner-side, last FixedUpdate. No network state - the
+    // bonus is computed on the owner, whose movement is authoritative.
+    private float _leanInput;       // meter from the provider, -1..1
+    private float _leanAligned;     // meter in the stick's direction, 0..1
+    private float _leanUsable;      // ... scaled by stick deflection, 0..1
+
+    /// <summary>Owner-side, -1..1: the LEAN meter as the provider reports it.</summary>
+    public float LeanInput => _leanInput;
+
+    /// <summary>Owner-side, 0..1: how much of the LEAN bonus applies right
+    /// now (engine on, stick turning the meter's way, times stick deflection).</summary>
+    public float Lean01 => _leanUsable;
+
+    /// <summary>Owner-side, 0..1: the meter in the stick's direction,
+    /// whatever the deflection - 1 = "full lean" for the feedback channels.</summary>
+    public float LeanAligned01 => _leanAligned;
+
     public bool IsBoosting => Time.time < _boostUntil;
+
+    // RECOVER combo (stall assist): an owner-side autopilot that flips the
+    // nose into the relight window, lets the engine catch, then pulls out
+    // level in the direction the plane was travelling. Player input is
+    // ignored until it is level or the timeout runs out.
+    private const float RecoverTimeout = 4f;
+    private const float RecoverLevelTolerance = 6f;
+    private bool _recovering;
+    private float _recoverDir;            // +1 = level out flying right, -1 = left
+    private float _recoverUntil;
+    private float _recoverStartedAt;
+
+    /// <summary>Owner-side: the RECOVER autopilot is flying the plane.</summary>
+    public bool IsRecovering => _recovering;
 
     // Synchronized state across network
     private NetworkVariable<float> netSpeed = new NetworkVariable<float>(5f,
@@ -619,7 +650,12 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
     void FixedUpdate() {
         // Parked in the hangar - no movement, no out-of-bounds respawn spam
-        if (NetInHangar.Value) return;
+        if (NetInHangar.Value)
+        {
+            _leanInput = _leanAligned = _leanUsable = 0f;
+            _recovering = false;
+            return;
+        }
 
         // Check if we should process input:
         // - Regular network player: IsOwner must be true
@@ -698,6 +734,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     {
         float horizontalInput = 0f;
         float verticalInput = 0f;
+        float lean = 0f;
 
         var inputProvider = GetInputProvider();
         if (inputProvider != null)
@@ -711,14 +748,86 @@ public class PlayerController : NetworkBehaviour, IDamagable
                 horizontalInput = inputProvider.GetHorizontalInput();
                 verticalInput = inputProvider.GetVerticalInput();
             }
+            lean = IsBot ? 0f : inputProvider.GetLean();
+
+            // Read every step so a request made with the engine running is
+            // dropped, not kept for the next stall.
+            if (inputProvider.ConsumeRecover() && engineOff && !_recovering && !IsBot) StartRecover();
         }
         else if (Time.frameCount % 300 == 0) // Log every 5 seconds at 60fps
         {
             Debug.LogWarning($"[PlayerController] No input provider available. LocalPlayerIndex={LocalPlayerIndex}");
         }
 
-        rotatePlane(horizontalInput);
+        if (_recovering && RecoverIntent(out float rx, out float rt))
+        {
+            horizontalInput = rx;
+            verticalInput = rt;
+            lean = 0f;
+        }
+
+        rotatePlane(horizontalInput, lean);
         movePlane(verticalInput);
+    }
+
+    private void StartRecover()
+    {
+        _recovering = true;
+        float vx = rb != null ? rb.linearVelocity.x : 0f;
+        _recoverDir = Mathf.Abs(vx) > 0.5f ? Mathf.Sign(vx) : (transform.right.x >= 0f ? 1f : -1f);
+        _recoverStartedAt = Time.time;
+        _recoverUntil = Time.time + RecoverTimeout;
+
+        SfxManager.PlayConfirm();
+        SfxManager.Haptic(HapticKind.Medium);
+        BannerOverlay.Show("RECOVER!", UiTheme.Highlight);
+        Telemetry.Log("stall_recover", ("result", "start"));
+    }
+
+    private void EndRecover(bool level)
+    {
+        _recovering = false;
+        if (level) SfxManager.Haptic(HapticKind.Success);
+        Telemetry.Log("stall_recover", ("result", level ? "level" : "timeout"),
+            ("seconds", Mathf.Round((Time.time - _recoverStartedAt) * 10f) / 10f));
+    }
+
+    /// <summary>The autopilot's stick: engine dead = turn to the middle of
+    /// the relight window, over the nose toward the travel side; engine on =
+    /// pull out to level flight at full throttle. False once it is done.</summary>
+    private bool RecoverIntent(out float x, out float throttle)
+    {
+        x = 0f;
+        throttle = 0f;
+        if (Time.time > _recoverUntil)
+        {
+            EndRecover(false);
+            return false;
+        }
+
+        float target;
+        if (engineOff)
+        {
+            var (minDeg, maxDeg) = EngineRestartHeadingWindow;
+            target = (minDeg + maxDeg) * 0.5f;
+        }
+        else target = _recoverDir > 0f ? 0f : 180f;
+
+        float delta = Mathf.DeltaAngle(HeadingDegrees, target);   // + = counter-clockwise
+        if (engineOff && Mathf.Abs(delta) > 150f)
+        {
+            // Nose up: tip over toward the side the plane is moving
+            delta = Mathf.Abs(delta) * -_recoverDir;
+        }
+        else if (!engineOff && Mathf.Abs(delta) <= RecoverLevelTolerance)
+        {
+            EndRecover(true);
+            return false;
+        }
+
+        x = -Mathf.Clamp(delta / FlightTuning.PointGainDeg, -1f, 1f);
+        throttle = engineOff ? 0f : 1f;
+        return true;
     }
 
     /// <summary>POINT scheme (Prompts/28 §4): the stick names a direction of
@@ -831,7 +940,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         // Speed is not lost immediately - keep velocity
     }
 
-    private void rotatePlane(float x)
+    private void rotatePlane(float x, float lean = 0f)
     {
         float dt = Time.fixedDeltaTime;
         float now = Time.time;
@@ -862,8 +971,15 @@ public class PlayerController : NetworkBehaviour, IDamagable
         else
         {
             float snapMul = now < _snapUntil ? P.SnapBoost : 1f;
-            target = x * FlightModel.TurnRateAt(P, speed, HandlingFactor) * snapMul;
+            // LEAN (Prompts/32 D1/D3): only with the engine on, only in the
+            // stick's direction; snap x lean never beyond 1.8x.
+            float leanMul = LeanModel.Multiplier(P, lean, x);
+            target = x * FlightModel.TurnRateAt(P, speed, HandlingFactor)
+                   * Mathf.Min(snapMul * leanMul, LeanModel.MaxTurnMultiplier);
         }
+        _leanInput = lean;
+        _leanAligned = engineOff || x == 0f ? 0f : Mathf.Max(0f, lean * Mathf.Sign(x));
+        _leanUsable = engineOff ? 0f : LeanModel.Usable(lean, x);
         _omega = FlightModel.StepOmega(P, _omega, target, dt);
 
         // Knockback spin (Prompts/29): dissolved into the heading over ~0.2 s
@@ -1116,6 +1232,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         _omega = 0f;
         _boostUntil = 0f;
         _relightLockedUntil = 0f;
+        _recovering = false;
         speed = defaultSpeed;
         engineOff = false;
         inSpace = false;

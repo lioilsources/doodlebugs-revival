@@ -90,6 +90,20 @@ the relevant one before touching flight, weapons or hangar UI. Summary:
   fonts, min text 12, min touch 48; `UiAudit` warns in dev builds).
   `UI/HangarScreen.cs` owns every hangar mode + plane/arena pickers;
   `GameHUD` keeps HUD, kill feed, results, podium only.
+- **Plan 31 (`[wip]`, implemented, device test pending):** ten UI themes over
+  the same hangar layout - `Prompts/31-CLAUDE-PLAN-ui-themes.md`, mockup next
+  to it. `UiTheme` is a facade over `UI/Kit/UiThemeCatalog` (`Ink` = text on
+  paper, `Line` = outlines, `OnBackdrop` = text on the arena); screens rebuild
+  on `UiTheme.Changed`. Art in `Resources/Sprites/UiThemes/<key>/`, fonts via
+  `tools/ui_themes/fetch_fonts.py`.
+  `tools/ui_themes/tokens.py` = palettes + WCAG contrast gate (mirror of the
+  future `UiThemeCatalog`), `prompts.py` = art prompts (schnell for textless
+  art, Qwen-Image only for the wordmark).
+- **Plan 32 (`[wip]`, wave 1 implemented):** LEAN, a tilt assist on top of
+  POINT/RATE - `Prompts/32-CLAUDE-PLAN-lean-hybrid.md`. Rolling the phone
+  into a turn adds up to 15 % turn rate; the meter rewards motion and leaks,
+  a held pose earns nothing. `tools/flight/lean_sim.py --check` guards the
+  numbers (mirror of the future `Flight/LeanModel.cs`).
 
 ## Tech Stack
 
@@ -309,6 +323,10 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   no GPU); `WeaponProfile.IconSpriteName` names them and `LoadIcon` falls
   back to `Sprites/Projectiles/metal/<form>` tinted, then to the weapon name.
   Ring/disc/knob sprites are generated at runtime by `UI/UiSprites.cs`.
+- RECOVER combo (stall assist): with the engine dead, double-tap the stick
+  (desktop: throttle-down key twice, gamepad: left stick click) and
+  `PlayerController` flies the flip into the relight window and the pull-out
+  to level itself (`IInputProvider.ConsumeRecover`, timeout 4 s).
 - iOS `deferSystemGesturesMode` = bottom edge (ProjectSettings) so a thumb on
   the triggers does not summon the home indicator.
 

@@ -57,6 +57,11 @@ public class HangarScreen : MonoBehaviour
 
     private GameObject _corner;
     private ArenaSheet _arena;
+    private Image _wordmark;
+    private RectTransform _overlay;
+    private Image _slotWeaponDisc, _slotGadgetDisc;
+    private int _lastSeconds;
+    private bool _rebuilding;
 
     private bool _open;
     private MatchManager.HangarMode _mode = MatchManager.HangarMode.Searching;
@@ -84,12 +89,53 @@ public class HangarScreen : MonoBehaviour
         return hs;
     }
 
-    private void Awake() => Instance = this;
+    private void Awake()
+    {
+        Instance = this;
+        UiTheme.Changed += OnThemeChanged;
+    }
 
     private void OnDestroy()
     {
         if (Instance == this) Instance = null;
+        UiTheme.Changed -= OnThemeChanged;
         Unhook();
+    }
+
+    /// <summary>Prompts/31: a new theme rebuilds the whole screen in place.
+    /// Mode, remaining time, the tab, picks and READY survive.</summary>
+    private void OnThemeChanged(UiThemeDef _) => Rebuild();
+
+    public void Rebuild()
+    {
+        var mc = MenuCanvas.Instance;
+        if (mc == null) return;
+        bool wasOpen = _open, ready = _localReady, corner = _corner != null;
+        if (_arena != null) { _arena.Close(); _arena = null; }
+        RemoveCorner();
+        ClearContent();
+        foreach (var go in new[] { _bg, _veilRoot, _layer })
+            if (go != null) Destroy(go.gameObject);
+        _tabs.Clear();
+        _rosterSignature = null;
+        _lastHeroKey = int.MinValue;
+        Build(mc);
+        OnRole(_connection != null ? _connection.Role : Doodlebugs.Network.LocalRole.None);
+        if (corner) ShowCorner();
+        if (!wasOpen) return;
+        _rebuilding = true;
+        try { Open(_mode, _lastSeconds); }
+        finally { _rebuilding = false; }
+        if (ready)
+        {
+            _localReady = true;
+            if (_mode == MatchManager.HangarMode.LateJoin) SetCta("DEPLOYING", UiTheme.PaperDim, 0, false);
+            else if (_mode != MatchManager.HangarMode.Waiting)
+            {
+                SetCta("WAITING", UiTheme.PaperDim, 0, false);
+                foreach (var (card, _) in _cards) card.SetInteractable(false);
+            }
+        }
     }
 
     private void Start()
@@ -147,7 +193,7 @@ public class HangarScreen : MonoBehaviour
 
         // Sky of the arena + a gradient veil (text sits on dark at the bottom)
         _sky = _bg.gameObject.AddComponent<Image>();
-        _sky.color = UiTheme.Ink;
+        _sky.color = Opaque(UiTheme.SkyBottom);
         _sky.raycastTarget = true;   // the hangar swallows every touch
         var fit = _bg.gameObject.AddComponent<AspectRatioFitter>();
         fit.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
@@ -166,6 +212,9 @@ public class HangarScreen : MonoBehaviour
         _veilTop.preserveAspect = false;
         _veilTop.color = UiTheme.SkyTop;
         Ui.Inset(_veilTop.rectTransform, 0, 0, 0, 0);
+        _overlay = Ui.Node(bgParent, "ThemeOverlay");
+        Ui.Inset(_overlay, 0, 0, 0, 0);
+        UiBackdrop.BuildOverlay(_overlay);
         bgParent.SetSiblingIndex(_bg.GetSiblingIndex() + 1);
         _veilRoot = bgParent;
 
@@ -191,30 +240,28 @@ public class HangarScreen : MonoBehaviour
         h.childControlHeight = false;
         h.childForceExpandWidth = false;
 
-        _title = Ui.AutoText(_topRow, "Title", "HANGAR", UiTheme.Display, UiTheme.SizeTitle, Color.white);
-        var sh = _title.gameObject.AddComponent<Shadow>();
-        sh.effectColor = UiTheme.Ink;
-        sh.effectDistance = new Vector2(0f, -3f);
+        _title = Ui.AutoText(_topRow, "Title", "HANGAR", UiTheme.Display, UiTheme.SizeTitle, UiTheme.OnBackdrop);
+        Ui.BackdropShadow(_title, 3f);
         _title.rectTransform.sizeDelta = new Vector2(120f, 40f);
 
         _rolePill = Ui.Pill(_topRow, "Role", "HOST", UiTheme.Glass, UiTheme.Highlight);
-        _roundPill = Ui.Pill(_topRow, "Round", "", UiTheme.Glass, Color.white);
-        _nextPill = Ui.Pill(_topRow, "Next", "", UiTheme.Glass, Color.white, 30f);
-        _readyPill = Ui.Pill(_topRow, "Ready", "", UiTheme.Glass, UiTheme.Confirm);
-        _statusPill = Ui.Pill(_topRow, "Status", "", UiTheme.Glass, Color.white);
+        _roundPill = Ui.Pill(_topRow, "Round", "", UiTheme.Glass, UiTheme.OnBackdrop);
+        _nextPill = Ui.Pill(_topRow, "Next", "", UiTheme.Glass, UiTheme.OnBackdrop, 30f);
+        _readyPill = Ui.Pill(_topRow, "Ready", "", UiTheme.Glass, ReadableOn(UiTheme.Confirm, UiTheme.Glass));
+        _statusPill = Ui.Pill(_topRow, "Status", "", UiTheme.Glass, UiTheme.OnBackdrop);
         _nextPill.bg.raycastTarget = true;
         Ui.Press(_nextPill.bg, OpenArenas);
 
         var spacer = Ui.Node(_topRow, "Spacer");
         spacer.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
-        var gear = Ui.Card(_topRow, "Settings", UiTheme.Paper, 24f, 4f);
+        var gear = Ui.Card(_topRow, "Settings", UiTheme.Frame, 24f, 4f);
         gear.Root.sizeDelta = new Vector2(48f, 48f);
         var le = gear.Root.gameObject.AddComponent<LayoutElement>();
         le.preferredWidth = 48f;
         le.preferredHeight = 48f;
         var icon = Ui.Sprite(gear.Face.transform, "Icon", UiSprites.Gear);
-        icon.color = UiTheme.Ink;
+        icon.color = UiTheme.FrameText;
         Ui.Inset(icon.rectTransform, 8, 8, 8, 8);
         Ui.Press(gear.Face, () => SettingsOverlay.Instance?.Open());
     }
@@ -235,8 +282,10 @@ public class HangarScreen : MonoBehaviour
         pr.offsetMin = new Vector2(16f, 86f);
         pr.offsetMax = new Vector2(-16f, 0f);
         pr.localRotation = Quaternion.Euler(0f, 0f, -7f);
+        _heroPlane.color = UiTheme.Active.ArtTint;
         var sh = _heroPlane.gameObject.AddComponent<Shadow>();
-        sh.effectColor = UiTheme.WithAlpha(UiTheme.Ink, 0.5f);
+        var bs = UiTheme.BackdropShadow;
+        sh.effectColor = bs.a > 0f ? UiTheme.WithAlpha(bs, 0.5f) : new Color(0f, 0f, 0f, 0.25f);
         sh.effectDistance = new Vector2(0f, -8f);
 
         var nameRow = Ui.Node(_hero, "NameRow");
@@ -247,12 +296,10 @@ public class HangarScreen : MonoBehaviour
         h.childControlWidth = true;
         h.childControlHeight = false;
         h.childForceExpandWidth = false;
-        _heroName = Ui.AutoText(nameRow, "Name", "", UiTheme.Display, 26, Color.white);
+        _heroName = Ui.AutoText(nameRow, "Name", "", UiTheme.Display, 26, UiTheme.OnBackdrop);
         _heroName.rectTransform.sizeDelta = new Vector2(100f, 30f);
-        var nsh = _heroName.gameObject.AddComponent<Shadow>();
-        nsh.effectColor = UiTheme.Ink;
-        nsh.effectDistance = new Vector2(0f, -3f);
-        _elementChip = Ui.Pill(nameRow, "Element", "", UiTheme.Weapon, UiTheme.Ink, 20f, 12, UiTheme.Label);
+        Ui.BackdropShadow(_heroName, 3f);
+        _elementChip = Ui.Pill(nameRow, "Element", "", UiTheme.Weapon, UiTheme.OnPick, 20f, 12, UiTheme.Label);
 
         var slots = Ui.Node(_hero, "Slots");
         Ui.BottomBand(slots, 0f, 50f);
@@ -262,26 +309,26 @@ public class HangarScreen : MonoBehaviour
         sh2.childControlHeight = true;
         sh2.childForceExpandWidth = true;
         sh2.childForceExpandHeight = true;
-        (_slotWeaponIcon, _slotWeaponName) = BuildSlot(slots, "Weapon", () => SwitchTab(Tab.Weapon));
-        (_slotGadgetIcon, _slotGadgetName) = BuildSlot(slots, "Gadget", () => SwitchTab(Tab.Gadget));
-        _slotGadget = _slotGadgetIcon.transform.parent.parent.gameObject;
+        (_slotWeaponIcon, _slotWeaponDisc, _slotWeaponName) = BuildSlot(slots, "Weapon", UiTheme.Weapon, () => SwitchTab(Tab.Weapon));
+        (_slotGadgetIcon, _slotGadgetDisc, _slotGadgetName) = BuildSlot(slots, "Gadget", UiTheme.Gadget, () => SwitchTab(Tab.Gadget));
+        _slotGadget = _slotGadgetName.transform.parent.parent.gameObject;
         _heroHome = _hero.anchoredPosition;
         _planeHome = pr.anchoredPosition;
     }
 
-    private (Image icon, Text name) BuildSlot(RectTransform parent, string label, System.Action onClick)
+    private (Image icon, Image disc, Text name) BuildSlot(RectTransform parent, string label, Color category, System.Action onClick)
     {
-        var card = Ui.Card(parent, "Slot" + label, UiTheme.Paper, UiTheme.RadiusButton, 4f);
+        var card = Ui.Card(parent, "Slot" + label, UiTheme.Frame, UiTheme.RadiusButton, 4f);
         var face = card.Face.transform;
-        var icon = Ui.Sprite(face, "Icon", null);
-        Ui.Place(icon.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(5f, 0f), new Vector2(36f, 36f));
-        var small = Ui.Text(face, "Label", label, UiTheme.BodyStrong, UiTheme.SizeSmall, UiTheme.TextDim);
+        var (badge, disc, icon) = Ui.Badge(face, "Icon", null, category, 34f);
+        Ui.Place(badge, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(6f, 0f), new Vector2(34f, 34f));
+        var small = Ui.Text(face, "Label", label, UiTheme.BodyStrong, UiTheme.SizeSmall, UiTheme.WithAlpha(UiTheme.FrameText, 0.75f));
         Ui.Inset(small.rectTransform, 46f, 22f, 4f, 4f);
-        var name = Ui.Text(face, "Name", "", UiTheme.Label, 17, UiTheme.Ink);
+        var name = Ui.Text(face, "Name", "", UiTheme.Label, 17, UiTheme.FrameText);
         name.horizontalOverflow = HorizontalWrapMode.Overflow;
         Ui.Inset(name.rectTransform, 46f, 4f, 4f, 20f);
         Ui.Press(card.Face, onClick);
-        return (icon, name);
+        return (icon, disc, name);
     }
 
     private void BuildTabs()
@@ -307,13 +354,13 @@ public class HangarScreen : MonoBehaviour
             le.preferredWidth = 120f;
             var label = Ui.Text(p.Face.transform, "Label", t.ToString().ToUpperInvariant(), UiTheme.Label,
                 UiTheme.SizeTab, UiTheme.Ink, TextAnchor.MiddleCenter);
-            var badge = Ui.Text(p.Face.transform, "Badge", "", UiTheme.BodyStrong, 12, UiTheme.Ink, TextAnchor.MiddleCenter);
+            var badge = Ui.Text(p.Face.transform, "Badge", "", UiTheme.BodyStrong, 12, UiTheme.OnPick, TextAnchor.MiddleCenter);
             Ui.Place(badge.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-6f, 0f), new Vector2(20f, 20f));
             var bdisc = Ui.Node(p.Face.transform, "BadgeDisc");
             Ui.Place(bdisc, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-6f, 0f), new Vector2(20f, 20f));
             var di = bdisc.gameObject.AddComponent<Image>();
             di.sprite = UiSprites.Disc;
-            di.color = UiTheme.Highlight;
+            di.color = UiTheme.Pick;
             di.raycastTarget = false;
             badge.transform.SetAsLastSibling();
             var captured = t;
@@ -322,7 +369,7 @@ public class HangarScreen : MonoBehaviour
         }
 
         _content = Ui.Node(_layer, "Content");
-        Ui.Inset(_content, 286f, 80f, 16f, 122f);
+        Ui.Inset(_content, 286f, 72f, 16f, 122f);
     }
 
     private void BuildBottom()
@@ -347,15 +394,23 @@ public class HangarScreen : MonoBehaviour
     {
         _boot = Ui.Node(_layer, "Boot");
         Ui.Inset(_boot, 0, 0, 0, 0);
-        var title = Ui.Text(_boot, "Title", "DOODLEBUGS", UiTheme.Display, 72, Color.white, TextAnchor.MiddleCenter);
-        Ui.Place(title.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(700f, 90f));
-        var sh = title.gameObject.AddComponent<Shadow>();
-        sh.effectColor = UiTheme.Ink;
-        sh.effectDistance = new Vector2(0f, -6f);
+        // The theme's wordmark (Qwen-Image, Prompts/31 §6) or the name in the display font
+        var mark = UiBackdrop.Art("wordmark");
+        if (mark != null)
+        {
+            _wordmark = Ui.Sprite(_boot, "Wordmark", mark);
+            Ui.Place(_wordmark.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 50f), new Vector2(620f, 150f));
+        }
+        else
+        {
+            var title = Ui.Text(_boot, "Title", "DOODLEBUGS", UiTheme.Display, 72, UiTheme.OnBackdrop, TextAnchor.MiddleCenter);
+            Ui.Place(title.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(700f, 90f));
+            Ui.BackdropShadow(title, 6f);
+        }
         _bootStatus = Ui.Text(_boot, "Status", "SEARCHING FOR GAME...", UiTheme.Label, 20, UiTheme.Highlight, TextAnchor.MiddleCenter);
         Ui.Place(_bootStatus.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -30f), new Vector2(700f, 30f));
         var ver = Ui.Text(_boot, "Version", Doodlebugs.UI.ConnectionUI.GameVersion, UiTheme.Body, 13,
-            UiTheme.WithAlpha(Color.white, 0.6f), TextAnchor.MiddleCenter);
+            UiTheme.WithAlpha(UiTheme.OnBackdrop, 0.6f), TextAnchor.MiddleCenter);
         Ui.Place(ver.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 24f), new Vector2(400f, 20f));
     }
 
@@ -371,7 +426,8 @@ public class HangarScreen : MonoBehaviour
 
     public void Open(MatchManager.HangarMode mode, int seconds)
     {
-        bool fresh = !_open || mode != _mode;
+        bool fresh = !_rebuilding && (!_open || mode != _mode);
+        _lastSeconds = seconds;
         if (mode != _mode && _arena != null) { _arena.Close(); _arena = null; }
         _mode = mode;
         RemoveCorner();
@@ -392,12 +448,16 @@ public class HangarScreen : MonoBehaviour
         var profile = BackgroundManager.Instance != null ? BackgroundManager.Instance.CurrentProfile : null;
         if (profile == null && BackgroundManager.Instance != null && BackgroundManager.Instance.BackgroundCount > 0)
             profile = BackgroundManager.Instance.GetProfile(0);
-        _sky.sprite = profile != null ? profile.backgroundSprite : null;
-        _sky.color = _sky.sprite != null ? Color.white : UiTheme.Ink;
+        // Searching and the warm-up lobby show the theme's own picture when it has one
+        var themeArt = searching || mode == MatchManager.HangarMode.Waiting ? UiBackdrop.Art("backdrop") : null;
+        _sky.sprite = themeArt != null ? themeArt
+            : UiBackdrop.Filtered(profile != null ? profile.backgroundSprite : null);
+        _sky.color = _sky.sprite != null ? Color.white : Opaque(UiTheme.SkyBottom);
         _bg.gameObject.SetActive(!lateJoin);
         _veilFlat.enabled = lateJoin;
         _veilTop.enabled = !lateJoin;
         _veilBottom.enabled = !lateJoin;
+        _overlay.gameObject.SetActive(!lateJoin);
 
         _boot.gameObject.SetActive(searching);
         _hero.gameObject.SetActive(!searching);
@@ -445,7 +505,7 @@ public class HangarScreen : MonoBehaviour
             if (fresh) UiTween.Move(_hero, _heroHome - new Vector2(30f, 0f), _heroHome, 0.3f, UiTween.Ease.OutBack);
         }
 
-        Telemetry.Log("hangar_open", ("mode", mode));
+        if (!_rebuilding) Telemetry.Log("hangar_open", ("mode", mode));
         UiAudit.Check(_layer);
     }
 
@@ -470,6 +530,7 @@ public class HangarScreen : MonoBehaviour
     {
         if (!_open || MatchManager.Instance == null || MatchManager.Instance.IsRunOver) return;
         if (_mode == MatchManager.HangarMode.Waiting || _mode == MatchManager.HangarMode.Searching) return;
+        _lastSeconds = secondsLeft;
         Ui.SetCount(_cta, secondsLeft);
         if (secondsLeft <= 5 && secondsLeft > 0)
         {
@@ -506,7 +567,7 @@ public class HangarScreen : MonoBehaviour
         if (_rolePill.root == null) return;
         _rolePill.root.gameObject.SetActive(role != Doodlebugs.Network.LocalRole.None);
         _rolePill.label.text = role == Doodlebugs.Network.LocalRole.Host ? "HOST" : "CLIENT";
-        _rolePill.label.color = role == Doodlebugs.Network.LocalRole.Host ? UiTheme.Highlight : UiTheme.Gadget;
+        _rolePill.label.color = ReadableOn(role == Doodlebugs.Network.LocalRole.Host ? UiTheme.Highlight : UiTheme.Gadget, UiTheme.Glass);
     }
 
     /// <summary>A late joiner's own plane deployed mid-battle: close the LateJoin hangar.</summary>
@@ -559,10 +620,10 @@ public class HangarScreen : MonoBehaviour
         foreach (var kv in _tabs)
         {
             bool on = kv.Key == tab;
-            kv.Value.panel.SetFace(on ? UiTheme.Paper : UiTheme.GlassLight);
+            kv.Value.panel.SetFace(on ? UiTheme.TabOn : UiTheme.GlassLight);
             kv.Value.panel.SetShadow(on ? 4f : 0f);
-            kv.Value.panel.Outline.enabled = on;
-            kv.Value.label.color = on ? UiTheme.Ink : Color.white;
+            if (kv.Value.panel.Outline != null) kv.Value.panel.Outline.enabled = on || UiTheme.Active.Outline > 0f && UiTheme.GlassLight.a < 0.05f;
+            kv.Value.label.color = on ? UiTheme.TabOnText : UiTheme.OnBackdrop;
         }
         ClearContent();
         switch (tab)
@@ -631,6 +692,7 @@ public class HangarScreen : MonoBehaviour
                 Verb = w.Verb,
                 Corner = i == 0 ? "KEEP" : "",
                 Icon = icon,
+                Glyph = w.LoadGlyph(),
                 IconTint = tint,
                 Title = w.DisplayName,
                 Description = w.Description,
@@ -657,6 +719,7 @@ public class HangarScreen : MonoBehaviour
                 Verb = g.Verb,
                 Corner = i == 0 ? "KEEP" : "",
                 Icon = g.LoadIcon(),
+                Glyph = g.LoadGlyph(),
                 Title = g.DisplayName,
                 Description = g.Description,
                 Stats = new[] { ("POWER", g.StatPower), ("RATE", g.StatRate), ("CD", Mathf.Clamp01(1f - g.Cooldown / 12f)) },
@@ -684,7 +747,7 @@ public class HangarScreen : MonoBehaviour
             var captured = type;
             var card = DraftCard.Build(row, new DraftCard.Data
             {
-                Category = UiTheme.Highlight,
+                Category = UiTheme.Pick,
                 Verb = "UPGRADE",
                 Corner = maxed ? "MAX" : $"{RunUpgrades.CostPoints} PT",
                 Icon = Resources.Load<Sprite>("Sprites/PowerUps/" + UpgradeIcons[i]),
@@ -748,6 +811,9 @@ public class HangarScreen : MonoBehaviour
     {
         _cta.Label.text = label;
         _cta.Panel.SetFace(face);
+        _cta.Label.color = face == UiTheme.PaperDim ? UiTheme.Ink
+            : face == UiTheme.Confirm ? UiTheme.OnConfirm
+            : Lum(face) > 0.45f ? UiTheme.OnPick : Color.white;
         _cta.Count.color = face;
         _cta.Button.interactable = interactable;
         Ui.SetCount(_cta, seconds);
@@ -796,7 +862,7 @@ public class HangarScreen : MonoBehaviour
     {
         if (_corner != null) return;
         var mc = MenuCanvas.Instance;
-        var (r, bg, _) = Ui.Pill(mc.Root, "HangarCorner", "HANGAR", UiTheme.Glass, Color.white, 48f, 17, UiTheme.Label);
+        var (r, bg, _) = Ui.Pill(mc.Root, "HangarCorner", "HANGAR", UiTheme.Glass, UiTheme.OnBackdrop, 48f, 17, UiTheme.Label);
         r.anchorMin = r.anchorMax = new Vector2(1f, 1f);
         r.pivot = new Vector2(1f, 1f);
         r.anchoredPosition = new Vector2(-16f, -8f);
@@ -862,13 +928,41 @@ public class HangarScreen : MonoBehaviour
         _elementChip.bg.color = el.Tint;
 
         var w = WeaponProfile.Get(weapon);
-        _slotWeaponIcon.sprite = w.LoadIcon(out _);
+        SetSlotIcon(_slotWeaponIcon, _slotWeaponDisc, w.LoadGlyph(), w.LoadIcon(out _));
         _slotWeaponName.text = w.DisplayName;
         bool showGadget = _mode != MatchManager.HangarMode.LateJoin;
         _slotGadget.SetActive(showGadget);
         var g = GadgetProfile.Get(gadget);
-        _slotGadgetIcon.sprite = g.LoadIcon();
+        SetSlotIcon(_slotGadgetIcon, _slotGadgetDisc, g.LoadGlyph(), g.LoadIcon());
         _slotGadgetName.text = g.DisplayName;
+    }
+
+    /// <summary>Glyph on the theme's badge; a sprite without a glyph brings its own disc.</summary>
+    private static void SetSlotIcon(Image icon, Image disc, Sprite glyph, Sprite full)
+    {
+        icon.sprite = glyph != null ? glyph : full;
+        icon.enabled = icon.sprite != null;
+        var badge = icon.transform.parent;
+        for (int i = 0; i < badge.childCount; i++)
+        {
+            var c = badge.GetChild(i);
+            if (c != icon.transform) c.gameObject.SetActive(glyph != null);
+        }
+        var r = icon.rectTransform;
+        float pad = glyph != null ? 34f * 0.16f : 0f;
+        Ui.Inset(r, pad, pad, pad, pad);
+    }
+
+    private static Color Opaque(Color c) => new Color(c.r, c.g, c.b, 1f);
+
+    private static float Lum(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+
+    /// <summary>An accent as text on glass, or OnBackdrop when the accent
+    /// would vanish (pastel accents on the light themes' white glass).</summary>
+    private static Color ReadableOn(Color accent, Color glass)
+    {
+        bool lightGlass = glass.a > 0.5f && Lum(glass) > 0.6f;
+        return lightGlass && Lum(accent) > 0.45f ? UiTheme.OnBackdrop : accent;
     }
 
     private struct Pilot { public ulong Client; public string Name; public int Model, Skin; }
@@ -925,7 +1019,7 @@ public class HangarScreen : MonoBehaviour
             var pill = Ui.Node(_roster, "Pilot_" + p.Client);
             pill.sizeDelta = new Vector2(120f, 40f);
             var bg = pill.gameObject.AddComponent<Image>();
-            bg.sprite = UiSprites.RoundedRect;
+            bg.sprite = UiSprites.Panel;
             bg.type = Image.Type.Sliced;
             bg.pixelsPerUnitMultiplier = UiSprites.RoundMultiplier(20f);
             bg.color = UiTheme.Glass;
@@ -943,7 +1037,7 @@ public class HangarScreen : MonoBehaviour
             Color pc = PlayerColorManager.Instance != null
                 ? PlayerColorManager.Instance.GetColor(p.Client, 0)
                 : PlayerColorManager.GetColorByIndex((int)p.Client);
-            var (thumb, _, icon) = Ui.Badge(pill, "Thumb", PlaneModelCatalog.LoadSprite(p.Model, p.Skin), UiTheme.Paper, 32f);
+            var (thumb, _, icon) = Ui.Badge(pill, "Thumb", PlaneModelCatalog.LoadSprite(p.Model, p.Skin), UiTheme.Frame, 32f);
             thumb.GetChild(0).GetComponent<Image>().color = pc;
             var tle = thumb.gameObject.AddComponent<LayoutElement>();
             tle.preferredWidth = 32f;
@@ -955,7 +1049,7 @@ public class HangarScreen : MonoBehaviour
             v.childControlWidth = true;
             v.childControlHeight = true;
             v.childAlignment = TextAnchor.MiddleLeft;
-            Ui.AutoText(col, "Name", p.Client == me ? "You" : p.Name, UiTheme.BodyStrong, 13, Color.white);
+            Ui.AutoText(col, "Name", p.Client == me ? "You" : p.Name, UiTheme.BodyStrong, 13, UiTheme.OnBackdrop);
             bool ready = _readyClients.Contains(p.Client);
             string state = readyCheck ? (ready ? "READY" : "PICKING") : _mode == MatchManager.HangarMode.Waiting ? "IN LOBBY" : "";
             if (state.Length > 0)

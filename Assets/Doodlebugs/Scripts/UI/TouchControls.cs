@@ -59,14 +59,32 @@ public class TouchControls : MonoBehaviour
     private static readonly Color StickBaseColor = new Color(1f, 1f, 1f, 0.18f);
     private static readonly Color StickKnobColor = new Color(1f, 1f, 1f, 0.55f);
 
+    // LEAN arc (Prompts/32 §4.8 / §5) around the stick base
+    private const float LeanArcSize = 330f;
+    private const float LeanArcWidthFrac = 0.05f;
+    private const float LeanFullAt = 0.999f;
+    private const float LeanRearmBelow = 0.6f;
+    private const string LeanBannerKey = "lean.firstFullShown";
+    private static readonly Color LeanArcColor = new Color(1f, 1f, 1f, 0.75f);
+
     private const float PlaneLookupInterval = 0.5f;
+
+    // RECOVER combo: double-tap on the stick while the engine is dead. The
+    // hint banner names it on the first stalls until the player has used it.
+    private const string RecoverUsedKey = "recover.used";
+    private const string RecoverHintsKey = "recover.hints";
+    private const int RecoverMaxHints = 3;
+    private bool _wasEngineOff;
 
     private Canvas _canvas;
     private RectTransform _root;
     private Rect _appliedSafeArea = new Rect(-1, -1, -1, -1);
     private Vector2Int _appliedScreen;
+    private float _appliedScale;
 
     private StickZone _stick;
+    private Image _leanArc;
+    private bool _leanFull;
     private readonly Trigger[] _triggers = new Trigger[TouchInputProvider.Slots];
 
     private PlayerController _plane;
@@ -125,6 +143,41 @@ public class TouchControls : MonoBehaviour
         if (!show) return;
 
         RefreshTriggers();
+        RefreshLean();
+        RefreshRecoverHint();
+    }
+
+    // --- RECOVER combo -------------------------------------------------------------
+
+    private void OnStickDoubleTap()
+    {
+        var provider = Provider;
+        if (provider == null || _plane == null || !_plane.IsEngineOff) return;
+        provider.RequestRecover();
+        if (PlayerPrefs.GetInt(RecoverUsedKey, 0) == 0)
+        {
+            PlayerPrefs.SetInt(RecoverUsedKey, 1);
+            PlayerPrefs.Save();
+        }
+    }
+
+    /// <summary>On a fresh stall, name the combo - only the first few times
+    /// and never once the player has used it.</summary>
+    private void RefreshRecoverHint()
+    {
+        bool off = _plane != null && _plane.IsEngineOff && !_plane.IsRecovering;
+        if (off && !_wasEngineOff && Provider != null && Provider.UsesStick
+            && PlayerPrefs.GetInt(RecoverUsedKey, 0) == 0)
+        {
+            int shown = PlayerPrefs.GetInt(RecoverHintsKey, 0);
+            if (shown < RecoverMaxHints)
+            {
+                PlayerPrefs.SetInt(RecoverHintsKey, shown + 1);
+                PlayerPrefs.Save();
+                BannerOverlay.Show("STALL! DOUBLE-TAP STICK", UiTheme.Danger);
+            }
+        }
+        _wasEngineOff = off;
     }
 
     // --- visibility ------------------------------------------------------------
@@ -192,12 +245,14 @@ public class TouchControls : MonoBehaviour
     {
         var safe = Screen.safeArea;
         var screen = new Vector2Int(Screen.width, Screen.height);
-        if (safe == _appliedSafeArea && screen == _appliedScreen) return;
+        // Overlay canvas: pixels / scaleFactor = canvas units. The scaler sets
+        // scaleFactor after the first frame, so a change of it re-applies too.
+        float s = _canvas != null && _canvas.scaleFactor > 0f ? _canvas.scaleFactor : 1f;
+        if (safe == _appliedSafeArea && screen == _appliedScreen && Mathf.Approximately(s, _appliedScale)) return;
         _appliedSafeArea = safe;
         _appliedScreen = screen;
+        _appliedScale = s;
 
-        // Overlay canvas: pixels / scaleFactor = canvas units.
-        float s = _canvas != null && _canvas.scaleFactor > 0f ? _canvas.scaleFactor : 1f;
         _root.offsetMin = new Vector2(safe.xMin, safe.yMin) / s;
         _root.offsetMax = new Vector2(safe.xMax - screen.x, safe.yMax - screen.y) / s;
     }
@@ -240,14 +295,81 @@ public class TouchControls : MonoBehaviour
         knobImage.color = StickKnobColor;
         knobImage.raycastTarget = false;
 
+        BuildLeanArc(baseGo.transform);
+
         _stick = zoneGo.AddComponent<StickZone>();
         _stick.Base = baseRect;
         _stick.Knob = knobRect;
         _stick.BaseGroup = baseGroup;
         _stick.Travel = StickTravel;
         _stick.OnAxes = OnStickAxes;
+        _stick.OnDoubleTap = OnStickDoubleTap;
         _stick.IdleAlpha = StickIdleAlpha;
         _stick.Rest();
+    }
+
+    // --- LEAN arc (Prompts/32) ----------------------------------------------------
+
+    private void BuildLeanArc(Transform stickBase)
+    {
+        var go = new GameObject("LeanArc");
+        go.transform.SetParent(stickBase, false);
+        UiKit.Rect(go, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(LeanArcSize, LeanArcSize));
+        _leanArc = go.AddComponent<Image>();
+        _leanArc.sprite = UiSprites.Ring(LeanArcWidthFrac);
+        _leanArc.color = LeanArcColor;
+        _leanArc.raycastTarget = false;
+        _leanArc.type = Image.Type.Filled;
+        _leanArc.fillMethod = Image.FillMethod.Radial360;
+        _leanArc.fillOrigin = (int)Image.Origin360.Top;
+        _leanArc.fillAmount = 0f;
+        go.SetActive(false);
+    }
+
+    /// <summary>The arc fills with |lean| the way the phone rolls (clockwise
+    /// = clockwise). Reaching a full meter while the stick turns the same
+    /// way fires the other three channels: sound, haptic and - once per
+    /// install - the banner that names the mechanic.</summary>
+    private void RefreshLean()
+    {
+        if (_leanArc == null) return;
+        var provider = Provider;
+        bool on = provider != null && provider.UsesStick && provider.LeanActive;
+        if (_leanArc.gameObject.activeSelf != on) _leanArc.gameObject.SetActive(on);
+        if (!on)
+        {
+            _leanFull = false;
+            return;
+        }
+
+        float lean = provider.GetLean();
+        float a = Mathf.Abs(lean);
+        _leanArc.fillAmount = a;
+        _leanArc.fillClockwise = lean >= 0f;
+        _leanArc.color = a >= LeanFullAt ? UiTheme.Highlight : LeanArcColor;
+
+        float aligned = _plane != null ? _plane.LeanAligned01 : 0f;
+        if (aligned >= LeanFullAt && !_leanFull)
+        {
+            _leanFull = true;
+            OnLeanFull();
+        }
+        else if (aligned < LeanRearmBelow) _leanFull = false;
+    }
+
+    private void OnLeanFull()
+    {
+        SfxManager.PlayNamed("lean_full", 0.6f, 0.03f);
+        SfxManager.Haptic(HapticKind.Light);
+        StartCoroutine(Punch(_leanArc.transform));
+
+        if (PlayerPrefs.GetInt(LeanBannerKey, 0) != 0) return;
+        PlayerPrefs.SetInt(LeanBannerKey, 1);
+        PlayerPrefs.Save();
+        int pct = Mathf.RoundToInt(FlightTuning.Active.LeanBonus * 100f);
+        BannerOverlay.Show($"LEAN! +{pct} % TURN", UiTheme.Highlight);
+        Telemetry.Log("lean_first_full", ("scheme", ControlSettings.Scheme), ("bonus_pct", pct));
     }
 
     private void OnStickAxes(Vector2 raw)
@@ -277,7 +399,16 @@ public class TouchControls : MonoBehaviour
         public CanvasGroup BaseGroup;
         public float Travel;
         public System.Action<Vector2> OnAxes;
+        public System.Action OnDoubleTap;
         public float IdleAlpha;
+
+        // Double-tap: a short, still tap followed by a press within the window
+        private const float TapMaxSeconds = 0.25f;
+        private const float DoubleTapWindow = 0.30f;
+        private const float TapMaxTravel = 0.35f;   // of Travel
+        private float _downAt;
+        private float _tapUpAt = -1f;
+        private bool _moved;
 
         private RectTransform _rect;
         private int _pointer = int.MinValue;
@@ -306,6 +437,15 @@ public class TouchControls : MonoBehaviour
             if (_pointer != int.MinValue) return;   // one finger owns the stick
             if (!ToLocal(e, out var local)) return;
 
+            float now = Time.unscaledTime;
+            if (_tapUpAt >= 0f && now - _tapUpAt <= DoubleTapWindow)
+            {
+                _tapUpAt = -1f;
+                OnDoubleTap?.Invoke();
+            }
+            _downAt = now;
+            _moved = false;
+
             _pointer = e.pointerId;
             _touchId = TouchIdOf(e);
             _pressFrame = Time.frameCount;
@@ -324,6 +464,7 @@ public class TouchControls : MonoBehaviour
             if (!ToLocal(e, out var local)) return;
 
             var delta = local - _origin;
+            if (delta.magnitude > Travel * TapMaxTravel) _moved = true;
             Knob.anchoredPosition = Vector2.ClampMagnitude(delta, Travel);
             OnAxes?.Invoke(new Vector2(
                 Mathf.Clamp(delta.x / Travel, -1f, 1f),
@@ -339,6 +480,8 @@ public class TouchControls : MonoBehaviour
         public void Release()
         {
             bool wasHeld = _pointer != int.MinValue;
+            if (wasHeld)
+                _tapUpAt = !_moved && Time.unscaledTime - _downAt <= TapMaxSeconds ? Time.unscaledTime : -1f;
             _pointer = int.MinValue;
             _touchId = NoTouch;
             OnAxes?.Invoke(Vector2.zero);
