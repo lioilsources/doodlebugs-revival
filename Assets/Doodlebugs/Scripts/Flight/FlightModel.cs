@@ -54,6 +54,12 @@ public static class FlightModel
             float w = TurnRateAt(p, v);
             sb.Append($"\n  {v,5:0.0} | {w,5:0} | {TurnRadius(p, v),5:0.00} | {180f / w,4:0.00}s | {360f / w,4:0.00}s");
         }
+        // Prompts/32 §3: the same corner at a full LEAN meter
+        float wc = TurnRateAt(p, p.CornerSpeed);
+        float wl = wc * (1f + p.LeanBonus);
+        sb.Append($"\n  LEAN +{p.LeanBonus * 100f:0}%: {wc:0} -> {wl:0} deg/s, radius " +
+                  $"{p.CornerSpeed / (wc * Mathf.Deg2Rad):0.00} -> {p.CornerSpeed / (wl * Mathf.Deg2Rad):0.00}, " +
+                  $"180 {180f / wc:0.00}s -> {180f / wl:0.00}s");
         return sb.ToString();
     }
 }

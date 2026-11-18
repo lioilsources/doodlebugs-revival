@@ -101,9 +101,18 @@ public class InputManager : MonoBehaviour
     {
         InputSystem.onDeviceChange -= OnDeviceChange;
         ControlSettings.Changed -= OnSchemeChanged;
+        ControlSettings.LeanChanged -= OnLeanChanged;
     }
 
     private void OnSchemeChanged(ControlScheme scheme) => mobileProvider?.SetScheme(scheme);
+
+    private void OnLeanChanged(bool on) => mobileProvider?.RefreshLean();
+
+    // LEAN (Prompts/32): the meter starts from zero after the app comes back.
+    private void OnApplicationFocus(bool focus)
+    {
+        if (!focus) mobileProvider?.LeanSensor.Reset();
+    }
 
     private void InitializeInputProvider()
     {
@@ -123,6 +132,7 @@ public class InputManager : MonoBehaviour
             gyroProvider.Initialize();
             mobileProvider = new TouchInputProvider(gyroProvider, ControlSettings.Scheme);
             ControlSettings.Changed += OnSchemeChanged;
+            ControlSettings.LeanChanged += OnLeanChanged;
             ControlSettings.LogBoot();
 
             if (forceGamepadInput || GamepadInputProvider.IsGamepadConnected())

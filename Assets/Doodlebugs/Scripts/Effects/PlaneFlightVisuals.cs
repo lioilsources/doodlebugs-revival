@@ -9,6 +9,9 @@ using UnityEngine;
 /// - half-roll: flying wheels-up for a moment rolls the sprite upright
 ///   (scale.y through zero, flipY at the midpoint)
 /// - wingtip trails in a hard turn
+/// - LEAN (Prompts/32 §4.10): turning faster than the envelope allows for
+///   longer than a moment brightens and stretches the wingtip trails - from
+///   the observed heading, so opponents see why that plane out-turned them
 /// - stall shudder near the stall speed while climbing
 /// - engine cut / relight puffs; sounds and haptics for the owner only
 ///
@@ -24,6 +27,11 @@ public class PlaneFlightVisuals : MonoBehaviour
     private const float InvertedHoldSeconds = 0.25f;
     private const float TrailLoad = 0.7f;         // fraction of the preset turn rate
     private const float WingSpan = 0.55f;         // local units of PlaneHolder (scale 2)
+    private const float OverEnvelope = 1.04f;     // measured rate vs TurnRateAt
+    private const float OverHoldSeconds = 0.25f;
+    private const float LeanTrailLifetime = 2.2f; // x the normal trail lifetime
+    private const float LeanTrailSize = 1.4f;
+    private static readonly Color LeanTrailTint = new Color(1f, 0.93f, 0.55f);
 
     private PlayerController _pc;
     private Transform _plane;
@@ -40,6 +48,9 @@ public class PlaneFlightVisuals : MonoBehaviour
     private float _shake;
     private float _nextStallTick;
     private float _flashUntil;
+    private float _overFor;
+    private bool _leanLook;
+    private TrailPreset _trailPreset;
 
     // Arsenal (Prompts/29 §6)
     private Shooting _shooting;
@@ -65,6 +76,7 @@ public class PlaneFlightVisuals : MonoBehaviour
             Speed = 0f, Jitter = 0.01f, StartSizeCurveEnd = 0.4f,
             ColorStart = Color.white, ColorEnd = new Color(0.8f, 0.9f, 1f), AlphaPeak = 0.7f,
         };
+        _trailPreset = preset;
         int order = _sprite != null ? _sprite.sortingOrder - 1 : 0;
         _trailA = EffectAssets.CreateTrailSystem(transform, preset, order);
         _trailB = EffectAssets.CreateTrailSystem(transform, preset, order);
@@ -228,8 +240,18 @@ public class PlaneFlightVisuals : MonoBehaviour
         UpdateBeam(parked);
         UpdateAimGuide(parked);
 
+        // --- over-envelope turn (LEAN) -----------------------------------------
+        // A snap also beats the envelope for ~0.2 s; the owner knows when it
+        // snapped and skips that window, remote clients only have the hold time.
+        float handling = _stats != null ? _stats.Handling : 1f;
+        float envelope = FlightModel.TurnRateAt(preset, _pc.Speed, handling);
+        bool over = !parked && !_pc.IsEngineOff && absW > envelope * OverEnvelope
+                    && Time.time >= _flashUntil + 0.1f;
+        _overFor = over ? _overFor + dt : 0f;
+        SetLeanLook(_overFor >= OverHoldSeconds);
+
         // --- wingtip trails ---------------------------------------------------
-        bool trails = !parked && (hardTurn || Time.time < _flashUntil) && !_pc.IsEngineOff;
+        bool trails = !parked && (hardTurn || _leanLook || Time.time < _flashUntil) && !_pc.IsEngineOff;
         SetTrail(_trailA, trails, +1f, bank * roll);
         SetTrail(_trailB, trails, -1f, bank * roll);
     }
@@ -291,11 +313,27 @@ public class PlaneFlightVisuals : MonoBehaviour
         }
     }
 
+    private void SetLeanLook(bool on)
+    {
+        if (on == _leanLook || _trailPreset == null) return;
+        _leanLook = on;
+        foreach (var ps in new[] { _trailA, _trailB })
+        {
+            if (ps == null) continue;
+            var main = ps.main;
+            float l = on ? LeanTrailLifetime : 1f;
+            float z = on ? LeanTrailSize : 1f;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(_trailPreset.LifetimeMin * l, _trailPreset.LifetimeMax * l);
+            main.startSize = new ParticleSystem.MinMaxCurve(_trailPreset.SizeMin * z, _trailPreset.SizeMax * z);
+            main.startColor = on ? LeanTrailTint : Color.white;
+        }
+    }
+
     private void SetTrail(ParticleSystem ps, bool on, float side, float bank)
     {
         if (ps == null) return;
         ps.transform.localPosition = new Vector3(-0.15f, side * WingSpan * bank, 0f);
         var emission = ps.emission;
-        emission.rateOverTime = on ? 60f : 0f;
+        emission.rateOverTime = on ? (_leanLook ? 90f : 60f) : 0f;
     }
 }

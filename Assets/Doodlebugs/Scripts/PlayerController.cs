@@ -46,6 +46,23 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// <summary>Owner-side, 0..1: how hard the plane is turning right now.</summary>
     public float TurnLoad01 => Mathf.Clamp01(Mathf.Abs(_omega) / Mathf.Max(1f, P.TurnRate));
 
+    // LEAN (Prompts/32): owner-side, last FixedUpdate. No network state - the
+    // bonus is computed on the owner, whose movement is authoritative.
+    private float _leanInput;       // meter from the provider, -1..1
+    private float _leanAligned;     // meter in the stick's direction, 0..1
+    private float _leanUsable;      // ... scaled by stick deflection, 0..1
+
+    /// <summary>Owner-side, -1..1: the LEAN meter as the provider reports it.</summary>
+    public float LeanInput => _leanInput;
+
+    /// <summary>Owner-side, 0..1: how much of the LEAN bonus applies right
+    /// now (engine on, stick turning the meter's way, times stick deflection).</summary>
+    public float Lean01 => _leanUsable;
+
+    /// <summary>Owner-side, 0..1: the meter in the stick's direction,
+    /// whatever the deflection - 1 = "full lean" for the feedback channels.</summary>
+    public float LeanAligned01 => _leanAligned;
+
     public bool IsBoosting => Time.time < _boostUntil;
 
     // Synchronized state across network
@@ -619,7 +636,11 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
     void FixedUpdate() {
         // Parked in the hangar - no movement, no out-of-bounds respawn spam
-        if (NetInHangar.Value) return;
+        if (NetInHangar.Value)
+        {
+            _leanInput = _leanAligned = _leanUsable = 0f;
+            return;
+        }
 
         // Check if we should process input:
         // - Regular network player: IsOwner must be true
@@ -698,6 +719,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
     {
         float horizontalInput = 0f;
         float verticalInput = 0f;
+        float lean = 0f;
 
         var inputProvider = GetInputProvider();
         if (inputProvider != null)
@@ -711,13 +733,14 @@ public class PlayerController : NetworkBehaviour, IDamagable
                 horizontalInput = inputProvider.GetHorizontalInput();
                 verticalInput = inputProvider.GetVerticalInput();
             }
+            lean = IsBot ? 0f : inputProvider.GetLean();
         }
         else if (Time.frameCount % 300 == 0) // Log every 5 seconds at 60fps
         {
             Debug.LogWarning($"[PlayerController] No input provider available. LocalPlayerIndex={LocalPlayerIndex}");
         }
 
-        rotatePlane(horizontalInput);
+        rotatePlane(horizontalInput, lean);
         movePlane(verticalInput);
     }
 
@@ -831,7 +854,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         // Speed is not lost immediately - keep velocity
     }
 
-    private void rotatePlane(float x)
+    private void rotatePlane(float x, float lean = 0f)
     {
         float dt = Time.fixedDeltaTime;
         float now = Time.time;
@@ -862,8 +885,15 @@ public class PlayerController : NetworkBehaviour, IDamagable
         else
         {
             float snapMul = now < _snapUntil ? P.SnapBoost : 1f;
-            target = x * FlightModel.TurnRateAt(P, speed, HandlingFactor) * snapMul;
+            // LEAN (Prompts/32 D1/D3): only with the engine on, only in the
+            // stick's direction; snap x lean never beyond 1.8x.
+            float leanMul = LeanModel.Multiplier(P, lean, x);
+            target = x * FlightModel.TurnRateAt(P, speed, HandlingFactor)
+                   * Mathf.Min(snapMul * leanMul, LeanModel.MaxTurnMultiplier);
         }
+        _leanInput = lean;
+        _leanAligned = engineOff || x == 0f ? 0f : Mathf.Max(0f, lean * Mathf.Sign(x));
+        _leanUsable = engineOff ? 0f : LeanModel.Usable(lean, x);
         _omega = FlightModel.StepOmega(P, _omega, target, dt);
 
         // Knockback spin (Prompts/29): dissolved into the heading over ~0.2 s

@@ -47,6 +47,14 @@ public interface IInputProvider
     }
 
     /// <summary>
+    /// LEAN (Prompts/32): the phone-roll meter, -1..1, + = clockwise (same
+    /// sign as the rotation input). It never turns the plane by itself - it
+    /// only adds turn rate in the stick's direction. Only the touch provider
+    /// has one; gamepad, keyboard and the bot stay at 0 (D6).
+    /// </summary>
+    float GetLean() => 0f;
+
+    /// <summary>
     /// Called every frame to update input state (for touch tracking)
     /// </summary>
     void UpdateInput();

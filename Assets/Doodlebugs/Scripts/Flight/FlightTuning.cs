@@ -34,6 +34,14 @@ public class FlightPreset
     public float DiveBoost;
     public float StallTurnRate;   // deg/s with the engine off
 
+    // LEAN (Prompts/32 §3): rolling the phone with the stick adds up to
+    // LeanBonus turn rate. Mirrored in tools/flight/lean_sim.py.
+    public float LeanBonus = 0.15f;   // fraction of the turn rate at a full meter
+    public float LeanTau = 2.0f;      // s, the meter leaks a held pose away
+    public float LeanDeadDeg = 6f;    // swing below this earns nothing (drift, jitter)
+    public float LeanFullDeg = 24f;   // swing for a full meter
+    public float LeanCapDeg = 36f;    // swing never stores more than this
+
     // Engine-off fall and relight window - unchanged from the old Novice
     // profile, which is the only one that ever flew.
     public float MaxGravity = 0.125f;
@@ -59,6 +67,7 @@ public static class FlightTuning
         TurnRate = 150f, EnvAtMin = 0.75f, EnvAtMax = 0.70f, TurnAttack = 0.05f, TurnRelease = 0.04f,
         SnapBoost = 1f, SnapSeconds = 0f, SnapCooldown = 0f,
         TurnDrag = 0.5f, ThrottleRate = 7f, ClimbDrag = 1f, DiveBoost = 3f, StallTurnRate = 320f,
+        LeanBonus = 0.10f, LeanTau = 2.0f, LeanDeadDeg = 6f, LeanFullDeg = 24f, LeanCapDeg = 36f,
     };
 
     public static readonly FlightPreset Arcade = new FlightPreset
@@ -68,6 +77,7 @@ public static class FlightTuning
         TurnRate = 210f, EnvAtMin = 0.70f, EnvAtMax = 0.62f, TurnAttack = 0.07f, TurnRelease = 0.05f,
         SnapBoost = 1.5f, SnapSeconds = 0.18f, SnapCooldown = 0.8f,
         TurnDrag = 0.9f, ThrottleRate = 9f, ClimbDrag = 1.4f, DiveBoost = 3.5f, StallTurnRate = 320f,
+        LeanBonus = 0.15f, LeanTau = 2.0f, LeanDeadDeg = 6f, LeanFullDeg = 24f, LeanCapDeg = 36f,
     };
 
     public static readonly FlightPreset Ace = new FlightPreset
@@ -77,6 +87,7 @@ public static class FlightTuning
         TurnRate = 260f, EnvAtMin = 0.65f, EnvAtMax = 0.55f, TurnAttack = 0.08f, TurnRelease = 0.05f,
         SnapBoost = 1.6f, SnapSeconds = 0.20f, SnapCooldown = 0.6f,
         TurnDrag = 1.1f, ThrottleRate = 11f, ClimbDrag = 1.6f, DiveBoost = 4f, StallTurnRate = 320f,
+        LeanBonus = 0.15f, LeanTau = 2.0f, LeanDeadDeg = 6f, LeanFullDeg = 24f, LeanCapDeg = 36f,
     };
 
     public static readonly FlightPreset[] Presets = { ClassicPlus, Arcade, Ace };
@@ -90,11 +101,19 @@ public static class FlightTuning
     public static float RateTurnExpo = 1.8f;
     public static float RateTurnDeadZone = 0.10f;
 
-    public static readonly string[] StickFields = { "PointDeadZone", "PointGainDeg", "RateTurnExpo", "RateTurnDeadZone" };
+    /// <summary>LEAN (Prompts/32): +1 trusts the documented gyro z sign
+    /// (LeanSensor), -1 flips it. Device-local - a sensor whose z runs the
+    /// other way is fixed in the Flight Lab without a build.</summary>
+    public static float LeanGyroSign = 1f;
 
-    private static readonly float[] StickDefaults = { 0.22f, 22f, 1.8f, 0.10f };
+    public static readonly string[] StickFields = { "PointDeadZone", "PointGainDeg", "RateTurnExpo", "RateTurnDeadZone", "LeanGyroSign" };
 
-    public static float GetStick(int i) => i switch { 0 => PointDeadZone, 1 => PointGainDeg, 2 => RateTurnExpo, _ => RateTurnDeadZone };
+    private static readonly float[] StickDefaults = { 0.22f, 22f, 1.8f, 0.10f, 1f };
+
+    public static float GetStick(int i) => i switch
+    {
+        0 => PointDeadZone, 1 => PointGainDeg, 2 => RateTurnExpo, 3 => RateTurnDeadZone, _ => LeanGyroSign,
+    };
 
     public static void SetStick(int i, float v, bool save = true)
     {
@@ -103,7 +122,8 @@ public static class FlightTuning
             case 0: PointDeadZone = Mathf.Clamp(v, 0.05f, 0.6f); break;
             case 1: PointGainDeg = Mathf.Clamp(v, 5f, 60f); break;
             case 2: RateTurnExpo = Mathf.Clamp(v, 1f, 3f); break;
-            default: RateTurnDeadZone = Mathf.Clamp(v, 0f, 0.4f); break;
+            case 3: RateTurnDeadZone = Mathf.Clamp(v, 0f, 0.4f); break;
+            default: LeanGyroSign = v < 0f ? -1f : 1f; break;
         }
         if (save) { PlayerPrefs.SetFloat("flightlab.stick." + i, GetStick(i)); PlayerPrefs.Save(); }
     }
@@ -177,6 +197,7 @@ public static class FlightTuning
         "MinSpeed", "CornerSpeed", "CruiseSpeed", "MaxSpeed", "BoostSpeed", "TurnRate",
         "EnvAtMin", "EnvAtMax", "TurnAttack", "TurnRelease", "SnapBoost", "SnapSeconds",
         "SnapCooldown", "TurnDrag", "ThrottleRate", "ClimbDrag", "DiveBoost", "StallTurnRate",
+        "LeanBonus", "LeanTau", "LeanDeadDeg", "LeanFullDeg", "LeanCapDeg",
     };
 
     public static IReadOnlyList<string> FieldNames => Fields;

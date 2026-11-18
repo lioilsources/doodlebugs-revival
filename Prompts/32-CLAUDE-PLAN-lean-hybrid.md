@@ -1,6 +1,8 @@
 # LEAN — hybridní ovládání: páka řídí, pohyb telefonu přidává (plán implementace)
 
-Status (2026-11-18): **plán, neimplementováno.** Vlastník téhož dne potvrdil
+Status (2026-11-18): **vlna 1 implementována**, kompilace ověřena Roslynem,
+zařízení ne (znaménko gyra ověřit živým řádkem ve Flight Labu, přepínač
+`LeanGyroSign`). Původně: plán. Vlastník téhož dne potvrdil
 D3 (bonus 15 %), D5 (zapnuto od začátku) a D7 (vypínač hostitele až ve vlně
 2). Ostatní rozhodnutí v §2 mají výchozí hodnotu, Opus může začít hned. Čísla v §3 pocházejí ze simulace
 `tools/flight/lean_sim.py`, na zařízení ověřená nejsou.
