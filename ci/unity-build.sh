@@ -87,6 +87,35 @@ find_unity() {
 
 UNITY="$(find_unity)"
 
+# ── One Library per target ───────────────────────────────────────────────────
+# Library/ holds the imported assets for ONE target. Switching iOS <-> Android
+# re-compresses every texture (4096 px backdrops, terrain strips, skins): 1.5-2.5 h
+# on the Mac Mini instead of ~30 min. With UNITY_LIBRARY_PER_TARGET=1 (CI sets it)
+# each target keeps its own copy next to the project as Library.<target> and the
+# right one is renamed into place before Unity starts - a rename, not a copy.
+# The first switch clones the current Library (APFS clonefile, no extra space
+# until the two diverge), so neither target starts from an empty one.
+if [[ "${UNITY_LIBRARY_PER_TARGET:-0}" == "1" ]]; then
+  MARK="Library/.ci-build-target"
+  CURRENT="$(cat "$MARK" 2>/dev/null || true)"
+  if [[ -d Library && -n "$CURRENT" && "$CURRENT" != "$BUILD_TARGET" ]]; then
+    rm -rf "Library.$CURRENT"
+    if [[ -d "Library.$BUILD_TARGET" ]]; then
+      mv Library "Library.$CURRENT"
+      mv "Library.$BUILD_TARGET" Library
+      echo "library: parked $CURRENT, restored $BUILD_TARGET"
+    else
+      cp -cR Library "Library.$CURRENT" 2>/dev/null || cp -R Library "Library.$CURRENT"
+      echo "library: kept a copy for $CURRENT, $BUILD_TARGET reimports once"
+    fi
+  elif [[ ! -d Library && -d "Library.$BUILD_TARGET" ]]; then
+    mv "Library.$BUILD_TARGET" Library
+    echo "library: restored $BUILD_TARGET"
+  fi
+  mkdir -p Library
+  echo "$BUILD_TARGET" > "$MARK"
+fi
+
 BUILD_NUMBER="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-0}}"
 
 EXTRA_ARGS=()

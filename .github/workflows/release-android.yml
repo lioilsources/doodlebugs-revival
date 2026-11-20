@@ -30,6 +30,7 @@ jobs:
       contents: write
 
     env:
+      UNITY_LIBRARY_PER_TARGET: "1"   # ci/unity-build.sh: one Library per target
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}

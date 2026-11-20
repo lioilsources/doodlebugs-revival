@@ -31,6 +31,7 @@ jobs:
     timeout-minutes: 180
 
     env:
+      UNITY_LIBRARY_PER_TARGET: "1"   # ci/unity-build.sh: one Library per target
       # fastlane asks xcodebuild for the build settings of the Unity project
       # (~3000 files); with the default 3 s timeout it gave up on a busy runner.
       FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: "60"
