@@ -162,6 +162,48 @@ namespace Doodlebugs.Editor
             }
         }
 
+        /// <summary>
+        /// Store screenshots (plan 34): an iOS Simulator build with the
+        /// StoreShotDirector compiled in. It flies itself through the boot
+        /// screen, the hangar tabs and a bot-vs-bot dogfight and saves PNGs in
+        /// the app's Documents folder. Never shipped - tools/store/shoot_simulator.sh
+        /// drives it.
+        ///   -executeMethod Doodlebugs.Editor.BuildScript.BuildIOSStoreShots -buildPath Builds/iOS-shots
+        /// </summary>
+        public static void BuildIOSStoreShots()
+        {
+            var sdk = PlayerSettings.iOS.sdkVersion;
+            try
+            {
+                var outputPath = GetArg("-buildPath") ?? "Builds/iOS-shots";
+                EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.iOS, BuildTarget.iOS);
+                PlayerSettings.iOS.sdkVersion = iOSSdkVersion.SimulatorSDK;
+                if (Directory.Exists(outputPath))
+                    Directory.Delete(outputPath, recursive: true);
+                Directory.CreateDirectory(outputPath);
+
+                Log($"building iOS Simulator store-shot project → {outputPath}");
+                var options = new BuildPlayerOptions
+                {
+                    scenes = EnabledScenes,
+                    locationPathName = outputPath,
+                    target = BuildTarget.iOS,
+                    targetGroup = BuildTargetGroup.iOS,
+                    options = BuildOptions.None,
+                    extraScriptingDefines = new[] { "DOODLEBUGS_STORESHOTS" },
+                };
+                var report = BuildPipeline.BuildPlayer(options);
+                PlayerSettings.iOS.sdkVersion = sdk;
+                Finish(report);
+            }
+            catch (Exception e)
+            {
+                PlayerSettings.iOS.sdkVersion = sdk;
+                Debug.LogError($"[BuildScript] store-shot build threw: {e}");
+                EditorApplication.Exit(1);
+            }
+        }
+
         // ── Android ───────────────────────────────────────────────────────────
 
         public static void BuildAndroid()
