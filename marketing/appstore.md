@@ -68,7 +68,7 @@ submitting (required for the EU storefronts).
 ## Release
 Manual release after approval (plan 33 R7).
 
-## App Review notes (paste as is, then add the video link)
+## App Review notes (paste as is)
 
 ```
 Local multiplayer dogfight for 2-8 nearby devices. No accounts, no
@@ -83,8 +83,6 @@ automatically in about 10 seconds. Tap READY on both. First to 3 kills
 wins the round, best of 5.
 
 Local Network and Bluetooth are used only to find nearby players.
-
-Demo video of two devices pairing and playing: <LINK>
 ```
 
 ## Screenshots (landscape)

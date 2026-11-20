@@ -85,7 +85,11 @@ public class StoreShotDirector : MonoBehaviour
     private IEnumerator Shot(string name)
     {
         yield return new WaitForEndOfFrame();
-        var tex = ScreenCapture.CaptureScreenshotAsTexture();
+        // ReadPixels at the end of the frame, not ScreenCapture: the project
+        // has the ScreenCapture module disabled.
+        var tex = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
+        tex.ReadPixels(new Rect(0, 0, Screen.width, Screen.height), 0, 0);
+        tex.Apply();
         File.WriteAllBytes(Path.Combine(_dir, name + ".png"), tex.EncodeToPNG());
         Destroy(tex);
         Log($"{name} {Screen.width}x{Screen.height}");

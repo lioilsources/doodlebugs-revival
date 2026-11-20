@@ -173,11 +173,14 @@ namespace Doodlebugs.Editor
         public static void BuildIOSStoreShots()
         {
             var sdk = PlayerSettings.iOS.sdkVersion;
+            var simArch = PlayerSettings.iOS.simulatorSdkArchitecture;
             try
             {
                 var outputPath = GetArg("-buildPath") ?? "Builds/iOS-shots";
                 EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.iOS, BuildTarget.iOS);
                 PlayerSettings.iOS.sdkVersion = iOSSdkVersion.SimulatorSDK;
+                // Apple-silicon Macs only run arm64 simulator apps; the default is x86_64.
+                PlayerSettings.iOS.simulatorSdkArchitecture = AppleMobileArchitectureSimulator.ARM64;
                 if (Directory.Exists(outputPath))
                     Directory.Delete(outputPath, recursive: true);
                 Directory.CreateDirectory(outputPath);
@@ -194,11 +197,13 @@ namespace Doodlebugs.Editor
                 };
                 var report = BuildPipeline.BuildPlayer(options);
                 PlayerSettings.iOS.sdkVersion = sdk;
+                PlayerSettings.iOS.simulatorSdkArchitecture = simArch;
                 Finish(report);
             }
             catch (Exception e)
             {
                 PlayerSettings.iOS.sdkVersion = sdk;
+                PlayerSettings.iOS.simulatorSdkArchitecture = simArch;
                 Debug.LogError($"[BuildScript] store-shot build threw: {e}");
                 EditorApplication.Exit(1);
             }

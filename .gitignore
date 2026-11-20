@@ -145,3 +145,6 @@ tools/store/out/
 
 # Local config (see .env.example)
 .env
+
+# Local run logs (tools/store/shoot_simulator.sh)
+/run/
