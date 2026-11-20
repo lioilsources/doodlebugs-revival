@@ -124,7 +124,7 @@ platform :android do
     }
 
     begin
-      firebase_app_distribution(common.merge(groups: ENV["FIREBASE_GROUPS"] || "testers"))
+      firebase_app_distribution(common.merge(groups: ENV["FIREBASE_GROUPS"] || "alfa"))
     rescue => e
       # The upload and the hand-out to testers are two separate API calls, and
       # only the second one is failing here ("HALTED release must have
@@ -137,6 +137,10 @@ platform :android do
       firebase_app_distribution(common)
       UI.important("Uploaded, but NOT distributed to testers. Check the group " \
                    "alias in FIREBASE_GROUPS against the Firebase console.")
+      # A log line went unnoticed for a month (v2.9.2-v2.12.0: alias "testers"
+      # did not exist). A workflow warning shows on the run summary instead.
+      puts "::warning title=Firebase not distributed::#{e.message} - " \
+           "group '#{ENV['FIREBASE_GROUPS'] || 'alfa'}', nobody got an e-mail. Hand the release out in the console."
     end
   end
 end
