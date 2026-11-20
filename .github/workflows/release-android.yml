@@ -36,7 +36,7 @@ jobs:
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       FIREBASE_ANDROID_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
-      FIREBASE_GROUPS: testers
+      FIREBASE_GROUPS: alfa   # tester group alias, same in every app (DevConventions shared/stores.md)
       FIREBASE_SA_PATH: ${{ github.workspace }}/.firebase-sa.json
 
     steps:
