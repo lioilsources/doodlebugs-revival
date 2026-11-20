@@ -114,12 +114,12 @@ change was intentional.
 broken build would go green and publish an empty artifact. `unity-build.sh` then
 also asserts the output path exists.
 
-**Jedna Library na platformu.** Přepnutí iOS ↔ Android znovu komprimuje všechny
-textury (1,5–2,5 h místo ~30 min). S `UNITY_LIBRARY_PER_TARGET=1` (nastavují ho
-oba workflow) `unity-build.sh` drží `Library.iOS` / `Library.Android` vedle
-projektu a před startem Unity přejmenuje správnou na `Library`. Značka cíle je
-v `Library/.ci-build-target`. První přepnutí naklonuje stávající Library (APFS
-clone). Smazat obě stačí `rm -rf Library Library.*` – další build importuje znovu.
+**One Library per target.** Switching iOS <-> Android re-compresses every
+texture (1.5-2.5 h instead of ~30 min). With `UNITY_LIBRARY_PER_TARGET=1` (both
+workflows set it) `unity-build.sh` keeps `Library.iOS` / `Library.Android` next
+to the project and renames the right one to `Library` before Unity starts; the
+target is marked in `Library/.ci-build-target`. The first switch clones the
+current Library (APFS clone). To start over: `rm -rf Library Library.*`.
 
 **`-logFile -`** streams the editor log to stdout. Without it Unity logs to a file
 and the job shows nothing at all until it hits the timeout.
