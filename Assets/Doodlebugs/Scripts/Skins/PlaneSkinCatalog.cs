@@ -115,6 +115,26 @@ public static class PlaneSkinCatalog
 
     public static int Count => All.Length;
 
+    /// <summary>Premium skins are offered (shown, locked until bought) only in
+    /// builds with the store (DOODLEBUGS_IAP). Without it they are hidden
+    /// everywhere, not shown locked (plan 33 R2/W1).</summary>
+#if DOODLEBUGS_IAP
+    public const bool PremiumOffered = true;
+#else
+    public const bool PremiumOffered = false;
+#endif
+
+    /// <summary>Skins a player can see in the picker in this build.</summary>
+    public static int OfferedCount
+    {
+        get
+        {
+            int n = 0;
+            foreach (var d in All) if (PremiumOffered || !d.IsPremium) n++;
+            return n;
+        }
+    }
+
     public static PlaneSkinDef Get(int id)
     {
         _byId ??= BuildIndex();

@@ -6,8 +6,8 @@ using UnityEngine.UI;
 /// PLANE tab (Prompts/30 §4): a strip of shapes (one-of-a-kind per match,
 /// taken ones show who flies them) above a strip of paints. Every tap goes
 /// to the server like before; the big plane in the hangar's left column
-/// shows the result. Premium paints say "soon" and buy nothing while the
-/// store products do not exist (D4).
+/// shows the result. Premium paints are hidden unless the build has the
+/// store (PlaneSkinCatalog.PremiumOffered, plan 33 W1).
 /// </summary>
 public class PlaneTab : MonoBehaviour
 {
@@ -18,6 +18,13 @@ public class PlaneTab : MonoBehaviour
     private Filter _filter = Filter.All;
     private float _refreshAt = -1f;
     private int _lastClaimHash;
+
+    // Tabs alive right now. A theme change or a second PLANE tap builds the new
+    // tab before the old one's OnDestroy runs (end of frame); trimming then
+    // freed the composites the new tab already showed (plan 33 U2).
+    private static int _live;
+
+    private void Awake() => _live++;
 
     public static PlaneTab Build(RectTransform parent)
     {
@@ -78,7 +85,11 @@ public class PlaneTab : MonoBehaviour
         hl.childForceExpandWidth = false;
         hl.childAlignment = TextAnchor.MiddleLeft;
         Ui.AutoText(head, "Title", "PAINT", UiTheme.Label, 15, UiTheme.OnBackdrop);
-        foreach (Filter f in System.Enum.GetValues(typeof(Filter)))
+        if (!PlaneSkinCatalog.PremiumOffered)
+        {
+            Ui.AutoText(head, "Count", PlaneSkinCatalog.OfferedCount.ToString(), UiTheme.Label, 15, UiTheme.TextDim);
+        }
+        else foreach (Filter f in System.Enum.GetValues(typeof(Filter)))
         {
             string text = f == Filter.All ? "All " + PlaneSkinCatalog.Count
                         : f == Filter.Free ? "Free" : "Premium · soon";
@@ -208,12 +219,16 @@ public class PlaneTab : MonoBehaviour
     private void BuildPaints(int model, int skin)
     {
         foreach (Transform c in _paintContent) Destroy(c.gameObject);
-        var iap = IAPManager.Instance;
-
         for (int i = 0; i < PlaneSkinCatalog.Count; i++)
         {
             var def = PlaneSkinCatalog.Get(i);
+            if (def.IsPremium && !PlaneSkinCatalog.PremiumOffered) continue;
+#if DOODLEBUGS_IAP
+            var iap = IAPManager.Instance;
             bool unlocked = iap == null || iap.IsSkinUnlocked(i);
+#else
+            bool unlocked = true;
+#endif
             if (_filter == Filter.Free && def.IsPremium) continue;
             if (_filter == Filter.Premium && !def.IsPremium) continue;
             bool mine = i == skin;
@@ -277,6 +292,7 @@ public class PlaneTab : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (--_live > 0) return;   // a newer tab still shows these previews
         // Free the composited previews, keep what planes wear
         var worn = new List<(int, int)>();
         foreach (var a in FindObjectsByType<PlaneAppearance>(FindObjectsSortMode.None))

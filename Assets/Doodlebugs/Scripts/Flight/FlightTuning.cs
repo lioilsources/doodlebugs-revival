@@ -137,9 +137,20 @@ public static class FlightTuning
         }
     }
 
+    /// <summary>Flight Lab exists in this build: the editor and test builds
+    /// (BuildScript defines DOODLEBUGS_LAB for every build that is not a release
+    /// tag). Store builds ignore lab numbers a TestFlight build may have saved
+    /// on the same device (plan 33 U3).</summary>
+#if DOODLEBUGS_LAB || UNITY_EDITOR
+    public const bool LabBuild = true;
+#else
+    public const bool LabBuild = false;
+#endif
+
     /// <summary>Boot: load saved stick feel and log the active preset's check table.</summary>
     public static void Boot()
     {
+        if (LabBuild)
         for (int i = 0; i < StickDefaults.Length; i++)
             if (PlayerPrefs.HasKey("flightlab.stick." + i)) SetStick(i, PlayerPrefs.GetFloat("flightlab.stick." + i), false);
         Debug.Log(FlightModel.Describe(Compiled));
@@ -160,7 +171,7 @@ public static class FlightTuning
             if (!_labLoaded)
             {
                 _labLoaded = true;
-                _lab = Parse(PlayerPrefs.GetString(LabKey, ""));
+                _lab = LabBuild ? Parse(PlayerPrefs.GetString(LabKey, "")) : null;
             }
             return _lab;
         }

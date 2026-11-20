@@ -409,9 +409,23 @@ public class HangarScreen : MonoBehaviour
         }
         _bootStatus = Ui.Text(_boot, "Status", "SEARCHING FOR GAME...", UiTheme.Label, 20, UiTheme.Highlight, TextAnchor.MiddleCenter);
         Ui.Place(_bootStatus.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -30f), new Vector2(700f, 30f));
+
+        // PRACTICE (plan 33 W2): skip the search and host now. One device - an
+        // App Store reviewer, a player on a train - flies within seconds; the
+        // host still advertises, so a friend's device pairs all the same.
+        var practice = Ui.BigButton(_boot, "Practice", "PRACTICE", UiTheme.Confirm, PressPractice);
+        Ui.Place(practice.Panel.Root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -92f), new Vector2(240f, 56f));
         var ver = Ui.Text(_boot, "Version", Doodlebugs.UI.ConnectionUI.GameVersion, UiTheme.Body, 13,
             UiTheme.WithAlpha(UiTheme.OnBackdrop, 0.6f), TextAnchor.MiddleCenter);
         Ui.Place(ver.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 24f), new Vector2(400f, 20f));
+    }
+
+    private void PressPractice()
+    {
+        var cm = Doodlebugs.Network.ConnectionManager.Instance;
+        if (cm == null || !cm.HostNow()) return;
+        SfxManager.PlayConfirm();
+        SfxManager.Haptic(HapticKind.Light);
     }
 
     // --- open / close -------------------------------------------------------------

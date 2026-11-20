@@ -161,6 +161,7 @@ public class SettingsOverlay : MonoBehaviour
 
     private void TitleTap()
     {
+        if (!FlightTuning.LabBuild) return;   // no Flight Lab in store builds (plan 33 U3)
         _titleTaps = Time.unscaledTime - _lastTitleTap < 0.6f ? _titleTaps + 1 : 1;
         _lastTitleTap = Time.unscaledTime;
         if (_titleTaps >= 5)
