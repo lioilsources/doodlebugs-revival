@@ -39,8 +39,9 @@ fi
 case "$PLATFORM" in
   ios)     BUILD_METHOD="BuildIOS"     BUILD_TARGET="iOS" ;;
   android) BUILD_METHOD="BuildAndroid" BUILD_TARGET="Android"
-           # Unity wants a file path for an APK; accept a bare directory too.
-           [[ "$OUTPUT" == *.apk ]] || OUTPUT="${OUTPUT%/}/doodlebugs.apk" ;;
+           # Unity wants a file path; .aab builds an App Bundle for Google Play
+           # (BuildScript switches on the suffix). A bare directory gets an APK.
+           [[ "$OUTPUT" == *.apk || "$OUTPUT" == *.aab ]] || OUTPUT="${OUTPUT%/}/doodlebugs.apk" ;;
   *)       echo "unknown platform '$PLATFORM' (expected ios or android)" >&2; exit 2 ;;
 esac
 

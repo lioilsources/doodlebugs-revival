@@ -28,6 +28,7 @@ ci/
   install-profile.sh  installs the provisioning profile, exports its name/UUID/team
   lock-keychain.sh    teardown for the two above
   sign-apk.sh         signs the APK with apksigner
+  sign-aab.sh         signs the Play App Bundle with jarsigner (same upload key)
 fastlane/
   Appfile Fastfile Pluginfile
 Assets/Doodlebugs/Editor/
@@ -51,10 +52,10 @@ than introducing a parallel set:
 | `APPSTORE_ISSUER_ID` | `Fastfile` | |
 | `APP_STORE_CONNECT_API_KEY_BASE64` | `Fastfile` | preferred |
 | `APPSTORE_API_PRIVATE_KEY` | `Fastfile` | fallback, raw `.p8` contents |
-| `ANDROID_KEYSTORE_BASE64` | `sign-apk.sh` | base64 keystore |
-| `ANDROID_KEYSTORE_PASSWORD` | `sign-apk.sh` | |
-| `ANDROID_KEY_ALIAS` | `sign-apk.sh` | JKS path only |
-| `ANDROID_KEY_PASSWORD` | `sign-apk.sh` | JKS path only |
+| `ANDROID_KEYSTORE_BASE64` | `sign-apk.sh`, `sign-aab.sh` | base64 keystore |
+| `ANDROID_KEYSTORE_PASSWORD` | `sign-apk.sh`, `sign-aab.sh` | |
+| `ANDROID_KEY_ALIAS` | `sign-apk.sh`, `sign-aab.sh` | JKS path only |
+| `ANDROID_KEY_PASSWORD` | `sign-apk.sh`, `sign-aab.sh` | JKS path only |
 | `FIREBASE_ANDROID_APP_ID` | `Fastfile` | `1:…:android:…` |
 | `FIREBASE_SERVICE_ACCOUNT_KEY` | `release-android.yml` | raw JSON or base64, both handled |
 
@@ -168,3 +169,12 @@ never arrived.
 `git clean -ffdx` by default, which would delete the gitignored `Library/` folder and
 add a full reimport to every build; the mobile workflows set `clean: false` so it
 survives between runs naturally. `actions/cache` would be pure overhead here.
+
+## Google Play (AAB)
+
+A tag, or a manual run of `release-android.yml` with `aab: true`, also
+builds `Builds/Android/doodlebugs.aab` (BuildScript switches on the `.aab`
+suffix), signs it with `sign-aab.sh` and uploads it as the
+`doodlebugs-android-aab` artefact. The first upload to Play Console is manual
+(the Publishing API only works after it); enrol in Play App Signing and keep
+this key as the upload key. Firebase keeps getting the APK.

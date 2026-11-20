@@ -5,6 +5,11 @@ on:
   push:
     tags: ['v*.*.*']
   workflow_dispatch:
+    inputs:
+      aab:
+        description: Also build the signed AAB for Google Play
+        type: boolean
+        default: false
 
 # Per-platform group — release-ios.yml explains why the shared one bit us and
 # why the single runner still keeps the two Unity editors from overlapping.
@@ -117,6 +122,31 @@ jobs:
           APK_PATH: Builds/Android/doodlebugs-signed.apk
           RELEASE_NOTES: "Doodlebugs Revival ${{ steps.version.outputs.version }} (build ${{ github.run_number }})"
         run: bundle exec fastlane android android_beta
+
+      # Google Play takes an App Bundle, Firebase keeps the APK. A second Unity
+      # build with a warm Library is a few minutes; it runs for every tag and
+      # for a manual run that asks for it. Same versionCode as the APK.
+      - name: Build unsigned AAB
+        if: github.ref_type == 'tag' || inputs.aab
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          VERSION_CODE_BASE: 100
+        run: |
+          export BUILD_NUMBER=$(( VERSION_CODE_BASE + GITHUB_RUN_NUMBER ))
+          ./ci/unity-build.sh android Builds/Android/doodlebugs.aab
+
+      - name: Sign AAB
+        if: github.ref_type == 'tag' || inputs.aab
+        run: ./ci/sign-aab.sh Builds/Android/doodlebugs.aab Builds/Android/doodlebugs-signed.aab
+
+      - name: Upload AAB artifact
+        if: github.ref_type == 'tag' || inputs.aab
+        uses: actions/upload-artifact@v6
+        with:
+          name: doodlebugs-android-aab
+          path: Builds/Android/doodlebugs-signed.aab
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6
