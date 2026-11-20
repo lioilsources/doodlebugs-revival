@@ -23,12 +23,13 @@ from PIL import Image, ImageFilter
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent / "out"
 
-# Landscape sizes. App Store: 6.9" iPhone is the required set, 13" iPad only
-# when the build supports iPad. Play: 16:9 phone screenshots.
+# Landscape sizes. App Store: 6.9" iPhone is the required set, 13" iPad
+# because the build runs on iPad. Play: phone screenshots may be at most 2:1,
+# so a 6.9" iPhone shot loses ~4 % on each side instead of being padded to 16:9.
 TARGETS = {
     "iphone69": (2868, 1320),
     "ipad13": (2732, 2048),
-    "play": (1920, 1080),
+    "play": (2640, 1320),
 }
 
 ICON = ROOT / "Assets/Doodlebugs/Sprites/Icon/AppIcon_1024.png"

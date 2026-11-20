@@ -1,8 +1,20 @@
 # Screenshoty a video pro obchody (předávka pro MacBook)
 
-Status (2026-11-20): připraveno. Navazuje na `Prompts/33` (WP5). Snímky dělá
-vlastník na MacBooku ze **skutečných zařízení**, ne ze simulátoru: hra páruje
-přes Multipeer a Nearby, simulátor ukáže jen cvičný let.
+Status (2026-11-20): snímky pro 2.12 hotové ze simulátoru (níže), video
+zůstává na vlastníkovi. Navazuje na `Prompts/33` (WP5).
+
+## Automaticky ze simulátoru (2.12)
+
+`tools/store/shoot_simulator.sh` postaví iOS Simulator build se
+`StoreShotDirector` (define `DOODLEBUGS_STORESHOTS`, do obchodu nikdy nejde),
+pustí ho na iPhonu 17 Pro Max a iPadu Pro 13" a hra se sama vyfotí: úvod,
+PRACTICE, záložky hangáru, souboj dvou botů. Syrové snímky jsou
+v `tools/store/out/raw/`, vybrané kopie pro App Store ve
+`fastlane/screenshots/en-US/` (nahrává je workflow `App Store media`,
+texty z `fastlane/metadata/en-US/`). Pódium chybí, potřebuje dva hráče.
+Simulátor nemá výřez displeje a dotykové ovládání se v něm neukáže.
+
+Ruční postup níže platí pro snímky ze skutečných zařízení.
 
 ## Z jakého buildu
 

@@ -277,12 +277,6 @@
         "com.unity.modules.physics": "1.0.0"
       }
     },
-    "com.unity.modules.unitywebrequest": {
-      "version": "1.0.0",
-      "depth": 1,
-      "source": "builtin",
-      "dependencies": {}
-    },
     "com.unity.modules.vectorgraphics": {
       "version": "1.0.0",
       "depth": 0,
