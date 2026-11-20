@@ -115,8 +115,11 @@ public class DraftCard : MonoBehaviour
             if ((t.FaceFx & UiFaceFx.Bevel) != 0) Rivets(face);
         }
 
-        // Icon + name + description
-        float iconSize = t.ScaleDisplay < 0.7f || t.Badge == UiBadgeStyle.Hex ? 46f : 52f;
+        // Icon + name in one row, the description on the full card width below.
+        // Beside a 52-unit icon the description got ~68 units on a phone card
+        // and lost half of every sentence (plan 33 U4); the content column is
+        // 184 units tall on a Face ID iPhone, so the icon shrinks to make room.
+        float iconSize = 36f;
         Graphic iconG;
         if (d.Glyph != null)
         {
@@ -140,22 +143,22 @@ public class DraftCard : MonoBehaviour
         title.resizeTextMinSize = UiTheme.MinText;
         title.resizeTextMaxSize = title.fontSize;
         title.horizontalOverflow = HorizontalWrapMode.Wrap;
-        Ui.TopBand(title.rectTransform, y0, 28f, textLeft, 6f);
+        Ui.TopBand(title.rectTransform, y0 + (iconSize - 28f) * 0.5f, 28f, textLeft, 6f);
         var desc = Ui.Text(host, "Desc", d.Description ?? "", UiTheme.Body, UiTheme.SizeSmall, UiTheme.TextDim, TextAnchor.UpperLeft);
         desc.lineSpacing = 0.9f;
         desc.resizeTextForBestFit = true;
         desc.resizeTextMinSize = UiTheme.MinText;
         desc.resizeTextMaxSize = desc.fontSize;
         desc.verticalOverflow = VerticalWrapMode.Truncate;
-        Ui.TopBand(desc.rectTransform, y0 + 28f, 32f, textLeft, 6f);
+        Ui.TopBand(desc.rectTransform, y0 + iconSize + 3f, 30f, 10f, 8f);
 
-        float y = y0 + iconSize + 10f;
+        float y = y0 + iconSize + 36f;
         if (d.Preview.HasValue)
         {
             var strip = Ui.Round(host, "Path", UiTheme.PaperDim, 8f);
-            Ui.TopBand(strip.rectTransform, y, 26f, 10f, 10f);
+            Ui.TopBand(strip.rectTransform, y, 22f, 10f, 10f);
             strip.gameObject.AddComponent<PathPreview>().Init(d.Preview.Value, d.Category);
-            y += 32f;
+            y += 26f;
         }
 
         if (!string.IsNullOrEmpty(d.Footer))
@@ -301,7 +304,7 @@ public class PathPreview : MonoBehaviour
         _kind = kind;
         var rect = (RectTransform)transform;
         // Layout may not have run yet - draw in a fixed 150 x 26 box, left-anchored
-        var pts = Points(kind, 150f, 26f);
+        var pts = Points(kind, 150f, 22f);
         foreach (var p in pts)
         {
             var d = Ui.Node(transform, "Dot");

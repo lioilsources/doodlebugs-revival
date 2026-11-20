@@ -33,21 +33,21 @@ public class GadgetProfile
         new GadgetProfile
         {
             Type = GadgetType.Nitro, DisplayName = "NITRO", Verb = "BOOST",
-            Description = "1.2 s of top speed. Relights a dead engine.",
+            Description = "1.2 s top speed. Relights the engine.",
             Cooldown = 7f, Duration = 1.2f, StatPower = 0.7f, StatRate = 0.55f,
             IconSpriteName = "gadget_nitro", Sound = "nitro"
         },
         new GadgetProfile
         {
             Type = GadgetType.BarrelRoll, DisplayName = "BARREL ROLL", Verb = "DODGE",
-            Description = "Shots and blasts pass through you for 0.45 s.",
+            Description = "Shots pass through you for 0.45 s.",
             Cooldown = 5f, Duration = 0.45f, StatPower = 0.5f, StatRate = 0.75f,
             IconSpriteName = "gadget_roll", Sound = "roll"
         },
         new GadgetProfile
         {
             Type = GadgetType.Thunderclap, DisplayName = "THUNDERCLAP", Verb = "SHOCKWAVE",
-            Description = "Shoves planes away and wipes enemy shots nearby.",
+            Description = "Shoves planes away, wipes shots nearby.",
             Cooldown = 9f, Duration = 0f, Radius = 3.5f, Knockback = 11f, StatPower = 0.85f, StatRate = 0.4f,
             IconSpriteName = "gadget_clap", Sound = "clap"
         },

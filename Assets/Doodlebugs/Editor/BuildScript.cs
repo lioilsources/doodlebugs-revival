@@ -105,6 +105,17 @@ namespace Doodlebugs.Editor
             return buildNumber;
         }
 
+        /// <summary>
+        /// Test builds (local runs, workflow_dispatch) keep the Flight Lab; a
+        /// release tag builds the store binary without it (plan 33 U3).
+        /// </summary>
+        private static string[] ExtraDefines()
+        {
+            bool releaseTag = Environment.GetEnvironmentVariable("GITHUB_REF_TYPE") == "tag";
+            Log(releaseTag ? "release tag: store build, no Flight Lab" : "test build: DOODLEBUGS_LAB defined");
+            return releaseTag ? Array.Empty<string>() : new[] { "DOODLEBUGS_LAB" };
+        }
+
         private static void Log(string message) =>
             Debug.Log($"[BuildScript] {message}");
 
@@ -139,6 +150,7 @@ namespace Doodlebugs.Editor
                     target = BuildTarget.iOS,
                     targetGroup = BuildTargetGroup.iOS,
                     options = BuildOptions.None,
+                    extraScriptingDefines = ExtraDefines(),
                 };
 
                 Finish(BuildPipeline.BuildPlayer(options));
@@ -161,9 +173,10 @@ namespace Doodlebugs.Editor
                 EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
 
                 // Firebase App Distribution can serve an AAB, but only once the
-                // project is linked to Google Play. APK keeps internal testing
-                // independent of the Play Console.
-                EditorUserBuildSettings.buildAppBundle = false;
+                // project is linked to Google Play, so testers get an APK. Google
+                // Play wants an AAB: an output path ending in .aab builds one.
+                bool appBundle = outputPath.EndsWith(".aab", StringComparison.OrdinalIgnoreCase);
+                EditorUserBuildSettings.buildAppBundle = appBundle;
 
                 var buildNumber = ApplyVersioning(appleVersionRules: false);
                 if (!string.IsNullOrEmpty(buildNumber))
@@ -188,7 +201,7 @@ namespace Doodlebugs.Editor
                 if (!string.IsNullOrEmpty(dir))
                     Directory.CreateDirectory(dir);
 
-                Log($"building Android APK → {outputPath}");
+                Log($"building Android {(appBundle ? "AAB" : "APK")} → {outputPath}");
                 var options = new BuildPlayerOptions
                 {
                     scenes = EnabledScenes,
@@ -196,6 +209,7 @@ namespace Doodlebugs.Editor
                     target = BuildTarget.Android,
                     targetGroup = BuildTargetGroup.Android,
                     options = BuildOptions.None,
+                    extraScriptingDefines = ExtraDefines(),
                 };
 
                 Finish(BuildPipeline.BuildPlayer(options));

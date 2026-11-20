@@ -12,7 +12,9 @@ namespace Doodlebugs.Editor
         // Unity export leaves the main target on manual signing with an empty
         // team (PlayerSettings has automatic signing off), so xcodebuild fails
         // with "requires a provisioning profile" — set it here instead.
-        private const string AppleTeamId = "P82HWPG7FN";
+        // Read from IOS_TEAM_ID (the same name CI uses) so the ID stays out of
+        // this public repo; without it the team is left for Xcode to pick.
+        private static string AppleTeamId => System.Environment.GetEnvironmentVariable("IOS_TEAM_ID");
 
         [PostProcessBuild(1)]
         public static void OnPostProcessBuild(BuildTarget target, string pathToBuiltProject)
@@ -70,7 +72,8 @@ namespace Doodlebugs.Editor
             foreach (string guid in new[] { mainGuid, frameworkGuid })
             {
                 proj.SetBuildProperty(guid, "CODE_SIGN_STYLE", "Automatic");
-                proj.SetTeamId(guid, AppleTeamId);
+                if (!string.IsNullOrEmpty(AppleTeamId))
+                    proj.SetTeamId(guid, AppleTeamId);
             }
 
             proj.WriteToFile(projPath);

@@ -153,6 +153,7 @@ namespace Doodlebugs.Network
                 _native.OnBecomeClient -= NativeBecomeClient;
                 _native.OnStatus -= SetStatus;
                 _native.OnResetNetworking -= NativeResetNetworking;
+                _native.OnUnavailable -= NativeUnavailable;
                 _native.Stop();
             }
 
@@ -178,6 +179,32 @@ namespace Doodlebugs.Network
             SetRole(LocalRole.None);
 
             _discovery?.StartListening();
+        }
+
+        /// <summary>
+        /// PRACTICE on the boot screen (plan 33 W2): stop searching and host right
+        /// away. The host keeps advertising, so a second device still pairs. Only
+        /// valid while searching; returns false otherwise.
+        /// </summary>
+        public bool HostNow()
+        {
+            if (State != ConnectionState.Searching) return false;
+            if (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient) return false;
+
+            Telemetry.Log("boot_practice", ("mode", _mode.ToString()));
+            if (_mode == LocalCoopMode.NativeP2P)
+            {
+                // Native browse window still ticking -> become host now. Without a
+                // usable native backend (permissions pending or denied) fall back to
+                // a plain LAN host so the player can still fly.
+                if (_native != null && _native.HostNow()) return true;
+                FallBackToLanHost("practice");
+                return true;
+            }
+
+            _discovery?.StopAllDiscovery();
+            OnDiscoveryTimeout();
+            return true;
         }
 
         public void RestartDiscovery()
@@ -290,6 +317,9 @@ namespace Doodlebugs.Network
 
         private void OnDiscoveryTimeout()
         {
+            // A timeout queued on the dispatcher can land after PRACTICE already
+            // started the host - never StartHost twice.
+            if (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient) return;
             Debug.Log("[ConnectionManager] No host found, becoming host");
 
             SetState(ConnectionState.WaitingForOpponent);
@@ -347,8 +377,45 @@ namespace Doodlebugs.Network
             _native.OnBecomeClient += NativeBecomeClient;
             _native.OnStatus += SetStatus;
             _native.OnResetNetworking += NativeResetNetworking;
+            _native.OnUnavailable += NativeUnavailable;
 
             _native.Begin();
+        }
+
+        // Nearby permission denied or no native backend (plan 33 N2): the boot
+        // screen used to wait forever. Host on the LAN path instead - solo flight
+        // works, and a second Android on the same Wi-Fi can still find us.
+        private void NativeUnavailable(string reason)
+        {
+            Debug.LogWarning($"[ConnectionManager] Native co-op unavailable ({reason}) - hosting on LAN");
+            if (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient) return;
+            FallBackToLanHost(reason);
+        }
+
+        private void FallBackToLanHost(string reason)
+        {
+            if (_native != null)
+            {
+                _native.OnBecomeHost -= NativeBecomeHost;
+                _native.OnBecomeClient -= NativeBecomeClient;
+                _native.OnStatus -= SetStatus;
+                _native.OnResetNetworking -= NativeResetNetworking;
+                _native.OnUnavailable -= NativeUnavailable;
+                _native.Stop();
+            }
+
+            _mode = LocalCoopMode.Lan;
+            var utp = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            if (utp != null) NetworkManager.Singleton.NetworkConfig.NetworkTransport = utp;
+            if (_discovery != null)
+            {
+                _discovery.OnServerFound -= OnServerFound;
+                _discovery.OnDiscoveryTimeout -= OnDiscoveryTimeout;
+                _discovery.OnServerFound += OnServerFound;
+                _discovery.OnDiscoveryTimeout += OnDiscoveryTimeout;
+            }
+            Telemetry.Log("coop_lan_fallback", ("reason", reason));
+            OnDiscoveryTimeout();
         }
 
         // Invoked synchronously by the orchestrator when no lobby was found.

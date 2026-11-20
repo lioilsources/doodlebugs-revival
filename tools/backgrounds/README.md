@@ -1,7 +1,7 @@
 # Arena backgrounds & foregrounds — SPARK pipeline
 
 Generuje mapy pro `BackgroundManager` na SPARKu (DGX GB10, ComfyUI API na
-`192.168.88.66:8188`). Výstupy mají rovnou rozměry, které `Doodlebugs → Sync
+`$SPARK_HOST:8188`, adresa v `.env` podle `.env.example`). Výstupy mají rovnou rozměry, které `Doodlebugs → Sync
 Background Profiles` očekává: background 4096×2732, foreground strip 4096 px
 široký, výška ≤ 1280 px (= 12.8 wu, zhruba půl obrazovky na telefonu),
 terén opřený o spodní hranu, průhledné nebe.

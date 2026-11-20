@@ -176,7 +176,7 @@ public class WeaponProfile
         new WeaponProfile
         {
             Type = WeaponType.Sniper, DisplayName = "LANCE", IconSpriteName = "weapon_sniper",
-            Description = "Hold to charge, release. Up to 3 damage.", Verb = "CHARGE", Preview = PreviewKind.Charge,
+            Description = "Hold to charge. Up to 3 damage.", Verb = "CHARGE", Preview = PreviewKind.Charge,
             StatDamage = 0.9f, StatRate = 0.25f, StatRange = 1f,
             Damage = 1, Cooldown = 1.3f, ForceMultiplier = 1.6f, ChargeSeconds = 0.9f, ChargeDamageMax = 3,
             ChargeForceMax = 3.2f, ProjectileScale = 1.3f, ProjectileTint = new Color(0.7f, 0.95f, 1f),
@@ -220,7 +220,7 @@ public class WeaponProfile
         new WeaponProfile
         {
             Type = WeaponType.Seeker, DisplayName = "SEEKER", IconSpriteName = "weapon_seeker",
-            Description = "Homes in. Lost in clouds, outrun by nitro.", Verb = "HOMING", Preview = PreviewKind.Homing,
+            Description = "Homes in. Clouds and nitro shake it.", Verb = "HOMING", Preview = PreviewKind.Homing,
             StatDamage = 0.66f, StatRate = 0.25f, StatRange = 0.9f,
             Damage = 2, Cooldown = 1.8f, ForceMultiplier = 0.45f, MaxSpeed = 16f, Acceleration = 20f,
             HomingTurnRate = 120f, BulletLifetime = 5f, ExplosionRadius = 1.2f, Knockback = 5f,

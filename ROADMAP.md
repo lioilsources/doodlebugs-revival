@@ -373,6 +373,7 @@ Tři plány mimo pořadí fází; implementovány najednou (28 celý, 29 vlny 1�
 | `Prompts/30` — hangár a vizuál | MenuCanvas pro telefon, směr „Sky Poster“, velké karty výběru, hangár ven z `GameHUD`; dodá tween util fáze 0 | 0, 2, 4 |
 | `Prompts/32` — LEAN, hybridní ovládání `[wip]` | páka řídí, švih telefonem do zatáčky přidá až 15 % rychlosti zatáčení; měří se pohyb, ne poloha; přepínač nad POINT a RATE | 1 (ovládání), 2 (juice) |
 | `Prompts/31` — motivy rozhraní `[wip]` | deset kabátů hangáru (70. až 30. léta, vesmír, džungle, utopie) nad stejným rozložením; `UiTheme` řízený daty, výběr v nastavení, výtvarné podklady ze schnellu a Qwen-Image | 2, 4 (kosmetika) |
+| `Prompts/33` — podání na obchody `[wip]` | opravy z revize kódu před první veřejnou verzí (ztráta hostitele, respawn, střely bez životnosti, zamčené barvy), tlačítko PRACTICE, AAB pro Google Play, podklady pro oba obchody; sólo režim z PR #58–#63 zůstává na další verzi | 1 (podání), 6 (store) |
 
 ---
 

@@ -51,7 +51,8 @@ from PIL import Image, ImageChops
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import themes as T  # noqa: E402
 
-API = "http://192.168.88.66:8188"
+# SPARK_HOST comes from the environment (see .env.example); COMFYUI_URL overrides it.
+API = os.environ.get("COMFYUI_URL") or f"http://{os.environ.get('SPARK_HOST', 'localhost')}:8188"
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 OUT = HERE / "out"
