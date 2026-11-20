@@ -9,11 +9,6 @@ on:
       version:
         description: App Store version to fill (default = bundleVersion)
         required: false
-  # One-off: the first upload ran from the PR branch before the workflow
-  # existed on main (workflow_dispatch only sees workflows on main).
-  push:
-    branches: [feat/store-screenshots]
-    paths: ['fastlane/screenshots/**', 'fastlane/metadata/**', '.github/workflows/store-media-ios.yml']
 
 jobs:
   deliver:
