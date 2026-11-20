@@ -314,7 +314,9 @@ public class Shooting : NetworkBehaviour
             bullet.SetWeapon((int)weapon.Type);
             // The shape decides what the projectile is made of (plan 24, D1).
             bullet.SetElement(element);
-            if (weapon.BulletLifetime > 0f) bullet.SetLifetime(weapon.BulletLifetime);
+            // 0 used to mean "forever": a tracer leaving through the top never met
+            // anything and lived on every device for the whole session (plan 33 C1).
+            bullet.SetLifetime(weapon.BulletLifetime > 0f ? weapon.BulletLifetime : Bullet.DefaultLifetime);
             bullet.SetPierce(weapon.Pierce && fullCharge);
         }
 

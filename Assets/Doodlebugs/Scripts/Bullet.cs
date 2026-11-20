@@ -408,6 +408,12 @@ public class Bullet : NetworkBehaviour
         return sprite;
     }
 
+    /// <summary>Lifetime of a weapon with BulletLifetime 0 (MG, Twin MG, Lance, Stinger).</summary>
+    public const float DefaultLifetime = 6f;
+
+    // Above the Space strip by this much a projectile can never come back into play.
+    private const float CeilingDespawnMargin = 30f;
+
     /// <summary>Despawn the bullet after this many seconds (short-range weapons). Server-only.</summary>
     public void SetLifetime(float seconds)
     {
@@ -474,6 +480,13 @@ public class Bullet : NetworkBehaviour
         if (_detonateAt > 0f && Time.time >= _detonateAt)
         {
             ServerDetonate();
+            return;
+        }
+
+        var space = ArenaBounds.Space;
+        if (space != null && transform.position.y > space.bounds.max.y + CeilingDespawnMargin)
+        {
+            NetworkObject.Despawn();
             return;
         }
 
