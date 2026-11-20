@@ -1,6 +1,9 @@
 # Podání na App Store a Google Play: opravy a dodělávky (plán implementace)
 
-Status (2026-11-20): **plán.** Podkladem je revize `main` @ `9f64d77`
+Status (2026-11-20, večer): **WP0–WP5 implementovány** na větvi
+`fix/store-submission` (kompilace Roslynem; Unity, buildy a zařízení zatím ne).
+Mimo: WP7 (P1), LEAN ve výchozím stavu beze změny až do ověření směru.
+Původně: **plán.** Podkladem je revize `main` @ `9f64d77`
 (v2.11.1) čtením kódu a rozbor posledních buildů z CI. **Žádný nález nebyl
 spuštěn v Unity ani na zařízení**; u každého je uvedeno, jak jistý je.
 Rozhodnutí v §2 mají výchozí hodnotu, Opus může začít hned. Vlastník
