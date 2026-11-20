@@ -101,7 +101,7 @@ crashlytics-build.properties
 # fastlane
 fastlane/report.xml
 fastlane/Preview.html
-fastlane/screenshots/
+# fastlane/screenshots/ is committed: the App Store set (Prompts/34).
 fastlane/test_output/
 vendor/bundle/
 .bundle/
