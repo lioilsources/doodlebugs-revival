@@ -26,6 +26,14 @@ namespace Doodlebugs.Network
         NativeP2P
     }
 
+    /// <summary>What the player chose on the Home screen (Prompts/27 S1).</summary>
+    public enum SessionKind
+    {
+        None,   // Home screen: no socket, no discovery, no permission prompt
+        Solo,   // one-device host on loopback against combat bots
+        Party   // today's LAN / native pairing flow
+    }
+
     /// <summary>This device's role in the current lobby, for a persistent UI badge.</summary>
     public enum LocalRole
     {
@@ -48,6 +56,46 @@ namespace Doodlebugs.Network
         // role (LAN or native path); surfaced to the HUD via OnRoleChanged.
         public LocalRole Role { get; private set; } = LocalRole.None;
         public event Action<LocalRole> OnRoleChanged;
+
+        public SessionKind Session { get; private set; } = SessionKind.None;
+        public event Action<SessionKind> OnSessionChanged;
+
+        // Solo hosts bind loopback only, on their own port range so a LAN
+        // host on 7777 (or a ParrelSync clone in solo) never blocks them.
+        private const string LoopbackAddress = "127.0.0.1";
+        private const ushort SoloPortBase = 7790;
+        private const int SoloPortTries = 5;
+        private const string LanListenAddress = "0.0.0.0";   // Scene01's ServerListenAddress
+
+        // Set while this device tears its own session down: the disconnect
+        // callbacks that shutdown raises must not restart discovery.
+        private bool _leaving;
+        private UnityTransport _sceneTransport;
+
+        private void SetSession(SessionKind kind)
+        {
+            if (Session == kind) return;
+            Session = kind;
+            Debug.Log($"[ConnectionManager] Session = {kind}");
+            OnSessionChanged?.Invoke(kind);
+        }
+
+        /// <summary>A party host was heard while this device plays solo
+        /// (Prompts/27 WP6): the toast offers it, nothing joins on its own.</summary>
+        public event Action<DiscoveryData> OnNearbyHost;
+        private DiscoveryData _nearbyHost;
+
+        // Passive listening is a UDP socket on the broadcast port. Free of any
+        // prompt on desktop and on Android over Wi-Fi; on iOS the broadcast
+        // path needs the multicast entitlement and would raise the Local
+        // Network prompt, so iOS never listens from solo (Prompts/27 WP6).
+        private static bool NearbyListenAllowed =>
+            Application.platform != RuntimePlatform.IPhonePlayer &&
+            (!IsMobile || Application.internetReachability == NetworkReachability.ReachableViaLocalAreaNetwork);
+
+        private static bool NetworkRunning =>
+            NetworkManager.Singleton != null &&
+            (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient);
 
         private void SetRole(LocalRole role)
         {
@@ -116,23 +164,192 @@ namespace Doodlebugs.Network
             // Subscribe to network events (both paths need these)
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
             NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+            _sceneTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+
+            if (_discovery != null)
+            {
+                _discovery.OnServerFound += OnServerFound;
+                _discovery.OnDiscoveryTimeout += OnDiscoveryTimeout;
+            }
+
+            // Nothing else at boot (Prompts/27 S1): the iOS Local Network prompt
+            // and Android's Nearby permissions fire the moment pairing starts,
+            // so pairing starts only when the player taps PARTY.
+            SetState(ConnectionState.Idle);
+        }
+
+        // --- Home screen entry points (Prompts/27 WP5) ---------------------
+
+        /// <summary>PLAY: a one-device session on loopback against bots. From a
+        /// running party or solo session it leaves that first.</summary>
+        public void BeginSolo()
+        {
+            if (NetworkRunning || Session != SessionKind.None)
+            {
+                ReturnHome();
+                // NGO completes Shutdown asynchronously (same defer as the host yield).
+                Invoke(nameof(BeginSoloNow), 0.7f);
+                return;
+            }
+            BeginSoloNow();
+        }
+
+        private void BeginSoloNow()
+        {
+            CancelInvoke(nameof(BeginSoloNow));
+            SetSession(SessionKind.Solo);
+            _discovery?.StopAllDiscovery();
+            _native?.Stop();
+            StartCoroutine(StartSoloHost());
+            Telemetry.Log("boot_mode", ("mode", "solo"));
+        }
+
+        private System.Collections.IEnumerator StartSoloHost()
+        {
+            var nm = NetworkManager.Singleton;
+            for (int attempt = 0; attempt < SoloPortTries; attempt++)
+            {
+                if (Session != SessionKind.Solo) yield break;   // left meanwhile
+                UseSceneTransport();
+                ushort port = (ushort)(SoloPortBase + attempt);
+                // Listen on loopback only: no local-network access, no prompt, no peer can join.
+                _sceneTransport.SetConnectionData(LoopbackAddress, port, LoopbackAddress);
+                nm.ConnectionApprovalCallback = ApproveConnection;
+                MatchManager.Instance?.ArmSolo(MatchManager.SoloBotCount);
+
+                if (nm.StartHost())
+                {
+                    SetState(ConnectionState.Connected);
+                    BackgroundManager.Instance?.SelectRandomBackground();
+                    LocalPlayerManager.Instance?.OnHostStarted();
+                    Debug.Log($"[ConnectionManager] Solo host on {LoopbackAddress}:{port}");
+                    // Hear party hosts nearby without ever answering them.
+                    if (NearbyListenAllowed) _discovery?.StartListening(hostWatch: true);
+                    yield break;
+                }
+
+                Debug.LogWarning($"[ConnectionManager] Solo host failed on port {port} - trying the next one");
+                MatchManager.Instance?.DisarmSolo();
+                if (NetworkRunning) nm.Shutdown();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+            Debug.LogError("[ConnectionManager] Solo host could not start on any loopback port");
+            ReturnHome();
+        }
+
+        /// <summary>PARTY: today's pairing flow, unchanged (LAN broadcast or the
+        /// native Multipeer/Nearby path). From a solo session it leaves first.</summary>
+        public void BeginParty()
+        {
+            if (NetworkRunning || Session == SessionKind.Solo)
+            {
+                ReturnHome();
+                Invoke(nameof(BeginPartyNow), 0.7f);
+                return;
+            }
+            BeginPartyNow();
+        }
+
+        private void BeginPartyNow()
+        {
+            CancelInvoke(nameof(BeginPartyNow));
+            SetSession(SessionKind.Party);
+            // A solo session left loopback in the transport: a LAN host must
+            // listen on every interface again or nobody can reach it.
+            UseSceneTransport();
+            if (_sceneTransport != null)
+            {
+                _sceneTransport.ConnectionData.ServerListenAddress = LanListenAddress;
+                _sceneTransport.ConnectionData.Port = 7777;
+            }
 
             _mode = DetermineMode();
             Debug.Log($"[ConnectionManager] LocalCoopMode = {_mode} (reachability={Application.internetReachability})");
+            Telemetry.Log("boot_mode", ("mode", "party"), ("transport", _mode));
 
             if (_mode == LocalCoopMode.NativeP2P)
             {
                 StartNativeP2P();
                 return;
             }
-
-            // LAN path (unchanged): subscribe to UDP discovery events and start it.
-            if (_discovery != null)
-            {
-                _discovery.OnServerFound += OnServerFound;
-                _discovery.OnDiscoveryTimeout += OnDiscoveryTimeout;
-            }
             StartDiscovery();
+        }
+
+        /// <summary>The toast's JOIN: leave solo, join the host it heard.</summary>
+        public void JoinNearby()
+        {
+            var target = _nearbyHost;
+            if (target == null) return;
+            ReturnHome();
+            _nearbyHost = target;   // ReturnHome forgot it
+            Invoke(nameof(FinishJoinNearby), 0.7f);
+        }
+
+        private void FinishJoinNearby()
+        {
+            var target = _nearbyHost;
+            _nearbyHost = null;
+            if (target == null) return;
+            SetSession(SessionKind.Party);
+            _mode = LocalCoopMode.Lan;
+            UseSceneTransport();
+            if (_sceneTransport != null) _sceneTransport.ConnectionData.ServerListenAddress = LanListenAddress;
+            SetState(ConnectionState.Connecting);
+            SetStatus(Loc.T("status.connecting"));
+            ConnectToHost(target);
+        }
+
+        /// <summary>CANCEL on the searching screen: stop pairing, back to Home.</summary>
+        public void CancelParty()
+        {
+            if (Session != SessionKind.Party) return;
+            ReturnHome();
+        }
+
+        /// <summary>Leave whatever session this device is in and show Home: the
+        /// only way out of a solo session, and the PARTY cancel. Idempotent.</summary>
+        public void ReturnHome()
+        {
+            _leaving = true;
+            CancelInvoke(nameof(RestartDiscovery));
+            CancelInvoke(nameof(NativeRestartDiscovery));
+            CancelInvoke(nameof(FinishHostYield));
+            CancelInvoke(nameof(StartDiscovery));
+            CancelInvoke(nameof(BeginSoloNow));
+            CancelInvoke(nameof(BeginPartyNow));
+            CancelInvoke(nameof(FinishJoinNearby));
+            StopAllCoroutines();
+            _nearbyHost = null;
+            _yieldingHost = false;
+            _yieldTarget = null;
+
+            // Server state first (coroutines, run tables, bots), while the
+            // network objects still exist; a client resets its mirrors.
+            var mm = MatchManager.Instance;
+            if (mm != null)
+            {
+                if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer) mm.ServerAbortSession();
+                else mm.LocalAbortSession();
+            }
+
+            _discovery?.StopAllDiscovery();
+            _native?.Stop();
+            if (NetworkRunning) NetworkManager.Singleton.Shutdown();
+
+            SetSession(SessionKind.None);
+            SetState(ConnectionState.Idle);
+            SetRole(LocalRole.None);
+            Invoke(nameof(FinishLeaving), 1f);
+        }
+
+        private void FinishLeaving() => _leaving = false;
+
+        // The iOS native path swaps NGO's transport; solo and LAN need the
+        // scene's UnityTransport back.
+        private void UseSceneTransport()
+        {
+            if (_sceneTransport == null) _sceneTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            if (_sceneTransport != null) NetworkManager.Singleton.NetworkConfig.NetworkTransport = _sceneTransport;
         }
 
         private void OnDestroy()
@@ -182,9 +399,10 @@ namespace Doodlebugs.Network
         }
 
         /// <summary>
-        /// PRACTICE on the boot screen (plan 33 W2): stop searching and host right
-        /// away. The host keeps advertising, so a second device still pairs. Only
-        /// valid while searching; returns false otherwise.
+        /// Stop a PARTY search and host right away (plan 33 W2's PRACTICE; PLAY
+        /// replaced it on the Home screen, the store-shot director still uses
+        /// it). The host keeps advertising, so a second device still pairs.
+        /// Only valid while searching; returns false otherwise.
         /// </summary>
         public bool HostNow()
         {
@@ -229,6 +447,19 @@ namespace Doodlebugs.Network
         {
             Debug.Log($"[ConnectionManager] Server found at {data.hostAddress}:{data.port}");
 
+            // Only a PARTY session pairs. A solo host has an "empty lobby" by the
+            // conflict test below and would yield to any host it hears - so a
+            // solo session only reports the host, before that test.
+            if (Session == SessionKind.Solo)
+            {
+                if (data.currentPlayers >= data.maxPlayers) return;
+                bool fresh = _nearbyHost == null || _nearbyHost.instanceId != data.instanceId;
+                _nearbyHost = data;
+                if (fresh) OnNearbyHost?.Invoke(data);
+                return;
+            }
+            if (Session != SessionKind.Party) return;
+
             // We are already hosting: this broadcast comes from a competing host
             // on the same network (both instances timed out together). Decide who
             // yields instead of leaving players in two separate lobbies.
@@ -253,6 +484,7 @@ namespace Doodlebugs.Network
         // Configure UnityTransport with the discovered address and start as client.
         private void ConnectToHost(DiscoveryData data)
         {
+            UseSceneTransport();
             var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
             if (transport != null)
             {
@@ -317,6 +549,7 @@ namespace Doodlebugs.Network
 
         private void OnDiscoveryTimeout()
         {
+            if (Session != SessionKind.Party) return;
             // A timeout queued on the dispatcher can land after PRACTICE already
             // started the host - never StartHost twice.
             if (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient) return;
@@ -326,6 +559,7 @@ namespace Doodlebugs.Network
             SetStatus("Waiting for opponent...");
 
             // Configure transport timeouts for mobile networks
+            UseSceneTransport();
             var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
             if (transport != null)
             {
@@ -368,11 +602,23 @@ namespace Doodlebugs.Network
             SetRole(LocalRole.None);
 
             // Orchestrator + transport live on a child object; RequireComponent
-            // adds the NativeLocalTransport automatically.
-            var go = new GameObject("NativeLocalCoop");
-            go.transform.SetParent(transform);
-            _native = go.AddComponent<NativeLocalCoopManager>();
+            // adds the NativeLocalTransport automatically. Created on the first
+            // PARTY and reused after a CANCEL.
+            if (_native == null)
+            {
+                var go = new GameObject("NativeLocalCoop");
+                go.transform.SetParent(transform);
+                _native = go.AddComponent<NativeLocalCoopManager>();
 
+            }
+
+            // Every PARTY (re)subscribes: FallBackToLanHost unhooks the
+            // orchestrator, and the object is reused after a CANCEL.
+            _native.OnBecomeHost -= NativeBecomeHost;
+            _native.OnBecomeClient -= NativeBecomeClient;
+            _native.OnStatus -= SetStatus;
+            _native.OnResetNetworking -= NativeResetNetworking;
+            _native.OnUnavailable -= NativeUnavailable;
             _native.OnBecomeHost += NativeBecomeHost;
             _native.OnBecomeClient += NativeBecomeClient;
             _native.OnStatus += SetStatus;
@@ -388,6 +634,7 @@ namespace Doodlebugs.Network
         private void NativeUnavailable(string reason)
         {
             Debug.LogWarning($"[ConnectionManager] Native co-op unavailable ({reason}) - hosting on LAN");
+            if (Session != SessionKind.Party) return;   // CANCEL / HOME landed first
             if (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient) return;
             FallBackToLanHost(reason);
         }
@@ -506,6 +753,14 @@ namespace Doodlebugs.Network
         private void OnClientConnected(ulong clientId)
         {
             Debug.Log($"[ConnectionManager] Client connected: {clientId}");
+            if (Session == SessionKind.Party && NetworkManager.Singleton.IsHost && clientId != NetworkManager.ServerClientId)
+            {
+                Telemetry.Log("lan_pair", ("peers", NetworkManager.Singleton.ConnectedClientsIds.Count), ("transport", _mode));
+            }
+            else if (Session == SessionKind.Party && !NetworkManager.Singleton.IsHost && clientId == NetworkManager.Singleton.LocalClientId)
+            {
+                Telemetry.Log("lan_pair", ("peers", 2), ("transport", _mode), ("role", "client"));
+            }
 
             if (NetworkManager.Singleton.IsHost)
             {
@@ -543,8 +798,9 @@ namespace Doodlebugs.Network
             Debug.Log($"[ConnectionManager] Client disconnected: {clientId}, LocalClientId={NetworkManager.Singleton.LocalClientId}, IsHost={NetworkManager.Singleton.IsHost}, IsClient={NetworkManager.Singleton.IsClient}");
 
             // Ignore callbacks caused by our own shutdown while yielding the host
-            // role - FinishHostYield is about to reconnect us as a client.
-            if (_yieldingHost) return;
+            // role - FinishHostYield is about to reconnect us as a client - and
+            // while leaving to the Home screen.
+            if (_yieldingHost || _leaving) return;
 
             // Additional diagnostics for debugging disconnect issues
             var transport = NetworkManager.Singleton.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();

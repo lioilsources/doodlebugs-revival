@@ -20,6 +20,10 @@ public class HangarScreen : MonoBehaviour
 
     public static bool IsOpen => Instance != null && Instance._open;
 
+    /// <summary>The Home screen (Prompts/27 WP5) is this screen's Searching
+    /// mode: PLAY, PARTY / CANCEL, settings.</summary>
+    public static bool IsHomeOpen => IsOpen && Instance._mode == MatchManager.HangarMode.Searching;
+
     private enum Tab { Weapon, Gadget, Upgrades, Plane }
 
     private RectTransform _bg, _layer;
@@ -50,10 +54,13 @@ public class HangarScreen : MonoBehaviour
     private RectTransform _roster;
     private Ui.Cta _cta;
     private string _rosterSignature;
+    private LanBotControls _lanBots;
 
-    // searching
+    // Home (Searching mode)
     private RectTransform _boot;
     private Text _bootStatus;
+    private Ui.Cta _bootPlay, _bootParty, _bootCancel;
+    private (RectTransform root, Image bg, Text label) _homePill;
 
     private GameObject _corner;
     private ArenaSheet _arena;
@@ -162,7 +169,9 @@ public class HangarScreen : MonoBehaviour
         _connection = Doodlebugs.Network.ConnectionManager.Instance;
         _connection.OnStatusMessage += OnStatus;
         _connection.OnRoleChanged += OnRole;
+        _connection.OnSessionChanged += OnSessionChanged;
         OnRole(_connection.Role);
+        RefreshHome();
     }
 
     private void Unhook()
@@ -182,6 +191,7 @@ public class HangarScreen : MonoBehaviour
         {
             _connection.OnStatusMessage -= OnStatus;
             _connection.OnRoleChanged -= OnRole;
+            _connection.OnSessionChanged -= OnSessionChanged;
         }
     }
 
@@ -254,6 +264,12 @@ public class HangarScreen : MonoBehaviour
 
         var spacer = Ui.Node(_topRow, "Spacer");
         spacer.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+
+        // HOME (Prompts/27 S10): the way out of a solo session between rounds,
+        // and out of a party host's empty lobby. Shown by Open per mode.
+        _homePill = Ui.Pill(_topRow, "Home", Loc.T("solo.home"), UiTheme.Glass, UiTheme.OnBackdrop, 48f, 17, UiTheme.Label);
+        _homePill.bg.raycastTarget = true;
+        Ui.Press(_homePill.bg, SoloControls.LeaveToHome);
 
         var gear = Ui.Card(_topRow, "Settings", UiTheme.Frame, 24f, 4f);
         gear.Root.sizeDelta = new Vector2(48f, 48f);
@@ -388,6 +404,9 @@ public class HangarScreen : MonoBehaviour
 
         _cta = Ui.BigButton(bar, "Cta", "READY", UiTheme.Confirm, PressCta);
         Ui.Place(_cta.Panel.Root, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), Vector2.zero, new Vector2(204f, 54f));
+
+        // + BOT / - BOT above the CTA, party host only (Prompts/27 S8)
+        _lanBots = LanBotControls.Create(_layer);
     }
 
     private void BuildBoot()
@@ -407,25 +426,81 @@ public class HangarScreen : MonoBehaviour
             Ui.Place(title.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(700f, 90f));
             Ui.BackdropShadow(title, 6f);
         }
-        _bootStatus = Ui.Text(_boot, "Status", "SEARCHING FOR GAME...", UiTheme.Label, 20, UiTheme.Highlight, TextAnchor.MiddleCenter);
+        _bootStatus = Ui.Text(_boot, "Status", Loc.T("hangar.searching"), UiTheme.Label, 20, UiTheme.Highlight, TextAnchor.MiddleCenter);
         Ui.Place(_bootStatus.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -30f), new Vector2(700f, 30f));
 
-        // PRACTICE (plan 33 W2): skip the search and host now. One device - an
-        // App Store reviewer, a player on a train - flies within seconds; the
-        // host still advertises, so a friend's device pairs all the same.
-        var practice = Ui.BigButton(_boot, "Practice", "PRACTICE", UiTheme.Confirm, PressPractice);
-        Ui.Place(practice.Panel.Root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -92f), new Vector2(240f, 56f));
+        // PLAY (Prompts/27 S1): one device, bots, offline - nothing touches the
+        // network before a tap, so a fresh install shows no permission prompt.
+        // PARTY runs the pairing search; CANCEL takes its place meanwhile.
+        _bootPlay = Ui.BigButton(_boot, "Play", Loc.T("home.play"), UiTheme.Confirm, PressPlay);
+        Ui.Place(_bootPlay.Panel.Root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -96f), new Vector2(280f, 64f));
+        _bootParty = Ui.BigButton(_boot, "Party", Loc.T("home.party"), UiTheme.Gadget, PressParty);
+        Ui.Place(_bootParty.Panel.Root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -172f), new Vector2(220f, 52f));
+        _bootCancel = Ui.BigButton(_boot, "Cancel", Loc.T("home.cancel"), UiTheme.PaperDim, PressCancel);
+        Ui.Place(_bootCancel.Panel.Root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -172f), new Vector2(220f, 52f));
+        _bootCancel.Label.color = UiTheme.Ink;
+
+        var gear = Ui.Card(_boot, "Settings", UiTheme.Frame, 24f, 4f);
+        Ui.Place(gear.Root, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-16f, -8f), new Vector2(48f, 48f));
+        var icon = Ui.Sprite(gear.Face.transform, "Icon", UiSprites.Gear);
+        icon.color = UiTheme.FrameText;
+        Ui.Inset(icon.rectTransform, 8, 8, 8, 8);
+        Ui.Press(gear.Face, () => SettingsOverlay.Instance?.Open());
+
         var ver = Ui.Text(_boot, "Version", Doodlebugs.UI.ConnectionUI.GameVersion, UiTheme.Body, 13,
             UiTheme.WithAlpha(UiTheme.OnBackdrop, 0.6f), TextAnchor.MiddleCenter);
         Ui.Place(ver.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 24f), new Vector2(400f, 20f));
+        RefreshHome();
     }
 
-    private void PressPractice()
+    // --- Home actions (four channels: press colour + label, tick, haptic, status) ---
+
+    private void PressPlay()
     {
         var cm = Doodlebugs.Network.ConnectionManager.Instance;
-        if (cm == null || !cm.HostNow()) return;
+        if (cm == null) return;
+        _bootPlay.Button.interactable = false;
+        _bootPlay.Label.text = Loc.T("home.loading");
         SfxManager.PlayConfirm();
         SfxManager.Haptic(HapticKind.Light);
+        Telemetry.Log("home_play");
+        cm.BeginSolo();
+    }
+
+    private void PressParty()
+    {
+        var cm = Doodlebugs.Network.ConnectionManager.Instance;
+        if (cm == null) return;
+        _bootStatus.text = Loc.T("hangar.searching");
+        SfxManager.PlayConfirm();
+        SfxManager.Haptic(HapticKind.Light);
+        Telemetry.Log("home_party");
+        cm.BeginParty();
+        RefreshHome();
+    }
+
+    private void PressCancel()
+    {
+        Telemetry.Log("home_party_cancel");
+        Doodlebugs.Network.ConnectionManager.Instance?.CancelParty();
+        RefreshHome();
+    }
+
+    private void OnSessionChanged(Doodlebugs.Network.SessionKind _) => RefreshHome();
+
+    /// <summary>Home view: the search status and CANCEL while a PARTY search
+    /// runs, PARTY otherwise; PLAY is always there to give up waiting.</summary>
+    private void RefreshHome()
+    {
+        if (_bootPlay == null) return;
+        var cm = Doodlebugs.Network.ConnectionManager.Instance;
+        bool searching = cm != null && cm.Session == Doodlebugs.Network.SessionKind.Party;
+        bool starting = cm != null && cm.Session == Doodlebugs.Network.SessionKind.Solo;
+        _bootStatus.gameObject.SetActive(searching);
+        _bootParty.Panel.Root.gameObject.SetActive(!searching);
+        _bootCancel.Panel.Root.gameObject.SetActive(searching);
+        _bootPlay.Button.interactable = !starting;
+        _bootPlay.Label.text = Loc.T(starting ? "home.loading" : "home.play");
     }
 
     // --- open / close -------------------------------------------------------------
@@ -474,6 +549,7 @@ public class HangarScreen : MonoBehaviour
         _overlay.gameObject.SetActive(!lateJoin);
 
         _boot.gameObject.SetActive(searching);
+        if (searching) RefreshHome();
         _hero.gameObject.SetActive(!searching);
         _tabRow.gameObject.SetActive(!searching);
         _content.gameObject.SetActive(!searching);
@@ -484,6 +560,15 @@ public class HangarScreen : MonoBehaviour
         _readyPill.root.gameObject.SetActive(readyCheck);
         _statusPill.root.gameObject.SetActive(mode == MatchManager.HangarMode.Waiting);
         _statusPill.label.text = "WAITING FOR PLAYERS...";
+        var match = MatchManager.Instance;
+        bool solo = match != null && match.IsSoloSession;
+        bool partyHostLobby = mode == MatchManager.HangarMode.Waiting &&
+                              NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;
+        _homePill.root.gameObject.SetActive(partyHostLobby || (solo && mode == MatchManager.HangarMode.Intermission));
+        bool partyHost = !solo && NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
+        _lanBots.gameObject.SetActive(partyHost && (mode == MatchManager.HangarMode.Waiting ||
+                                                    mode == MatchManager.HangarMode.PreBattle ||
+                                                    mode == MatchManager.HangarMode.Intermission));
         RefreshPills();
 
         // Tabs per mode
@@ -498,7 +583,8 @@ public class HangarScreen : MonoBehaviour
             case MatchManager.HangarMode.LateJoin: SetCta("JOIN", UiTheme.Confirm, seconds, true); break;
             case MatchManager.HangarMode.PreBattle:
             case MatchManager.HangarMode.Intermission:
-                SetCta("READY", UiTheme.Confirm, seconds > 0 ? seconds : MatchManager.HangarSeconds, true); break;
+                SetCta(solo ? Loc.T("solo.next_round") : "READY", UiTheme.Confirm,
+                    seconds > 0 ? seconds : MatchManager.HangarSeconds, true); break;
         }
 
         if (!searching)
@@ -606,8 +692,10 @@ public class HangarScreen : MonoBehaviour
         _nextPill.label.text = (host ? "ARENAS · " : "NEXT · ") + arena.ToUpperInvariant();
         _nextPill.bg.raycastTarget = host;
 
-        int devices = RosterDevices().Count;
-        _readyPill.label.text = $"READY {_readyClients.Count}/{Mathf.Max(1, devices)}";
+        var roster = RosterDevices();
+        int bots = 0;
+        foreach (var r in roster) if (r.Bot) bots++;
+        _readyPill.label.text = $"READY {_readyClients.Count + bots}/{Mathf.Max(1, roster.Count)}";
 
         if (mm != null && _tabs.TryGetValue(Tab.Upgrades, out var up))
         {
@@ -979,7 +1067,9 @@ public class HangarScreen : MonoBehaviour
         return lightGlass && Lum(accent) > 0.45f ? UiTheme.OnBackdrop : accent;
     }
 
-    private struct Pilot { public ulong Client; public string Name; public int Model, Skin; }
+    // Bot = a combat bot in a LAN party (Prompts/27 WP6): its own pill, always
+    // READY; Client is then its participant id, LocalIdx its seat index.
+    private struct Pilot { public ulong Client; public int LocalIdx; public bool Bot; public string Name; public int Model, Skin; }
 
     private static List<Pilot> RosterDevices()
     {
@@ -993,7 +1083,22 @@ public class HangarScreen : MonoBehaviour
         });
         foreach (var p in planes)
         {
-            if (p.IsBot || !seen.Add(p.OwnerClientId)) continue;
+            if (p.IsWarmupBot) continue;
+            if (p.IsCombatBot)
+            {
+                var ba = p.GetComponent<PlaneAppearance>();
+                list.Add(new Pilot
+                {
+                    Client = MatchManager.ParticipantId(p.OwnerClientId, p.LocalPlayerIndex),
+                    LocalIdx = p.LocalPlayerIndex,
+                    Bot = true,
+                    Name = p.DisplayName,
+                    Model = ba != null ? ba.NetModelId.Value : 0,
+                    Skin = ba != null ? ba.NetSkinId.Value : 0,
+                });
+                continue;
+            }
+            if (!seen.Add(p.OwnerClientId)) continue;
             var a = p.GetComponent<PlaneAppearance>();
             string n = p.PlayerName;
             int hash = n.IndexOf('#');
@@ -1006,7 +1111,10 @@ public class HangarScreen : MonoBehaviour
                 Skin = a != null ? a.NetSkinId.Value : 0,
             });
         }
-        return list;
+        // Humans first, bots after, each group in plane order
+        var ordered = list.FindAll(x => !x.Bot);
+        ordered.AddRange(list.FindAll(x => x.Bot));
+        return ordered;
     }
 
     private void RebuildRoster(bool force)
@@ -1048,9 +1156,11 @@ public class HangarScreen : MonoBehaviour
             var le = pill.gameObject.AddComponent<LayoutElement>();
             le.preferredHeight = 40f;
 
+            ulong colorClient = p.Bot ? 0UL : p.Client;
+            int colorIdx = p.Bot ? p.LocalIdx : 0;
             Color pc = PlayerColorManager.Instance != null
-                ? PlayerColorManager.Instance.GetColor(p.Client, 0)
-                : PlayerColorManager.GetColorByIndex((int)p.Client);
+                ? PlayerColorManager.Instance.GetColor(colorClient, colorIdx)
+                : PlayerColorManager.GetColorByIndex((int)colorClient + colorIdx);
             var (thumb, _, icon) = Ui.Badge(pill, "Thumb", PlaneModelCatalog.LoadSprite(p.Model, p.Skin), UiTheme.Frame, 32f);
             thumb.GetChild(0).GetComponent<Image>().color = pc;
             var tle = thumb.gameObject.AddComponent<LayoutElement>();
@@ -1063,8 +1173,8 @@ public class HangarScreen : MonoBehaviour
             v.childControlWidth = true;
             v.childControlHeight = true;
             v.childAlignment = TextAnchor.MiddleLeft;
-            Ui.AutoText(col, "Name", p.Client == me ? "You" : p.Name, UiTheme.BodyStrong, 13, UiTheme.OnBackdrop);
-            bool ready = _readyClients.Contains(p.Client);
+            Ui.AutoText(col, "Name", !p.Bot && p.Client == me ? "You" : p.Name, UiTheme.BodyStrong, 13, UiTheme.OnBackdrop);
+            bool ready = p.Bot || _readyClients.Contains(p.Client);   // nobody waits for a bot
             string state = readyCheck ? (ready ? "READY" : "PICKING") : _mode == MatchManager.HangarMode.Waiting ? "IN LOBBY" : "";
             if (state.Length > 0)
                 Ui.AutoText(col, "State", state, UiTheme.Label, 12, ready ? UiTheme.Confirm : UiTheme.Highlight);

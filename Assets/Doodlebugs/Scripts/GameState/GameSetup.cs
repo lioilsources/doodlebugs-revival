@@ -124,6 +124,8 @@ public class GameSetup : MonoBehaviour
         // same canvas (ROADMAP §3.9 - GameHUD stops growing). Both are inert
         // on desktop except the settings overlay itself.
         TouchControls.Create(canvas);
+        SoloControls.Create(canvas);   // in-battle HOME corner (Prompts/27 WP5)
+        NearbyToast.Create(canvas);    // 'PILOT NEARBY - JOIN' during solo (WP6)
 
         // Phone-first menus (Prompts/30): own canvas, own scale
         ThemeSettings.Boot();      // Prompts/31: the saved UI theme, before any screen is built

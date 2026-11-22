@@ -11,13 +11,15 @@ public enum ControlScheme
 
 /// <summary>
 /// The touch control scheme (Prompts/26 D1): POINT by default for new installs
-/// (Prompts/28 D4), RATE and gyro as an opt-in from the settings overlay. Persisted in PlayerPrefs until
-/// PlayerProfile (ROADMAP Phase 0) lands - the profile migration reads
-/// <see cref="SchemeKey"/>. Desktop never reads this: keyboard and gamepad
+/// (Prompts/28 D4), RATE and gyro as an opt-in from the settings overlay.
+/// Persisted in <see cref="PlayerProfile"/>; <see cref="SchemeKey"/> is the
+/// PlayerPrefs key it used before, which the profile imports once. LEAN still
+/// lives in PlayerPrefs (<see cref="LeanKey"/>). Desktop never reads this: keyboard and gamepad
 /// are picked by InputManager from the devices present.
 /// </summary>
 public static class ControlSettings
 {
+    /// <summary>Legacy PlayerPrefs key (pre-profile builds); read only by the import.</summary>
     public const string SchemeKey = "settings.controlScheme";
     public const string LeanKey = "settings.lean";
 
@@ -30,7 +32,7 @@ public static class ControlSettings
         {
             if (_scheme == null)
             {
-                int raw = PlayerPrefs.GetInt(SchemeKey, (int)ControlScheme.Pointer);
+                int raw = PlayerProfile.Current.settings.controlScheme;
                 _scheme = Enum.IsDefined(typeof(ControlScheme), raw)
                     ? (ControlScheme)raw
                     : ControlScheme.Pointer;
@@ -40,7 +42,7 @@ public static class ControlSettings
     }
 
     /// <summary>True once the player has chosen; false = still the default.</summary>
-    public static bool IsSaved => PlayerPrefs.HasKey(SchemeKey);
+    public static bool IsSaved => PlayerProfile.Current.settings.controlSchemeSaved;
 
     /// <summary>Raised after the scheme changed and was saved.</summary>
     public static event Action<ControlScheme> Changed;
@@ -50,8 +52,10 @@ public static class ControlSettings
         if (scheme == Scheme && IsSaved) return;
 
         _scheme = scheme;
-        PlayerPrefs.SetInt(SchemeKey, (int)scheme);
-        PlayerPrefs.Save();
+        PlayerProfile.Current.settings.controlScheme = (int)scheme;
+        PlayerProfile.Current.settings.controlSchemeSaved = true;
+        PlayerProfile.MarkDirty();
+        PlayerProfile.Save();
         Telemetry.Log("input_scheme_set", ("scheme", scheme), ("source", source));
         Changed?.Invoke(scheme);
     }

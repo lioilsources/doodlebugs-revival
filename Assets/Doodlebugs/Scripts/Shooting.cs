@@ -227,6 +227,7 @@ public class Shooting : NetworkBehaviour
         float planeSpeed = planeRb != null ? planeRb.linearVelocity.magnitude : 0f;
         int localPlayerIndex = playerController.LocalPlayerIndex >= 0 ? playerController.LocalPlayerIndex : 0;
         ShootServerRpc(firePoint.position, firePoint.rotation, planeSpeed, localPlayerIndex, slot, charge);
+        if (!playerController.IsBot) ProfileRecorder.ReportLocalShot();
     }
 
     [ServerRpc]
@@ -396,7 +397,7 @@ public class Shooting : NetworkBehaviour
             if (dist > g.Radius) continue;
             Vector2 dir = dist > 0.01f ? d / dist : Vector2.up;
             float spin = (Random.value < 0.5f ? -1f : 1f) * 40f;
-            p.ServerApplyImpulse(dir * g.Knockback, spin, OwnerClientId, myIdx, !playerController.IsBot);
+            p.ServerApplyImpulse(dir * g.Knockback, spin, OwnerClientId, myIdx, !playerController.IsWarmupBot);
         }
         foreach (var b in FindObjectsByType<Bullet>(FindObjectsSortMode.None))
         {
