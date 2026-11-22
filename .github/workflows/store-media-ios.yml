@@ -1,0 +1,60 @@
+name: App Store media
+
+# Uploads the store texts (fastlane/metadata) and screenshots
+# (fastlane/screenshots) to an App Store version. No binary, no submission:
+# picking the build and pressing "Add for Review" stays a human step.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: App Store version to fill (default = bundleVersion)
+        required: false
+
+jobs:
+  deliver:
+    name: Upload texts and screenshots
+    runs-on: [self-hosted, macos-unity]
+    timeout-minutes: 30
+
+    env:
+      BUNDLE_ID_IOS: com.ol1n.doodlebugsRevival
+      APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+      APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+      APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.hooksPath
+          GIT_CONFIG_VALUE_0: .git/hooks
+        with:
+          lfs: true
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /fastlane/
+            /ci/
+            /Gemfile
+            /ProjectSettings/ProjectSettings.asset
+          path: store-media
+
+      - name: Select Ruby
+        working-directory: store-media
+        run: ./ci/select-ruby.sh
+
+      - name: Install fastlane
+        working-directory: store-media
+        run: |
+          bundle config set --local path vendor/bundle
+          bundle install --jobs 4
+
+      - name: Upload
+        working-directory: store-media
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          STORE_VERSION="${INPUT_VERSION:-$(awk '/^  bundleVersion:/ {print $2}' ProjectSettings/ProjectSettings.asset)}"
+          echo "App Store version: $STORE_VERSION"
+          STORE_VERSION="$STORE_VERSION" bundle exec fastlane ios ios_store_media

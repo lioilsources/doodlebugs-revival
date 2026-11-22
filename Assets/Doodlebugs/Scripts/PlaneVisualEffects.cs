@@ -75,6 +75,12 @@ public class PlaneVisualEffects : NetworkBehaviour
             UpdateSmoke(planeStats.NetHealth.Value);
         }
 
+        // Bank, half-roll, wingtip trails, stall shudder (Prompts/28 §5)
+        if (playerController != null && GetComponent<PlaneFlightVisuals>() == null)
+        {
+            gameObject.AddComponent<PlaneFlightVisuals>().Init(playerController);
+        }
+
         // Subscribe to expert status changes
         isExpert.OnValueChanged += OnExpertStatusChanged;
 

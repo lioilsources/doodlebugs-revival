@@ -26,11 +26,16 @@ public class TouchControls : MonoBehaviour
 
     // Canvas units (reference 1920x1080, match 0.5 - an iPhone 12 mini is
     // 2119x978 of them).
-    private const float StickTravel = 90f;
-    private const float StickBaseSize = 260f;
-    private const float StickKnobSize = 110f;
-    private const float StickDeadZone = 0.12f;
-    private const float StickExpo = 1.3f;
+    // RATE tuning (Prompts/28 §4): the plane turns ~3x faster than when these
+    // were 90 / 0.12 / 1.3, so a steeper expo keeps half-stick at the old full
+    // rate, and throttle gets its own wider dead zone so a diagonal thumb
+    // while turning does not change speed.
+    private const float StickTravel = 110f;
+    private const float StickBaseSize = 290f;
+    private const float StickKnobSize = 120f;
+    // turn dead zone / expo live in FlightTuning (tunable in the Flight Lab)
+    private const float ThrottleDeadZone = 0.28f;
+    private const float ThrottleExpo = 1.3f;
     // Right half up to 80 % height: the top strip stays free for the corner
     // HANGAR button (TouchControls sits above GameHUD and would swallow it).
     private const float ZoneWidthFrac = 0.50f;
@@ -41,7 +46,7 @@ public class TouchControls : MonoBehaviour
     private const float PrimarySize = 200f;
     private const float SecondarySize = 170f;
     private const float RingWidthFrac = 0.07f;
-    private const float IconFrac = 0.55f;
+    private const float IconFrac = 0.72f;   // badge icons (Prompts/29 §7)
     private const float PunchScale = 1.12f;
     private const float PunchSeconds = 0.12f;
     private static readonly Vector2 PrimaryPos = new Vector2(150f, 150f);
@@ -54,14 +59,32 @@ public class TouchControls : MonoBehaviour
     private static readonly Color StickBaseColor = new Color(1f, 1f, 1f, 0.18f);
     private static readonly Color StickKnobColor = new Color(1f, 1f, 1f, 0.55f);
 
+    // LEAN arc (Prompts/32 §4.8 / §5) around the stick base
+    private const float LeanArcSize = 330f;
+    private const float LeanArcWidthFrac = 0.05f;
+    private const float LeanFullAt = 0.999f;
+    private const float LeanRearmBelow = 0.6f;
+    private const string LeanBannerKey = "lean.firstFullShown";
+    private static readonly Color LeanArcColor = new Color(1f, 1f, 1f, 0.75f);
+
     private const float PlaneLookupInterval = 0.5f;
+
+    // RECOVER combo: double-tap on the stick while the engine is dead. The
+    // hint banner names it on the first stalls until the player has used it.
+    private const string RecoverUsedKey = "recover.used";
+    private const string RecoverHintsKey = "recover.hints";
+    private const int RecoverMaxHints = 3;
+    private bool _wasEngineOff;
 
     private Canvas _canvas;
     private RectTransform _root;
     private Rect _appliedSafeArea = new Rect(-1, -1, -1, -1);
     private Vector2Int _appliedScreen;
+    private float _appliedScale;
 
     private StickZone _stick;
+    private Image _leanArc;
+    private bool _leanFull;
     private readonly Trigger[] _triggers = new Trigger[TouchInputProvider.Slots];
 
     private PlayerController _plane;
@@ -120,6 +143,41 @@ public class TouchControls : MonoBehaviour
         if (!show) return;
 
         RefreshTriggers();
+        RefreshLean();
+        RefreshRecoverHint();
+    }
+
+    // --- RECOVER combo -------------------------------------------------------------
+
+    private void OnStickDoubleTap()
+    {
+        var provider = Provider;
+        if (provider == null || _plane == null || !_plane.IsEngineOff) return;
+        provider.RequestRecover();
+        if (PlayerPrefs.GetInt(RecoverUsedKey, 0) == 0)
+        {
+            PlayerPrefs.SetInt(RecoverUsedKey, 1);
+            PlayerPrefs.Save();
+        }
+    }
+
+    /// <summary>On a fresh stall, name the combo - only the first few times
+    /// and never once the player has used it.</summary>
+    private void RefreshRecoverHint()
+    {
+        bool off = _plane != null && _plane.IsEngineOff && !_plane.IsRecovering;
+        if (off && !_wasEngineOff && Provider != null && Provider.UsesStick
+            && PlayerPrefs.GetInt(RecoverUsedKey, 0) == 0)
+        {
+            int shown = PlayerPrefs.GetInt(RecoverHintsKey, 0);
+            if (shown < RecoverMaxHints)
+            {
+                PlayerPrefs.SetInt(RecoverHintsKey, shown + 1);
+                PlayerPrefs.Save();
+                BannerOverlay.Show("STALL! DOUBLE-TAP STICK", UiTheme.Danger);
+            }
+        }
+        _wasEngineOff = off;
     }
 
     // --- visibility ------------------------------------------------------------
@@ -176,7 +234,7 @@ public class TouchControls : MonoBehaviour
 
     private void ApplyScheme(ControlScheme scheme)
     {
-        if (_stick != null) _stick.gameObject.SetActive(scheme == ControlScheme.Joystick);
+        if (_stick != null) _stick.gameObject.SetActive(scheme != ControlScheme.Gyro);
         _stick?.Release();
         Provider?.ReleaseAll();
     }
@@ -187,12 +245,14 @@ public class TouchControls : MonoBehaviour
     {
         var safe = Screen.safeArea;
         var screen = new Vector2Int(Screen.width, Screen.height);
-        if (safe == _appliedSafeArea && screen == _appliedScreen) return;
+        // Overlay canvas: pixels / scaleFactor = canvas units. The scaler sets
+        // scaleFactor after the first frame, so a change of it re-applies too.
+        float s = _canvas != null && _canvas.scaleFactor > 0f ? _canvas.scaleFactor : 1f;
+        if (safe == _appliedSafeArea && screen == _appliedScreen && Mathf.Approximately(s, _appliedScale)) return;
         _appliedSafeArea = safe;
         _appliedScreen = screen;
+        _appliedScale = s;
 
-        // Overlay canvas: pixels / scaleFactor = canvas units.
-        float s = _canvas != null && _canvas.scaleFactor > 0f ? _canvas.scaleFactor : 1f;
         _root.offsetMin = new Vector2(safe.xMin, safe.yMin) / s;
         _root.offsetMax = new Vector2(safe.xMax - screen.x, safe.yMax - screen.y) / s;
     }
@@ -235,14 +295,81 @@ public class TouchControls : MonoBehaviour
         knobImage.color = StickKnobColor;
         knobImage.raycastTarget = false;
 
+        BuildLeanArc(baseGo.transform);
+
         _stick = zoneGo.AddComponent<StickZone>();
         _stick.Base = baseRect;
         _stick.Knob = knobRect;
         _stick.BaseGroup = baseGroup;
         _stick.Travel = StickTravel;
         _stick.OnAxes = OnStickAxes;
+        _stick.OnDoubleTap = OnStickDoubleTap;
         _stick.IdleAlpha = StickIdleAlpha;
         _stick.Rest();
+    }
+
+    // --- LEAN arc (Prompts/32) ----------------------------------------------------
+
+    private void BuildLeanArc(Transform stickBase)
+    {
+        var go = new GameObject("LeanArc");
+        go.transform.SetParent(stickBase, false);
+        UiKit.Rect(go, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(LeanArcSize, LeanArcSize));
+        _leanArc = go.AddComponent<Image>();
+        _leanArc.sprite = UiSprites.Ring(LeanArcWidthFrac);
+        _leanArc.color = LeanArcColor;
+        _leanArc.raycastTarget = false;
+        _leanArc.type = Image.Type.Filled;
+        _leanArc.fillMethod = Image.FillMethod.Radial360;
+        _leanArc.fillOrigin = (int)Image.Origin360.Top;
+        _leanArc.fillAmount = 0f;
+        go.SetActive(false);
+    }
+
+    /// <summary>The arc fills with |lean| the way the phone rolls (clockwise
+    /// = clockwise). Reaching a full meter while the stick turns the same
+    /// way fires the other three channels: sound, haptic and - once per
+    /// install - the banner that names the mechanic.</summary>
+    private void RefreshLean()
+    {
+        if (_leanArc == null) return;
+        var provider = Provider;
+        bool on = provider != null && provider.UsesStick && provider.LeanActive;
+        if (_leanArc.gameObject.activeSelf != on) _leanArc.gameObject.SetActive(on);
+        if (!on)
+        {
+            _leanFull = false;
+            return;
+        }
+
+        float lean = provider.GetLean();
+        float a = Mathf.Abs(lean);
+        _leanArc.fillAmount = a;
+        _leanArc.fillClockwise = lean >= 0f;
+        _leanArc.color = a >= LeanFullAt ? UiTheme.Highlight : LeanArcColor;
+
+        float aligned = _plane != null ? _plane.LeanAligned01 : 0f;
+        if (aligned >= LeanFullAt && !_leanFull)
+        {
+            _leanFull = true;
+            OnLeanFull();
+        }
+        else if (aligned < LeanRearmBelow) _leanFull = false;
+    }
+
+    private void OnLeanFull()
+    {
+        SfxManager.PlayNamed("lean_full", 0.6f, 0.03f);
+        SfxManager.Haptic(HapticKind.Light);
+        StartCoroutine(Punch(_leanArc.transform));
+
+        if (PlayerPrefs.GetInt(LeanBannerKey, 0) != 0) return;
+        PlayerPrefs.SetInt(LeanBannerKey, 1);
+        PlayerPrefs.Save();
+        int pct = Mathf.RoundToInt(FlightTuning.Active.LeanBonus * 100f);
+        BannerOverlay.Show($"LEAN! +{pct} % TURN", UiTheme.Highlight);
+        Telemetry.Log("lean_first_full", ("scheme", ControlSettings.Scheme), ("bonus_pct", pct));
     }
 
     private void OnStickAxes(Vector2 raw)
@@ -250,13 +377,16 @@ public class TouchControls : MonoBehaviour
         var provider = Provider;
         if (provider == null) return;
 
-        // Stick up = turn left (rotation -1), down = turn right, right = more
-        // throttle, left = less. Per-axis curve, no circular normalisation: a
-        // thumb in the corner means full throttle AND full turn (the knob is
-        // clamped to the ring, the axes are not).
+        // POINT reads the raw vector (where the thumb points).
+        provider.SetRawStick(raw);
+
+        // RATE: stick up = turn left (rotation -1), down = turn right, right =
+        // more throttle, left = less. Per-axis curve, no circular
+        // normalisation: a thumb in the corner means full throttle AND full
+        // turn (the knob is clamped to the ring, the axes are not).
         provider.SetStick(new Vector2(
-            -MobileInputProvider.Curve(raw.y, StickDeadZone, 1f, StickExpo),
-            MobileInputProvider.Curve(raw.x, StickDeadZone, 1f, StickExpo)));
+            -MobileInputProvider.Curve(raw.y, FlightTuning.RateTurnDeadZone, 1f, FlightTuning.RateTurnExpo),
+            MobileInputProvider.Curve(raw.x, ThrottleDeadZone, 1f, ThrottleExpo)));
     }
 
     /// <summary>Floating stick (D7): the base jumps to where the thumb lands,
@@ -269,7 +399,16 @@ public class TouchControls : MonoBehaviour
         public CanvasGroup BaseGroup;
         public float Travel;
         public System.Action<Vector2> OnAxes;
+        public System.Action OnDoubleTap;
         public float IdleAlpha;
+
+        // Double-tap: a short, still tap followed by a press within the window
+        private const float TapMaxSeconds = 0.25f;
+        private const float DoubleTapWindow = 0.30f;
+        private const float TapMaxTravel = 0.35f;   // of Travel
+        private float _downAt;
+        private float _tapUpAt = -1f;
+        private bool _moved;
 
         private RectTransform _rect;
         private int _pointer = int.MinValue;
@@ -298,6 +437,15 @@ public class TouchControls : MonoBehaviour
             if (_pointer != int.MinValue) return;   // one finger owns the stick
             if (!ToLocal(e, out var local)) return;
 
+            float now = Time.unscaledTime;
+            if (_tapUpAt >= 0f && now - _tapUpAt <= DoubleTapWindow)
+            {
+                _tapUpAt = -1f;
+                OnDoubleTap?.Invoke();
+            }
+            _downAt = now;
+            _moved = false;
+
             _pointer = e.pointerId;
             _touchId = TouchIdOf(e);
             _pressFrame = Time.frameCount;
@@ -316,6 +464,7 @@ public class TouchControls : MonoBehaviour
             if (!ToLocal(e, out var local)) return;
 
             var delta = local - _origin;
+            if (delta.magnitude > Travel * TapMaxTravel) _moved = true;
             Knob.anchoredPosition = Vector2.ClampMagnitude(delta, Travel);
             OnAxes?.Invoke(new Vector2(
                 Mathf.Clamp(delta.x / Travel, -1f, 1f),
@@ -331,6 +480,8 @@ public class TouchControls : MonoBehaviour
         public void Release()
         {
             bool wasHeld = _pointer != int.MinValue;
+            if (wasHeld)
+                _tapUpAt = !_moved && Time.unscaledTime - _downAt <= TapMaxSeconds ? Time.unscaledTime : -1f;
             _pointer = int.MinValue;
             _touchId = NoTouch;
             OnAxes?.Invoke(Vector2.zero);
@@ -423,7 +574,30 @@ public class TouchControls : MonoBehaviour
             new Vector2(0.5f, 0.5f), Vector2.zero, Color.white, new Vector2(size, 30));
         fallback.enabled = false;
 
+        // Special ammo dots under the trigger, Mk II chip on its rim
+        var dotsGo = new GameObject("Ammo");
+        dotsGo.transform.SetParent(go.transform, false);
+        var dotsRect = UiKit.Rect(dotsGo, new Vector2(0.5f, 0f), new Vector2(0.5f, 1f), new Vector2(0f, -6f), new Vector2(size, 18f));
+        var dots = new Image[3];
+        for (int i = 0; i < dots.Length; i++)
+        {
+            var d = new GameObject("Dot" + i);
+            d.transform.SetParent(dotsRect, false);
+            UiKit.Rect(d, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2((i - 1) * 22f, 0f), new Vector2(14f, 14f));
+            dots[i] = d.AddComponent<Image>();
+            dots[i].sprite = UiSprites.Disc;
+            dots[i].color = UiTheme.Special;
+            dots[i].raycastTarget = false;
+            dots[i].enabled = false;
+        }
+        var mk = UiKit.Label(go.transform, "MkII", "MK II", 18, new Vector2(1f, 1f), new Vector2(-10f, -6f),
+            UiTheme.Highlight, new Vector2(90f, 26f));
+        mk.font = UiTheme.Label;
+        mk.enabled = false;
+
         var trigger = go.AddComponent<Trigger>();
+        trigger.Ammo = dots;
+        trigger.MkII = mk;
         trigger.Slot = slot;
         trigger.Fill = fill;
         trigger.Icon = icon;
@@ -458,18 +632,32 @@ public class TouchControls : MonoBehaviour
             if (charged && !t.WasCharged) StartCoroutine(Punch(t.transform));
             t.WasCharged = charged;
 
-            int weaponId = _shooting != null ? _shooting.GetWeaponId(slot) : (int)WeaponType.MG;
-            if (weaponId != t.WeaponId)
+            int key = _shooting != null ? _shooting.GetSlotKey(slot) : (int)WeaponType.MG;
+            if (key != t.WeaponId)
             {
-                t.WeaponId = weaponId;
-                SetIcon(t, WeaponProfile.Get(weaponId));
+                t.WeaponId = key;
+                SetIcon(t, slot);
+                StartCoroutine(Punch(t.transform));
             }
+
+            // Ring colour by category; special ammo as dots; Mk II chip
+            bool gadget = _shooting != null && _shooting.IsGadgetSlot(slot);
+            bool special = slot == 0 && _shooting != null && _shooting.HasSpecial;
+            if (!charged) t.Fill.color = gadget ? UiTheme.Gadget : special ? UiTheme.Special : ChargingColor;
+            int ammo = special ? _shooting.SpecialAmmo : 0;
+            for (int i = 0; i < t.Ammo.Length; i++) t.Ammo[i].enabled = i < ammo;
+            t.MkII.enabled = !gadget && !special && _shooting != null &&
+                             _shooting.GetWeapon(slot).Category == WeaponCategory.Upgrade;
         }
     }
 
-    private static void SetIcon(Trigger t, WeaponProfile weapon)
+    private void SetIcon(Trigger t, int slot)
     {
-        var sprite = weapon.LoadIcon(out var tint);
+        Sprite sprite;
+        Color tint;
+        string label;
+        if (_shooting != null) sprite = _shooting.GetSlotIcon(slot, out tint, out label);
+        else { var w = WeaponProfile.Get(WeaponType.MG); sprite = w.LoadIcon(out tint); label = w.DisplayName; }
         if (sprite != null)
         {
             t.Icon.sprite = sprite;
@@ -480,7 +668,7 @@ public class TouchControls : MonoBehaviour
         else
         {
             t.Icon.enabled = false;
-            t.Fallback.text = weapon.DisplayName;
+            t.Fallback.text = label;
             t.Fallback.enabled = true;
         }
     }
@@ -530,6 +718,8 @@ public class TouchControls : MonoBehaviour
         public Text Fallback;
         public bool WasCharged;
         public int WeaponId;
+        public Image[] Ammo;
+        public Text MkII;
         public System.Action<int, bool> OnHeld;
 
         private int _pointer = int.MinValue;

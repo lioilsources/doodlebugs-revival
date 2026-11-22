@@ -42,7 +42,7 @@ SDXL maleb), `base/` (originály stripů), `out/` (náhledy). Do repa jde jen
 kód, brands.json, fonty a hotové stripy v Assets.
 
 **Velké rendery na SPARKu**: `spark_generate.py` volá ComfyUI API na
-`192.168.88.66:8188` (DGX GB10) — enqueue `/prompt` → poll `/history/{id}` →
+`$SPARK_HOST:8188` (DGX GB10) — enqueue `/prompt` → poll `/history/{id}` →
 download `/view`, vzor podle `Ol1nLLM/backend/comfyui`. Použito na 4096×2732
 DOODLE AIR background; Mini by takové rozlišení neutáhl.
 

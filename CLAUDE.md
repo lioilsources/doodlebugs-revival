@@ -65,6 +65,46 @@ code; ROADMAP.md status markers move `[ ]` → `[plan]` → `[wip]` → `[done v
 `CHANGELOG.md` stopped at 31/03/2026 and does not track tags - GitHub
 Releases are the release record until it is revived or formally retired.
 
+**Plans 28-30 (2026-11-18, `[wip]`, implemented, device test pending):**
+`Prompts/28` flight feel, `Prompts/29` arsenal (waves 1+2; wave 3 open),
+`Prompts/30` hangar UX (`Prompts/30-hangar-mockup.html` = size spec). Read
+the relevant one before touching flight, weapons or hangar UI. Summary:
+- **Flight** = `Scripts/Flight/FlightTuning.cs` (presets CLASSIC+/ARCADE/ACE,
+  ARCADE compiled) + `FlightModel.cs` (turn envelope peaking at corner
+  speed, attack/release, snap, turn bleed). Pilot maturity is dead code.
+  Damage costs handling only on the hull, floor 85 %. Flight Lab = 5 taps
+  on the SETTINGS title; flight overrides apply in the lobby only.
+  `Effects/PlaneFlightVisuals.cs` = bank, half-roll (flipY), wingtip
+  trails, stall shudder, Lance beam, bomb aim dots. Never rotate the
+  `Plane` child: its rotation is the relight-window test.
+- **Arsenal**: slot 1 = gadget (`Weapons/GadgetProfile.cs`: NITRO default,
+  BARREL ROLL, THUNDERCLAP), slot 0 = drafted weapon or a supply-drop
+  special with ammo. Every draftable weapon has a Mk II (crate never
+  empty). Knockback via `PlayerController.ServerApplyImpulse` (owner
+  applies it); knocked into the ground = `KillCause.Slammed` kill.
+  `WeaponType` ids are append-only, array index == enum value
+  (`WeaponProfile.Validate` logs a mismatch). Supply drop =
+  `PowerUpManager` timer in Battle, a shootable `PowerUp`.
+- **UI**: menus live on `UI/Kit/MenuCanvas` (800x400 Expand, ~0.94 pt per
+  unit on an iPhone mini), built from `UI/Kit/Ui.cs` + `UiTheme` (Barlow
+  fonts, min text 12, min touch 48; `UiAudit` warns in dev builds).
+  `UI/HangarScreen.cs` owns every hangar mode + plane/arena pickers;
+  `GameHUD` keeps HUD, kill feed, results, podium only.
+- **Plan 31 (`[wip]`, implemented, device test pending):** ten UI themes over
+  the same hangar layout - `Prompts/31-CLAUDE-PLAN-ui-themes.md`, mockup next
+  to it. `UiTheme` is a facade over `UI/Kit/UiThemeCatalog` (`Ink` = text on
+  paper, `Line` = outlines, `OnBackdrop` = text on the arena); screens rebuild
+  on `UiTheme.Changed`. Art in `Resources/Sprites/UiThemes/<key>/`, fonts via
+  `tools/ui_themes/fetch_fonts.py`.
+  `tools/ui_themes/tokens.py` = palettes + WCAG contrast gate (mirror of the
+  future `UiThemeCatalog`), `prompts.py` = art prompts (schnell for textless
+  art, Qwen-Image only for the wordmark).
+- **Plan 32 (`[wip]`, wave 1 implemented):** LEAN, a tilt assist on top of
+  POINT/RATE - `Prompts/32-CLAUDE-PLAN-lean-hybrid.md`. Rolling the phone
+  into a turn adds up to 15 % turn rate; the meter rewards motion and leaks,
+  a held pose earns nothing. `tools/flight/lean_sim.py --check` guards the
+  numbers (mirror of the future `Flight/LeanModel.cs`).
+
 ## Tech Stack
 
 - Unity 6000.3.13f1
@@ -248,10 +288,12 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   sensor enabled only in that scheme) and one held flag per weapon slot from
   the triggers. Touch-anywhere-to-shoot is gone. A connected gamepad still
   wins on mobile (`InputManager.IsUsingGamepad`), and the controls hide.
-- Scheme: `ControlSettings.Scheme` (`Scripts/Meta/`), Joystick by default,
-  Gyro opt-in; PlayerPrefs key `settings.controlScheme` until `PlayerProfile`
-  (Phase 0) absorbs it. Toggle lives in `UI/SettingsOverlay.cs` (SETTINGS
-  button in every hangar, bottom-left column) - Phase 2's shake/music/SFX/
+- Scheme: `ControlSettings.Scheme` (`Scripts/Meta/`): POINT (`Pointer`,
+  stick = direction of flight, `IInputProvider.TryGetHeadingIntent`) is the
+  default for new installs, RATE (`Joystick`, the old stick) and Gyro
+  opt-in; PlayerPrefs key `settings.controlScheme` until `PlayerProfile`
+  (Phase 0) absorbs it. Toggle lives in `UI/SettingsOverlay.cs` (gear
+  button in the hangar's top bar) - Phase 2's shake/music/SFX/
   haptics rows go there, not into `GameHUD`.
 - `UI/TouchControls.cs` (Prompts/26): runtime-built under a `Screen.safeArea`
   container. Floating stick in the right 50 % × bottom 80 % zone (top strip
@@ -281,12 +323,16 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   no GPU); `WeaponProfile.IconSpriteName` names them and `LoadIcon` falls
   back to `Sprites/Projectiles/metal/<form>` tinted, then to the weapon name.
   Ring/disc/knob sprites are generated at runtime by `UI/UiSprites.cs`.
+- RECOVER combo (stall assist): with the engine dead, double-tap the stick
+  (desktop: throttle-down key twice, gamepad: left stick click) and
+  `PlayerController` flies the flip into the relight window and the pull-out
+  to level itself (`IInputProvider.ConsumeRecover`, timeout 4 s).
 - iOS `deferSystemGesturesMode` = bottom edge (ProjectSettings) so a thumb on
   the triggers does not summon the home indicator.
 
 ## Match Flow / Audio / HUD
 
-- Boot: GameHUD opens an OPAQUE "Searching" hangar on the very first frame
+- Boot: HangarScreen opens an OPAQUE "Searching" hangar on the very first frame
   (discovery status + version, no arena visible); it morphs into the Waiting
   hangar on host start or the PreBattle/LateJoin hangar from server RPCs.
   The arena is first revealed by battle start or the FLY warm-up button.
@@ -337,8 +383,8 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   `Shooting.NetWeaponId` is server-write; hangar picks go through
   `RequestSelectWeaponServerRpc`. The Weapon power-up crate climbs one tier of
   the current weapon's `UpgradesTo` chain and is lost on death/round restart
-  (back to the hangar pick). Maturity profiles still scale ROF/force as
-  multipliers.
+  (back to the hangar pick). Gadgets, specials, homing, charge, remote
+  detonation: see the plans 28-30 summary above.
 - Explosive weapons (`ExplosionRadius > 0`): server does an AoE
   `Physics2D.OverlapCircleAll` (damages every plane in range, incl. the
   shooter's own outside the spawn grace), then `ExplodeClientRpc` plays the

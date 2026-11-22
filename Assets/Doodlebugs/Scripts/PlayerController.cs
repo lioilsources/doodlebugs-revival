@@ -13,30 +13,71 @@ public class PlayerController : NetworkBehaviour, IDamagable
     Rigidbody2D rb;
     ClientNetworkTransform networkTransform;
 
-    // Base values (can be overridden by maturity profile)
-    private float baseRotateSpeed = 200f;
-    private float defaultSpeed = 5f;
-    private float baseMaxSpeed = 20f;
-    private float minSpeed = 2f;
-    private float climbDrag = 1f;       // how fast speed decreases when climbing
-    private float diveBoost = 3f;       // how fast speed increases when diving
-    private float throttleRate = 5f;    // how fast throttle changes speed
-    private float baseMaxGravity = 0.5f;
-    private float baseGravityIncreaseRate = 0.35f;  // how fast gravity increases
-    private float baseEngineOffRotateMultiplier = 16f;  // Novice default: 50 * 16 = 800
-    private float baseEngineRestartMin = -0.8f;
-    private float baseEngineRestartMax = -0.6f;
-
-    // Profile-aware properties (uses player's own maturity level, not global)
-    private PilotMaturityProfile Profile => PilotMaturityManager.Instance?.GetProfile(_maturityLevel);
-    private float rotateSpeed => Profile?.rotateSpeed ?? baseRotateSpeed;
+    // Flight model v2 (Prompts/28): every number comes from FlightTuning.
+    // The pilot-maturity profiles never applied (scores reset each round
+    // below their 10/20-kill thresholds) and are no longer read (D2).
+    private static FlightPreset P => FlightTuning.Active;
+    private float defaultSpeed => P.CruiseSpeed;
+    private float minSpeed => P.MinSpeed;
     // Run-upgrade ENGINE levels raise the speed cap (synced, works for owner input)
-    private float maxSpeed => (Profile?.maxSpeed ?? baseMaxSpeed) * (planeStats?.SpeedMultiplier ?? 1f);
-    private float maxGravity => Profile?.maxGravity ?? baseMaxGravity;
-    private float gravityIncreaseRate => Profile?.gravityIncreaseRate ?? baseGravityIncreaseRate;
-    private float engineOffRotateMultiplier => Profile?.engineOffRotateMultiplier ?? baseEngineOffRotateMultiplier;
-    private float engineRestartMin => Profile?.engineRestartMinRotation ?? baseEngineRestartMin;
-    private float engineRestartMax => Profile?.engineRestartMaxRotation ?? baseEngineRestartMax;
+    private float SpeedMul => planeStats?.SpeedMultiplier ?? 1f;
+    private float maxSpeed => P.MaxSpeed * SpeedMul;
+    private float maxGravity => P.MaxGravity;
+    private float gravityIncreaseRate => P.GravityIncreaseRate;
+    private float engineRestartMin => P.EngineRestartMin;
+    private float engineRestartMax => P.EngineRestartMax;
+    private float HandlingFactor => planeStats != null ? planeStats.Handling : 1f;
+
+    // Owner-side flight state
+    private float _omega;                 // deg/s, + = clockwise (same sign as the rotation input)
+    private float _snapUntil, _snapReadyAt;
+    private float _lastNeutralAt = -1f, _lastPosAt = -1f, _lastNegAt = -1f;
+    private Vector2 _externalVelocity;    // knockback (Prompts/29), decays
+    private float _spinKick;              // degrees still to apply, + = counter-clockwise
+    private float _boostUntil;            // nitro / ram
+    private const float ImpulseDecay = 14f;
+
+    /// <summary>Owner-side: a snap turn just started (sound + haptic hook).</summary>
+    public event System.Action OnSnapTurn;
+
+    /// <summary>Every client: the synced engine state flipped (true = off).</summary>
+    public event System.Action<bool> OnEngineStateChanged;
+
+    /// <summary>Owner-side, 0..1: how hard the plane is turning right now.</summary>
+    public float TurnLoad01 => Mathf.Clamp01(Mathf.Abs(_omega) / Mathf.Max(1f, P.TurnRate));
+
+    // LEAN (Prompts/32): owner-side, last FixedUpdate. No network state - the
+    // bonus is computed on the owner, whose movement is authoritative.
+    private float _leanInput;       // meter from the provider, -1..1
+    private float _leanAligned;     // meter in the stick's direction, 0..1
+    private float _leanUsable;      // ... scaled by stick deflection, 0..1
+
+    /// <summary>Owner-side, -1..1: the LEAN meter as the provider reports it.</summary>
+    public float LeanInput => _leanInput;
+
+    /// <summary>Owner-side, 0..1: how much of the LEAN bonus applies right
+    /// now (engine on, stick turning the meter's way, times stick deflection).</summary>
+    public float Lean01 => _leanUsable;
+
+    /// <summary>Owner-side, 0..1: the meter in the stick's direction,
+    /// whatever the deflection - 1 = "full lean" for the feedback channels.</summary>
+    public float LeanAligned01 => _leanAligned;
+
+    public bool IsBoosting => Time.time < _boostUntil;
+
+    // RECOVER combo (stall assist): an owner-side autopilot that flips the
+    // nose into the relight window, lets the engine catch, then pulls out
+    // level in the direction the plane was travelling. Player input is
+    // ignored until it is level or the timeout runs out.
+    private const float RecoverTimeout = 4f;
+    private const float RecoverLevelTolerance = 6f;
+    private bool _recovering;
+    private float _recoverDir;            // +1 = level out flying right, -1 = left
+    private float _recoverUntil;
+    private float _recoverStartedAt;
+
+    /// <summary>Owner-side: the RECOVER autopilot is flying the plane.</summary>
+    public bool IsRecovering => _recovering;
 
     // Synchronized state across network
     private NetworkVariable<float> netSpeed = new NetworkVariable<float>(5f,
@@ -130,12 +171,13 @@ public class PlayerController : NetworkBehaviour, IDamagable
         (2f * Mathf.Asin(Mathf.Clamp(engineRestartMin, -1f, 1f)) * Mathf.Rad2Deg,
          2f * Mathf.Asin(Mathf.Clamp(engineRestartMax, -1f, 1f)) * Mathf.Rad2Deg);
 
-    /// <summary>Turn radius with the engine on, world units. rotatePlane
-    /// scales the turn rate with speed / defaultSpeed, so speed cancels:
-    /// r = v / omega = defaultSpeed * 180 / (pi * rotateSpeed * handling).
-    /// Novice at full health: 5.73.</summary>
-    public float EngineOnTurnRadius =>
-        defaultSpeed * 180f / (Mathf.PI * Mathf.Max(1f, rotateSpeed) * Mathf.Max(0.1f, planeStats != null ? planeStats.Handling : 1f));
+    /// <summary>Full-stick turn radius at a speed with the engine on, world units.</summary>
+    public float TurnRadiusAt(float speed) => FlightModel.TurnRadius(P, speed, HandlingFactor);
+
+    /// <summary>Turn radius at the current speed.</summary>
+    public float EngineOnTurnRadius => TurnRadiusAt(Speed);
+
+    public float CruiseFlightSpeed => P.CruiseSpeed;
 
     /// <summary>
     /// Get the display name for this player (device name, shortened)
@@ -169,22 +211,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
     /// Check and upgrade maturity level based on kills.
     /// Thresholds: 10 kills = Advanced, 20 kills = Expert
     /// </summary>
-    public void CheckMaturityUpgrade(int totalKills)
-    {
-        PilotMaturityLevel newLevel = _maturityLevel;
-
-        if (totalKills >= 20)
-            newLevel = PilotMaturityLevel.Expert;
-        else if (totalKills >= 10)
-            newLevel = PilotMaturityLevel.Advanced;
-
-        if (newLevel != _maturityLevel)
-        {
-            _maturityLevel = newLevel;
-            Debug.Log($"[PlayerController] Player {OwnerClientId}_{LocalPlayerIndex} maturity upgraded to {newLevel}");
-            OnMaturityChanged?.Invoke(newLevel);
-        }
-    }
+    [System.Obsolete("Pilot maturity no longer affects flight (Prompts/28 D2)")]
+    public void CheckMaturityUpgrade(int totalKills) { }
 
     // Local accessors for network variables
     private float speed
@@ -229,6 +257,12 @@ public class PlayerController : NetworkBehaviour, IDamagable
     // Attribution expires so a shield-hit from long ago doesn't credit that
     // shooter when the victim later dies to something unrelated.
     private const float KillAttributionWindow = 4f;
+    // A knockback has to be what put the plane into the ground, not a hit long before
+    private const float SlamAttributionWindow = 2.5f;
+    private float _lastKnockbackTime = -999f;
+
+    private bool IsSelf(ulong clientId, int localIdx) =>
+        clientId == OwnerClientId && localIdx == (LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0);
     private ulong _lastAttackerClientId;
     private int _lastAttackerLocalPlayerIndex;
     private bool _hasLastAttacker;
@@ -264,6 +298,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         // Subscribe to local player index changes to update color when set
         netLocalPlayerIndex.OnValueChanged += OnLocalPlayerIndexChanged;
+        netEngineOff.OnValueChanged += OnEngineOffChanged;
 
         appearance = GetComponent<PlaneAppearance>();
         if (appearance != null)
@@ -450,11 +485,17 @@ public class PlayerController : NetworkBehaviour, IDamagable
     {
         base.OnNetworkDespawn();
         netLocalPlayerIndex.OnValueChanged -= OnLocalPlayerIndexChanged;
+        netEngineOff.OnValueChanged -= OnEngineOffChanged;
         if (appearance != null)
         {
             appearance.NetSkinId.OnValueChanged -= OnSkinChanged;
             appearance.NetModelId.OnValueChanged -= OnModelChanged;
         }
+    }
+
+    private void OnEngineOffChanged(bool previous, bool current)
+    {
+        if (previous != current) OnEngineStateChanged?.Invoke(current);
     }
 
     /// <summary>Called when the server applies a new hangar skin / shape pick.</summary>
@@ -609,7 +650,12 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
     void FixedUpdate() {
         // Parked in the hangar - no movement, no out-of-bounds respawn spam
-        if (NetInHangar.Value) return;
+        if (NetInHangar.Value)
+        {
+            _leanInput = _leanAligned = _leanUsable = 0f;
+            _recovering = false;
+            return;
+        }
 
         // Check if we should process input:
         // - Regular network player: IsOwner must be true
@@ -688,35 +734,149 @@ public class PlayerController : NetworkBehaviour, IDamagable
     {
         float horizontalInput = 0f;
         float verticalInput = 0f;
+        float lean = 0f;
 
         var inputProvider = GetInputProvider();
         if (inputProvider != null)
         {
-            horizontalInput = inputProvider.GetHorizontalInput();
-            verticalInput = inputProvider.GetVerticalInput();
+            if (inputProvider.TryGetHeadingIntent(out float headingDeg, out float push))
+            {
+                PointIntent(headingDeg, push, out horizontalInput, out verticalInput);
+            }
+            else
+            {
+                horizontalInput = inputProvider.GetHorizontalInput();
+                verticalInput = inputProvider.GetVerticalInput();
+            }
+            lean = IsBot ? 0f : inputProvider.GetLean();
+
+            // Read every step so a request made with the engine running is
+            // dropped, not kept for the next stall.
+            if (inputProvider.ConsumeRecover() && engineOff && !_recovering && !IsBot) StartRecover();
         }
         else if (Time.frameCount % 300 == 0) // Log every 5 seconds at 60fps
         {
             Debug.LogWarning($"[PlayerController] No input provider available. LocalPlayerIndex={LocalPlayerIndex}");
         }
 
-        rotatePlane(horizontalInput);
+        if (_recovering && RecoverIntent(out float rx, out float rt))
+        {
+            horizontalInput = rx;
+            verticalInput = rt;
+            lean = 0f;
+        }
+
+        rotatePlane(horizontalInput, lean);
         movePlane(verticalInput);
+    }
+
+    private void StartRecover()
+    {
+        _recovering = true;
+        float vx = rb != null ? rb.linearVelocity.x : 0f;
+        _recoverDir = Mathf.Abs(vx) > 0.5f ? Mathf.Sign(vx) : (transform.right.x >= 0f ? 1f : -1f);
+        _recoverStartedAt = Time.time;
+        _recoverUntil = Time.time + RecoverTimeout;
+
+        SfxManager.PlayConfirm();
+        SfxManager.Haptic(HapticKind.Medium);
+        BannerOverlay.Show("RECOVER!", UiTheme.Highlight);
+        Telemetry.Log("stall_recover", ("result", "start"));
+    }
+
+    private void EndRecover(bool level)
+    {
+        _recovering = false;
+        if (level) SfxManager.Haptic(HapticKind.Success);
+        Telemetry.Log("stall_recover", ("result", level ? "level" : "timeout"),
+            ("seconds", Mathf.Round((Time.time - _recoverStartedAt) * 10f) / 10f));
+    }
+
+    /// <summary>The autopilot's stick: engine dead = turn to the middle of
+    /// the relight window, over the nose toward the travel side; engine on =
+    /// pull out to level flight at full throttle. False once it is done.</summary>
+    private bool RecoverIntent(out float x, out float throttle)
+    {
+        x = 0f;
+        throttle = 0f;
+        if (Time.time > _recoverUntil)
+        {
+            EndRecover(false);
+            return false;
+        }
+
+        float target;
+        if (engineOff)
+        {
+            var (minDeg, maxDeg) = EngineRestartHeadingWindow;
+            target = (minDeg + maxDeg) * 0.5f;
+        }
+        else target = _recoverDir > 0f ? 0f : 180f;
+
+        float delta = Mathf.DeltaAngle(HeadingDegrees, target);   // + = counter-clockwise
+        if (engineOff && Mathf.Abs(delta) > 150f)
+        {
+            // Nose up: tip over toward the side the plane is moving
+            delta = Mathf.Abs(delta) * -_recoverDir;
+        }
+        else if (!engineOff && Mathf.Abs(delta) <= RecoverLevelTolerance)
+        {
+            EndRecover(true);
+            return false;
+        }
+
+        x = -Mathf.Clamp(delta / FlightTuning.PointGainDeg, -1f, 1f);
+        throttle = engineOff ? 0f : 1f;
+        return true;
+    }
+
+    /// <summary>POINT scheme (Prompts/28 §4): the stick names a direction of
+    /// flight; turn toward it the short way at the edge of the envelope, and
+    /// throttle to corner speed in the turn, to cruise..max on the straight.
+    /// push == 0 = no direction: fly straight at cruise.</summary>
+    private void PointIntent(float headingDeg, float push, out float x, out float throttle)
+    {
+        float target;
+        if (push <= 0f || float.IsNaN(headingDeg))
+        {
+            x = 0f;
+            target = P.CruiseSpeed;
+        }
+        else
+        {
+            float delta = Mathf.DeltaAngle(HeadingDegrees, headingDeg);   // + = counter-clockwise
+            if (Mathf.Abs(delta) > 165f)
+            {
+                // Dead astern: keep turning the way we already turn, from rest
+                // take the arc that lifts the nose (never dive into the ground).
+                float sign = _omega < -1f ? 1f : _omega > 1f ? -1f
+                    : (transform.right.x >= 0f ? 1f : -1f);
+                delta = Mathf.Abs(delta) * sign;
+            }
+            x = -Mathf.Clamp(delta / FlightTuning.PointGainDeg, -1f, 1f);
+
+            float straight = Mathf.Lerp(P.CruiseSpeed, P.MaxSpeed, push);
+            target = Mathf.Lerp(straight, P.CornerSpeed, Mathf.InverseLerp(20f, 70f, Mathf.Abs(delta)));
+        }
+        throttle = Mathf.Clamp((target - speed) / 1.5f, -1f, 1f);
     }
 
     private void movePlane(float throttleInput)
     {
+        float dt = Time.fixedDeltaTime;
+
         if (engineOff)
         {
             // Engine OFF - gravity gradually increases
-            currentGravity = Mathf.MoveTowards(currentGravity, maxGravity, gravityIncreaseRate * Time.fixedDeltaTime);
+            currentGravity = Mathf.MoveTowards(currentGravity, maxGravity, gravityIncreaseRate * dt);
 
-            // Add gravity to current velocity
-            rb.linearVelocity += Vector2.down * currentGravity * Time.fixedDeltaTime * 60f;
+            // Add gravity to current velocity (+ any knockback received)
+            rb.linearVelocity += Vector2.down * currentGravity * dt * 60f + _externalVelocity;
+            _externalVelocity = Vector2.zero;
 
             // Check for dive to restart engine
             var rotation = plane.transform.rotation.z;
-            if (rotation > engineRestartMin && rotation < engineRestartMax)
+            if (rotation > engineRestartMin && rotation < engineRestartMax && Time.time >= _relightLockedUntil)
             {
                 // Diving - turn on engine and keep speed
                 EngineOn();
@@ -726,34 +886,40 @@ public class PlayerController : NetworkBehaviour, IDamagable
         {
             // Engine ON - speed changes based on flight angle
             float verticalFactor = transform.right.y;  // -1 (down) to +1 (up)
-
             if (verticalFactor > 0)
-            {
-                // Climbing - loses speed
-                speed -= verticalFactor * climbDrag * Time.fixedDeltaTime;
-            }
+                speed -= verticalFactor * P.ClimbDrag * dt;    // climbing loses speed
             else
-            {
-                // Diving - gains speed
-                speed -= verticalFactor * diveBoost * Time.fixedDeltaTime;
-            }
+                speed -= verticalFactor * P.DiveBoost * dt;    // diving gains speed
 
-            // Throttle input: forward tilt = speed up, backward tilt = slow down
+            // Throttle input: right / forward tilt = speed up
             if (throttleInput != 0)
-            {
-                speed += throttleInput * throttleRate * Time.fixedDeltaTime;
-            }
+                speed += throttleInput * P.ThrottleRate * dt;
 
-            // Clamp speed
-            speed = Mathf.Clamp(speed, minSpeed, maxSpeed);
+            // A hard turn above corner speed bleeds energy (never below it)
+            speed = FlightModel.TurnBleed(P, speed, _omega, HandlingFactor, dt);
+
+            float cap = maxSpeed;
+            if (IsBoosting)
+            {
+                cap = P.BoostSpeed * SpeedMul;
+                speed = Mathf.MoveTowards(speed, cap, 40f * dt);
+            }
+            else if (speed > cap)
+            {
+                // Coming off a boost: ease back down instead of snapping
+                speed = Mathf.Max(cap, speed - 8f * dt);
+                cap = speed;
+            }
+            speed = Mathf.Clamp(speed, minSpeed, cap);
 
             // If speed drops below minimum, turn off engine
-            if (speed <= minSpeed)
+            if (speed <= minSpeed && !IsBoosting)
             {
                 EngineOff();
             }
 
-            rb.linearVelocity = transform.right * speed;
+            rb.linearVelocity = (Vector2)transform.right * speed + _externalVelocity;
+            _externalVelocity = Vector2.MoveTowards(_externalVelocity, Vector2.zero, ImpulseDecay * dt);
         }
     }
 
@@ -763,7 +929,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
         if (inSpace) return;
 
         // Keep speed from the fall
-        speed = rb.linearVelocity.magnitude;
+        speed = Mathf.Max(minSpeed + 0.5f, rb.linearVelocity.magnitude);
         engineOff = false;
         currentGravity = 0f;
     }
@@ -774,48 +940,131 @@ public class PlayerController : NetworkBehaviour, IDamagable
         // Speed is not lost immediately - keep velocity
     }
 
-    private void rotatePlane(float x)
+    private void rotatePlane(float x, float lean = 0f)
     {
-        float angle;
-        Vector2 direction = new Vector2(0, 0);
+        float dt = Time.fixedDeltaTime;
+        float now = Time.time;
+        float ax = Mathf.Abs(x);
 
-        // turn left/right
-        if (x < 0)
+        // Snap: a flick to full deflection from neutral or from the opposite
+        // side doubles down for a moment. Keyboard taps count as flicks; the
+        // bot ramps its input and never qualifies, but is excluded anyway.
+        if (!engineOff && !IsBot && P.SnapBoost > 1f && ax >= 0.85f && now >= _snapReadyAt)
         {
-            direction = (Vector2)leftPoint.position - rb.position;
+            float lastOpposite = x > 0f ? _lastNegAt : _lastPosAt;
+            if (now - _lastNeutralAt <= 0.10f || now - lastOpposite <= 0.10f)
+            {
+                _snapUntil = now + P.SnapSeconds;
+                _snapReadyAt = now + P.SnapCooldown;
+                OnSnapTurn?.Invoke();
+            }
         }
-        if (x > 0)
+        if (ax < 0.2f) _lastNeutralAt = now;
+        if (x >= 0.5f) _lastPosAt = now;
+        if (x <= -0.5f) _lastNegAt = now;
+
+        float target;
+        if (engineOff)
         {
-            direction = (Vector2)rightPoint.position - rb.position;
-        }
-
-        direction.Normalize();
-        angle = Vector3.Cross(direction, transform.up).z;
-
-        // Rotation speed proportional to plane speed, scaled by handling
-        // Faster rotation when engine is off (multiplier varies by profile)
-        float handlingFactor = planeStats != null ? planeStats.Handling : 1f;
-        float speedFactor = rb.linearVelocity.magnitude / defaultSpeed;  // 1.0 at defaultSpeed
-        float currentRotateSpeed = engineOff
-            ? rotateSpeed * engineOffRotateMultiplier * handlingFactor
-            : rotateSpeed * speedFactor * handlingFactor;
-
-        // turn on/off - proportional to input strength
-        if (x != 0)
-        {
-            rb.angularVelocity = -currentRotateSpeed * angle * Mathf.Abs(x);
+            target = x * P.StallTurnRate * HandlingFactor;
         }
         else
         {
-            rb.angularVelocity = 0;
+            float snapMul = now < _snapUntil ? P.SnapBoost : 1f;
+            // LEAN (Prompts/32 D1/D3): only with the engine on, only in the
+            // stick's direction; snap x lean never beyond 1.8x.
+            float leanMul = LeanModel.Multiplier(P, lean, x);
+            target = x * FlightModel.TurnRateAt(P, speed, HandlingFactor)
+                   * Mathf.Min(snapMul * leanMul, LeanModel.MaxTurnMultiplier);
         }
+        _leanInput = lean;
+        _leanAligned = engineOff || x == 0f ? 0f : Mathf.Max(0f, lean * Mathf.Sign(x));
+        _leanUsable = engineOff ? 0f : LeanModel.Usable(lean, x);
+        _omega = FlightModel.StepOmega(P, _omega, target, dt);
 
-        angle = Mathf.Atan2(
+        // Knockback spin (Prompts/29): dissolved into the heading over ~0.2 s
+        float kick = 0f;
+        if (Mathf.Abs(_spinKick) > 0.01f)
+        {
+            float take = _spinKick * (1f - Mathf.Exp(-dt / 0.07f));
+            _spinKick -= take;
+            kick = take / dt;
+        }
+        else _spinKick = 0f;
+
+        rb.angularVelocity = -_omega + kick;
+
+        float angle = Mathf.Atan2(
             forwardPoint.position.y - plane.transform.position.y,
             forwardPoint.position.x - plane.transform.position.x
         ) * Mathf.Rad2Deg;
 
         plane.transform.rotation = Quaternion.Euler(new Vector3(0, 0, angle));
+    }
+
+    // --- external motion (Prompts/29: knockback, nitro, EMP) -----------------
+
+    /// <summary>Server: push this plane (explosion, shockwave). The owner
+    /// applies it - movement is owner-authoritative.</summary>
+    public void ServerApplyImpulse(Vector2 impulse, float spinDeg, ulong attackerClientId, int attackerLocalIdx, bool hasAttacker)
+    {
+        if (!IsServer) return;
+        if (planeStats != null && (planeStats.IsInvulnerable || planeStats.IsDodging)) return;
+        if (hasAttacker)
+        {
+            SetLastAttacker(attackerClientId, attackerLocalIdx);
+            _lastKnockbackTime = Time.time;
+        }
+        ApplyImpulseClientRpc(impulse, spinDeg);
+    }
+
+    [ClientRpc]
+    private void ApplyImpulseClientRpc(Vector2 impulse, float spinDeg)
+    {
+        bool controls = IsOwner || (IsLocalPlayer && NetworkManager.Singleton.IsHost);
+        if (!controls) return;
+        _externalVelocity += impulse;
+        _spinKick += spinDeg;
+    }
+
+    /// <summary>Server: nitro for this many seconds; relights a dead engine.</summary>
+    public void ServerBoost(float seconds)
+    {
+        if (!IsServer) return;
+        BoostClientRpc(seconds);
+    }
+
+    [ClientRpc]
+    private void BoostClientRpc(float seconds)
+    {
+        bool controls = IsOwner || (IsLocalPlayer && NetworkManager.Singleton.IsHost);
+        if (!controls) return;
+        _boostUntil = Time.time + seconds;
+        if (engineOff && !inSpace)
+        {
+            speed = Mathf.Max(P.CornerSpeed, rb != null ? rb.linearVelocity.magnitude : 0f);
+            engineOff = false;
+            currentGravity = 0f;
+        }
+    }
+
+    /// <summary>Server: kill the engine (EMP); no relight for lockSeconds.</summary>
+    public void ServerForceEngineOff(float lockSeconds)
+    {
+        if (!IsServer) return;
+        ForceEngineOffClientRpc(lockSeconds);
+    }
+
+    private float _relightLockedUntil;
+
+    [ClientRpc]
+    private void ForceEngineOffClientRpc(float lockSeconds)
+    {
+        bool controls = IsOwner || (IsLocalPlayer && NetworkManager.Singleton.IsHost);
+        if (!controls) return;
+        _boostUntil = 0f;
+        _relightLockedUntil = Time.time + lockSeconds;
+        EngineOff();
     }
 
     public void Hit(int damage)
@@ -864,7 +1113,8 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         // Attribute kill to last attacker (only recent hits count). A bot
         // kill stays credited for the feed line but never scores.
-        bool credited = _hasLastAttacker && Time.time - _lastAttackerTime <= KillAttributionWindow;
+        bool credited = _hasLastAttacker && Time.time - _lastAttackerTime <= KillAttributionWindow &&
+                        !IsSelf(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
         if (credited && !IsBot && !IsBotIdentity(_lastAttackerClientId, _lastAttackerLocalPlayerIndex))
         {
             ScoreManager.Instance?.AddScore(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
@@ -977,6 +1227,12 @@ public class PlayerController : NetworkBehaviour, IDamagable
         }
 
         // Reset state
+        _externalVelocity = Vector2.zero;
+        _spinKick = 0f;
+        _omega = 0f;
+        _boostUntil = 0f;
+        _relightLockedUntil = 0f;
+        _recovering = false;
         speed = defaultSpeed;
         engineOff = false;
         inSpace = false;
@@ -1066,11 +1322,23 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         if (collider.gameObject.CompareTag("Ground"))
         {
-            // Crashed into ground/obstacle - instant kill, no power-up drop
-            int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
-            if (!IsBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
-            SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.Ground);
-            HandleDeathAndRespawn();
+            // Knocked into the ground by someone (Prompts/29 D3): that is a
+            // kill for them. Otherwise a plain crash - no power-up drop.
+            // HandleCombatDeath already keeps bot kills out of the score.
+            // Only a knockback counts - a crash after a plain hit is a crash.
+            bool slammed = _hasLastAttacker && Time.time - _lastKnockbackTime <= SlamAttributionWindow &&
+                           !IsSelf(_lastAttackerClientId, _lastAttackerLocalPlayerIndex);
+            if (slammed)
+            {
+                HandleCombatDeath(KillCause.Slammed);
+            }
+            else
+            {
+                int localIdx = LocalPlayerIndex >= 0 ? LocalPlayerIndex : 0;
+                if (!IsBot) ScoreManager.Instance?.AddDeath(OwnerClientId, localIdx);
+                SyncKillFeedClientRpc(OwnerClientId, localIdx, 0, 0, false, (byte)KillCause.Ground);
+                HandleDeathAndRespawn();
+            }
         }
 
         if (collider.gameObject.CompareTag("Player"))

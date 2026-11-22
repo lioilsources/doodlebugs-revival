@@ -36,6 +36,10 @@ public class GameSetup : MonoBehaviour
 
     private void Awake()
     {
+        // 60 fps from the first frame: the boot screen and the hangar ran at the
+        // mobile default of 30 until a plane spawned (plan 33 W5).
+        Application.targetFrameRate = 60;
+        QualitySettings.vSyncCount = 0;
         if (_instance != null && _instance != this)
         {
             Destroy(gameObject);
@@ -95,9 +99,11 @@ public class GameSetup : MonoBehaviour
             Debug.Log("[GameSetup] BotManager created");
         }
 
+#if DOODLEBUGS_IAP
         // Plane skin entitlements (store init is best-effort - IAPManager
         // falls back to its PlayerPrefs cache if Unity IAP isn't configured yet)
         IAPManager.GetOrCreate();
+#endif
     }
 
     private void CreateHUD(Canvas canvas)
@@ -118,6 +124,15 @@ public class GameSetup : MonoBehaviour
         // same canvas (ROADMAP §3.9 - GameHUD stops growing). Both are inert
         // on desktop except the settings overlay itself.
         TouchControls.Create(canvas);
-        SettingsOverlay.Create(canvas);
+
+        // Phone-first menus (Prompts/30): own canvas, own scale
+        ThemeSettings.Boot();      // Prompts/31: the saved UI theme, before any screen is built
+        MenuCanvas.Create();
+        HangarScreen.Create();
+        SettingsOverlay.Create();
+
+        FlightTuning.Boot();
+        WeaponProfile.Validate();
+        UiThemeCatalog.Validate();
     }
 }

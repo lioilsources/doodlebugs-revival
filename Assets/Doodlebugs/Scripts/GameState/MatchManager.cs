@@ -376,6 +376,10 @@ public class MatchManager : MonoBehaviour
     private void HandleLocalSessionEnded()
     {
         Phase = GamePhase.WaitingForPlayers;
+        // The old host's round clock must not follow this device into its next
+        // session: as the new host it would call ROUND OVER from the waiting
+        // lobby 3 minutes later (plan 33 N3).
+        ScoreManager.Instance?.ResetMatch();
         BackgroundManager.Instance?.ServerResetWarmUpArena();
         IsIntermission = false;
         IsRunOver = false;
@@ -425,8 +429,8 @@ public class MatchManager : MonoBehaviour
             BotManager.Instance?.ServerEnsureDespawned();
         }
 
-        // Time-limit check (server decides)
-        if (IsIntermission) return;
+        // Time-limit check (server decides) - only a running battle has a clock.
+        if (IsIntermission || Phase != GamePhase.Battle) return;
 
         var score = ScoreManager.Instance;
         if (score == null || !score.MatchStarted) return;
@@ -658,16 +662,20 @@ public class MatchManager : MonoBehaviour
 
     private void BroadcastThroughServerPlayer(Action<PlayerController> rpc)
     {
+        // Never route a phase RPC through the bot (it despawns on the very
+        // connect that triggers the pre-battle broadcast) or through a plane that
+        // is no longer spawned - on a disconnect that can be the leaver's own,
+        // and NGO drops the RPC silently (plan 33 N5). The host's own plane is
+        // the safest carrier, any other live human plane the fallback.
+        PlayerController carrier = null;
         foreach (var player in FindObjectsOfType<PlayerController>())
         {
-            // Never route a phase RPC through the bot: it despawns on the very
-            // connect that triggers the pre-battle broadcast.
-            if (player.IsServer && !player.IsBot)
-            {
-                rpc(player);
-                break;
-            }
+            if (!player.IsServer || player.IsBot || !player.IsSpawned) continue;
+            if (player.OwnerClientId == NetworkManager.ServerClientId) { carrier = player; break; }
+            if (carrier == null) carrier = player;
         }
+        if (carrier != null) rpc(carrier);
+        else Debug.LogWarning("[MatchManager] No spawned plane to carry a phase RPC");
     }
 
     /// <summary>Called on every client (incl. host) via PlayerController ClientRpc.</summary>
@@ -736,6 +744,7 @@ public class MatchManager : MonoBehaviour
             case GamePhase.WaitingForPlayers:
                 // Freeze-to-waiting: leave any intermission cosmetics behind
                 IsIntermission = false;
+                IsRunOver = false;   // podium interrupted by a leaver (plan 33 N4)
                 _roundEnding = false;
                 if (_intermissionCoroutine != null)
                 {

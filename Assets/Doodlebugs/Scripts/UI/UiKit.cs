@@ -99,4 +99,17 @@ public static class UiKit
         image.raycastTarget = raycastTarget;
         return image;
     }
+
+    /// <summary>Fit a stretched rect to Screen.safeArea on an overlay canvas
+    /// (shared by TouchControls and MenuCanvas).</summary>
+    public static void FitSafeArea(RectTransform rect, Canvas canvas)
+    {
+        if (rect == null) return;
+        var safe = Screen.safeArea;
+        float s = canvas != null && canvas.scaleFactor > 0f ? canvas.scaleFactor : 1f;
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = new Vector2(safe.xMin, safe.yMin) / s;
+        rect.offsetMax = new Vector2(safe.xMax - Screen.width, safe.yMax - Screen.height) / s;
+    }
 }
