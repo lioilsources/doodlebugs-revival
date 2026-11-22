@@ -124,7 +124,7 @@ platform :android do
     }
 
     begin
-      firebase_app_distribution(common.merge(groups: ENV["FIREBASE_GROUPS"] || "testers"))
+      firebase_app_distribution(common.merge(groups: ENV["FIREBASE_GROUPS"] || "alfa"))
     rescue => e
       # The upload and the hand-out to testers are two separate API calls, and
       # only the second one is failing here ("HALTED release must have
