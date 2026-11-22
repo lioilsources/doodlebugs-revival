@@ -11,7 +11,7 @@ Instructions for Claude Code when working in this repository.
 The product plan lives in `ROADMAP.md` (Czech). Read it before proposing or
 planning any feature; it defines phases, KPIs and open decisions D1–D9.
 
-**Status:** v2.12.0 tagged 2026-11-20; CI ships every `v*.*.*` tag to
+**Status:** v2.13.0 tagged 2026-11-22; CI ships every `v*.*.*` tag to
 TestFlight / Firebase App Distribution. Store submission is plan 33. Boot
 shows Home (PLAY / PARTY, `HangarScreen`'s Searching view): PLAY is a solo
 session against combat bots on loopback, PARTY is the LAN / Multipeer
