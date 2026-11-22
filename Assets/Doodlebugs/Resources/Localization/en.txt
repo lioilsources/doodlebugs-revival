@@ -1,0 +1,233 @@
+# Doodlebugs Revival - UI strings, source language (English).
+# key=value, {0} placeholders, \n = line break. See Scripts/Localization/Loc.cs.
+# Other catalogues translate from this file; tools/l10n/check_catalogues.py
+# checks every one has the same keys and placeholders.
+
+# --- iOS permission prompts (iOSPostProcessBuild writes InfoPlist.strings) ---
+perm.local_network=Doodlebugs uses your local network to find and connect to nearby players.
+perm.bluetooth=This app uses Bluetooth to connect to nearby players for local multiplayer.
+
+# --- connection status (sentence case; the hangar shows it upper-cased) ---
+status.searching=Searching for game...
+status.full=Game is full, searching again...
+status.connecting=Connecting...
+status.another_game=Another game found, joining...
+status.waiting_opponent=Waiting for opponent...
+status.starting=Game starting!
+status.opponent_left=Opponent left. Waiting for new opponent...
+status.host_disconnected=Host disconnected
+status.coop_unsupported=Local co-op not supported here
+status.searching_nearby=Searching nearby (mobile data)...
+status.permissions_denied=Nearby permissions denied - enable them in Settings
+status.lobby_created=Created lobby. Waiting for players...
+status.joining_lobby=Joining lobby...
+status.join_failed=Join failed - searching again...
+
+# --- HUD ---
+hud.host=HOST
+hud.client=CLIENT
+hud.first_to=FIRST TO {0}
+feed.midair={0} MIDAIR CRASH
+feed.crashed={0} CRASHED
+feed.lost={0} LOST
+feed.down={0} DOWN
+
+# --- results / podium ---
+results.round_over=ROUND OVER
+results.winner=WINNER: {0} ({1})
+results.wins_to=WINS (TO {0}): {1}
+results.run_over=RUN OVER!
+results.hangar_opening=HANGAR OPENING...
+podium.run_over=RUN OVER
+podium.champion=CHAMPION: {0}
+podium.wins={0} WINS
+podium.new_run_in=NEW RUN IN {0}
+
+# --- hangar ---
+hangar.title=HANGAR
+hangar.battle_in_progress=BATTLE IN PROGRESS
+hangar.searching=SEARCHING FOR GAME...
+hangar.waiting=WAITING FOR PLAYERS...
+hangar.battle_in=BATTLE IN {0}
+hangar.deploy_in=DEPLOY IN {0}
+hangar.auto_start=AUTO-START {0}
+hangar.weapon_next_round=WEAPON FOR NEXT ROUND
+hangar.pick_weapon=PICK YOUR WEAPON
+hangar.fly=FLY
+hangar.join=JOIN
+hangar.deploying=DEPLOYING...
+hangar.keep=KEEP: {0}
+hangar.weapon_stats=DMG {0} · ROF {1}/s
+hangar.selected=SELECTED
+hangar.run_points=UPGRADES · RUN POINTS: {0}
+hangar.level_max=LV {0}/{1} MAX
+hangar.level_cost=LV {0}/{1} · COST {2}
+hangar.ready=READY
+hangar.picking=PICKING...
+hangar.waiting_button=WAITING...
+hangar.ready_count=READY {0}/{1}
+hangar.plane=PLANE
+hangar.settings=SETTINGS
+hangar.scenes=SCENES
+
+# --- arena picker ---
+scenes.title=ARENA ROTATION
+scenes.sub=drag the grip to reorder - tap a row to drop or restore it
+scenes.premium=PREMIUM
+common.done=DONE
+common.close=CLOSE
+
+# --- plane picker ---
+planes.title=PICK YOUR PLANE
+planes.sub=shape + skin is one-of-a-kind - once a pilot flies a combo, it's taken
+planes.equipped=EQUIPPED
+planes.locked=LOCKED
+planes.taken=TAKEN
+
+# --- settings ---
+settings.controls=CONTROLS
+settings.joystick=JOYSTICK
+settings.gyro=GYRO
+settings.recenter=RECENTER
+settings.desktop_hint=KEYBOARD: A/D TURN, W/S THROTTLE, SPACE FIRE - GAMEPAD: LEFT STICK + ANY BUTTON
+settings.hint_gyro=TILT TO FLY. RECENTER TAKES YOUR CURRENT HOLD AS LEVEL.
+settings.hint_stick=STICK BOTTOM-RIGHT: UP/DOWN THROTTLE, LEFT/RIGHT TURN.
+
+# --- weapons (WeaponType names) ---
+weapon.MG.name=MG
+weapon.MG.desc=1 bullet, balanced
+weapon.TwinMG.name=TWIN MG
+weapon.TwinMG.desc=2 bullets, fast
+weapon.Flak.name=FLAK
+weapon.Flak.desc=5 pellets, close range
+weapon.HeavyFlak.name=HEAVY FLAK
+weapon.HeavyFlak.desc=7 pellets, wider cone
+weapon.Bomb.name=AERO BOMB
+weapon.Bomb.desc=digs craters, big boom
+weapon.Sniper.name=SNIPER
+weapon.Sniper.desc=2 dmg, across the map
+weapon.Rocket.name=ROCKET
+weapon.Rocket.desc=accelerates, small AoE
+weapon.Mine.name=MINE
+weapon.Mine.desc=hides in clouds, 3 dmg
+
+# --- projectile elements (ElementProfile.Key) ---
+element.metal=STEEL
+element.fire=FIRE
+element.lightning=SPARK
+element.venom=VENOM
+element.plasma=PLASMA
+element.air=GUST
+
+# --- run upgrades ---
+upgrade.Shield.name=SHIELD
+upgrade.Shield.desc=+1 max shield
+upgrade.Hull.name=HULL
+upgrade.Hull.desc=+1 max hull
+upgrade.FireRate.name=FIRE RATE
+upgrade.FireRate.desc=+15% ROF
+upgrade.Engine.name=ENGINE
+upgrade.Engine.desc=+10% speed
+
+# --- maps (background sprite name) ---
+map.DuneSea=Dune Sea
+map.Metropolis=Metropolis
+map.MistyPeaks=Misty Peaks
+map.Orbit=Orbit
+map.Volcano=Volcano
+
+# --- plane shapes (PlaneModelCatalog key) ---
+plane.biplane=Doodlebug
+plane.triplane=Triplane
+plane.racer=Racer
+plane.flying_boat=Flying Boat
+plane.canard=Canard
+plane.twin_boom=Twin Boom
+plane.gull_wing=Gull Wing
+plane.barnstormer=Barnstormer
+plane.rocket=Rocket
+plane.gyrocopter=Gyrocopter
+plane.ornithopter=Ornithopter
+plane.paper_plane=Paper Plane
+plane.bathtub=Bathtub
+plane.crop_duster=Crop Duster
+plane.delta_glider=Delta Glider
+plane.zeppelin=Zeppelin
+plane.starfighter=Starfighter
+plane.shuttle=Shuttle
+plane.interceptor=Interceptor
+plane.saucer=Saucer
+plane.lander=Lander
+plane.gunship=Gunship
+plane.galleon=Galleon
+plane.manta=Manta
+plane.seaplane=Seaplane
+plane.wright_flyer=Wright Flyer
+plane.aerial_screw=Aerial Screw
+plane.balloon=Balloon
+plane.stealth=Stealth
+plane.hover_pod=Hover Pod
+plane.tiltrotor=Tiltrotor
+plane.gotha_bomber=Gotha
+plane.elliptical_fighter=Spitfire
+plane.heavy_bomber=Fortress
+plane.dragonfly=Dragonfly
+plane.flying_car=Flying Car
+plane.dragon=Dragon
+plane.unicorn=Unicorn
+plane.wasp=Wasp
+plane.fly=Fly
+plane.eagle=Eagle
+plane.goose=Goose
+
+# --- liveries (PlaneSkinCatalog key) ---
+skin.doodle_red=Doodle Red
+skin.raf_khaki=RAF Khaki
+skin.luftstreit_grey=Luftstreitkräfte Grey
+skin.aeronautique_blue=Aéronautique Blue
+skin.racing_stripe=Racing Stripe
+skin.checkerboard=Checkerboard
+skin.candy_stripe=Candy Stripe
+skin.polka_dot=Polka Dot
+skin.woodgrain=Woodgrain
+skin.barnstormer_yellow=Barnstormer Yellow
+skin.sunset_fade=Sunset Fade
+skin.silver_dart=Silver Dart
+skin.jungle_camo=Jungle Camo
+skin.desert_camo=Desert Camo
+skin.arctic_camo=Arctic Camo
+skin.naval_dazzle=Naval Dazzle
+skin.volcanic_camo=Volcanic Camo
+skin.forest_camo=Forest Camo
+skin.storm_grey_camo=Storm Grey Camo
+skin.autumn_camo=Autumn Camo
+skin.night_camo=Night Camo
+skin.chrome_shine=Chrome Shine
+skin.gold_leaf=Gold Leaf
+skin.copper_patina=Copper Patina
+skin.gunmetal=Gunmetal
+skin.holo_shift=Holo Shift
+skin.rose_gold=Rose Gold
+skin.obsidian_gloss=Obsidian Gloss
+skin.circuit_board=Circuit Board
+skin.carbon_weave=Carbon Weave
+skin.galaxy_nebula=Galaxy Nebula
+skin.aurora_borealis=Aurora Borealis
+skin.lava_flow=Lava Flow
+skin.deep_ocean=Deep Ocean
+skin.lightning_bolt=Lightning Bolt
+skin.toxic_glow=Toxic Glow
+skin.crystal_ice=Crystal Ice
+skin.dragon_scale=Dragon Scale
+skin.phoenix_flame=Phoenix Flame
+skin.gotham_night=Gotham Night
+skin.dream_pink=Dream Pink
+skin.hero_comic=Hero Comic
+skin.galaxy_saber=Galaxy Saber
+skin.koala_pastel=Koala Pastel
+skin.sponge_yellow=Sponge Yellow
+skin.villain_purple=Villain Purple
+skin.brick_hero=Brick Hero
+skin.arcade_pixel=Arcade Pixel
+skin.retro_wave=Retro Wave
+skin.tiger_stripe=Tiger Stripe
