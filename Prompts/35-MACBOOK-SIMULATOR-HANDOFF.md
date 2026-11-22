@@ -2,8 +2,7 @@
 
 Stav: připraveno 2026-11-22 na Mac Mini (M2). Pokračuje se na MacBooku. Ten je
 na stejné LAN a má víc paměti, takže utáhne dva až tři simulátory současně.
-Mac Mini s 16 GB měl při jednom iPadu Pro 13" pomalé snímky a iPad
-nestihl doběhnout.
+Na Mac Mini iPad Pro 13" snímal pomalu a nestihl doběhnout.
 
 ## Výchozí stav (2.12.0)
 
