@@ -27,8 +27,9 @@ Fakta z repa, ne z paměti:
   (Metropolis, MistyPeaks, DuneSea, Volcano, Orbit), 6 elementů projektilů.
   Vše kromě 38 „premium“ skinů je zdarma; IAP produkty ve storech neexistují,
   paywall je záměrně neaktivní (`Skins/IAPManager.cs`).
-- **Persistence:** jediný `PlayerPrefs` klíč (vlastněné skin bundly). Žádný
-  profil hráče, žádný postup, žádné statistiky přes sezení.
+- **Persistence:** `PlayerProfile` (`Scripts/Meta/PlayerProfile.cs`, JSON v
+  `persistentDataPath`) drží statistiky, nastavení ovládání a sólo tier;
+  `IAPManager` má dál vlastní `PlayerPrefs` cache vlastněných bundlů.
 - **Měření:** žádná analytika, žádný crash reporting, žádné Game Center,
   žádný review prompt, žádné notifikace. Privacy label „Data Not Collected“.
 - **UI:** celé generované v kódu (`UI/GameHUD.cs`, 2 923 řádků, uGUI, font
@@ -148,7 +149,11 @@ v externí skupině.
 
 ---
 
-### Fáze 1 — Solo-first: bitva proti botům (v3.0) `[ ]` · ~3 týdny
+### Fáze 1 — Solo-first: bitva proti botům (v3.0) `[wip]` · ~3 týdny
+
+Plán: `Prompts/36-CLAUDE-PLAN-solo-first.md`. WP2–WP6 přeneseny na `main`
+jako větev `feat/solo-first` (2026-11-22), zatím jen anglicky; lokalizace
+(PR #57) a analytika (WP7) přijdou potom.
 
 **Cíl:** hra se dá hrát sama. Odstranit jediný největší blok retence i
 App Review.
