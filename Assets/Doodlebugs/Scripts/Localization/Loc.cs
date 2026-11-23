@@ -105,6 +105,22 @@ public static class Loc
         return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
     }
 
+    private static HashSet<string> _noFonts = new HashSet<string>();
+
+    /// <summary><paramref name="font"/>, or the built-in OS-backed font when
+    /// the active catalogue lists it under <c>@nofont=</c> (it lacks a glyph
+    /// of that language - the UI themes use Latin-only display faces). The
+    /// list is computed offline by tools/l10n/check_catalogues.py --fix-font,
+    /// so no word is drawn half in the theme face and half in a fallback.</summary>
+    public static Font Cover(Font font)
+    {
+        if (font == null) return null;
+        EnsureLoaded();
+        if (!_pixelFont || _noFonts.Contains(font.name))
+            return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        return font;
+    }
+
     /// <summary>Switch language at runtime; already-built UI keeps its text
     /// until it is rebuilt.</summary>
     public static void SetLanguage(string code)
@@ -132,13 +148,16 @@ public static class Loc
         }
 
         bool pixel = true;
-        _active = code == SourceLanguage ? _source : Load(code, out pixel);
+        var noFonts = new HashSet<string>();
+        _active = code == SourceLanguage ? _source : Load(code, out pixel, out noFonts);
         if (_active == null)
         {
             code = SourceLanguage;
             _active = _source;
             pixel = true;
+            noFonts = new HashSet<string>();
         }
+        _noFonts = noFonts;
 
         _language = code;
         _pixelFont = pixel;
@@ -146,9 +165,12 @@ public static class Loc
         catch (CultureNotFoundException) { _culture = CultureInfo.InvariantCulture; }
     }
 
-    private static Dictionary<string, string> Load(string code, out bool pixelFont)
+    private static Dictionary<string, string> Load(string code, out bool pixelFont) => Load(code, out pixelFont, out _);
+
+    private static Dictionary<string, string> Load(string code, out bool pixelFont, out HashSet<string> noFonts)
     {
         pixelFont = true;
+        noFonts = new HashSet<string>(StringComparer.Ordinal);
         var asset = Resources.Load<TextAsset>("Localization/" + code);
         if (asset == null) return null;
 
@@ -159,7 +181,11 @@ public static class Loc
             if (line.Length == 0 || line[0] == '#') continue;
             if (line[0] == '@')
             {
-                if (line.Trim() == "@font=system") pixelFont = false;
+                var directive = line.Trim();
+                if (directive == "@font=system") pixelFont = false;
+                else if (directive.StartsWith("@nofont=", StringComparison.Ordinal))
+                    foreach (var f in directive.Substring(8).Split(','))
+                        if (f.Trim().Length > 0) noFonts.Add(f.Trim());
                 continue;
             }
             int eq = line.IndexOf('=');

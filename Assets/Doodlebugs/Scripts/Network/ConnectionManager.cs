@@ -392,7 +392,7 @@ namespace Doodlebugs.Network
         public void StartDiscovery()
         {
             SetState(ConnectionState.Searching);
-            SetStatus($"{UI.ConnectionUI.GameVersion}  •  Searching for game...");
+            SetStatus($"{UI.ConnectionUI.GameVersion}  •  " + Loc.T("status.searching"));
             SetRole(LocalRole.None);
 
             _discovery?.StartListening();
@@ -471,13 +471,13 @@ namespace Doodlebugs.Network
 
             if (data.currentPlayers >= data.maxPlayers)
             {
-                SetStatus("Game is full, searching again...");
+                SetStatus(Loc.T("status.full"));
                 StartDiscovery();
                 return;
             }
 
             SetState(ConnectionState.Connecting);
-            SetStatus("Connecting...");
+            SetStatus(Loc.T("status.connecting"));
             ConnectToHost(data);
         }
 
@@ -531,7 +531,7 @@ namespace Doodlebugs.Network
             }
 
             SetState(ConnectionState.Connecting);
-            SetStatus("Another game found, joining...");
+            SetStatus(Loc.T("status.another_game"));
 
             // NGO completes Shutdown asynchronously - defer the client start.
             Invoke(nameof(FinishHostYield), 0.7f);
@@ -556,7 +556,7 @@ namespace Doodlebugs.Network
             Debug.Log("[ConnectionManager] No host found, becoming host");
 
             SetState(ConnectionState.WaitingForOpponent);
-            SetStatus("Waiting for opponent...");
+            SetStatus(Loc.T("status.waiting_opponent"));
 
             // Configure transport timeouts for mobile networks
             UseSceneTransport();
@@ -776,7 +776,7 @@ namespace Doodlebugs.Network
                     else _discovery?.StopBroadcast();
 
                     SetState(ConnectionState.Connected);
-                    SetStatus("Game starting!");
+                    SetStatus(Loc.T("status.starting"));
                 }
                 else if (_mode == LocalCoopMode.Lan)
                 {
@@ -789,7 +789,7 @@ namespace Doodlebugs.Network
             {
                 // We connected as client
                 SetState(ConnectionState.Connected);
-                SetStatus("Game starting!");
+                SetStatus(Loc.T("status.starting"));
             }
         }
 
@@ -816,7 +816,7 @@ namespace Doodlebugs.Network
                 if (playerCount < MaxPlayers)
                 {
                     SetState(ConnectionState.WaitingForOpponent);
-                    SetStatus("Opponent left. Waiting for new opponent...");
+                    SetStatus(Loc.T("status.opponent_left"));
 
                     if (_mode == LocalCoopMode.NativeP2P)
                     {
@@ -833,7 +833,7 @@ namespace Doodlebugs.Network
             {
                 // We were client and got disconnected (host left)
                 SetState(ConnectionState.Disconnected);
-                SetStatus("Host disconnected");
+                SetStatus(Loc.T("status.host_disconnected"));
 
                 // Restart discovery after a short delay
                 if (_mode == LocalCoopMode.NativeP2P)

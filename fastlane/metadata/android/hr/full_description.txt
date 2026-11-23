@@ -1,0 +1,14 @@
+Povedi prijatelja, sjednite u istu sobu i borite se.
+
+Doodlebugs Revival je arkadna pucačina s dvokrilcima iz Prvog svjetskog rata za lokalni multiplayer. Od dva do osam uređaja pronalaze se automatski: bez računa, poslužitelja i postavljanja. Pokreni igru na oba, spojit će se za nekoliko sekundi, a nebo će se ispuniti svjetlećim mecima.
+
+- BRZE RUNDE: prvi do 3 obaranja ili dok ne zazvoni zvono nakon 3 minute. Serije do 5 pobjeda s postoljem za prvaka.
+- HANGAR: između rundi odaberi novo oružje (strojnice, flak, bombe, rakete, mine) i potroši bodove na štit, trup, motor i brzinu paljbe.
+- RUŠIVI HORIZONT: svaka runda mijenja arenu i zid ručno oslikanih retro plakata. Raznesi tornjeve dio po dio.
+- POJAČANJA: oboreni avioni ispuštaju balone sa zdravljem, štitom, popravkom i većom štetom.
+- KAUČ KOOP: do 4 pilota na jednom računalu s gamepadovima i tipkovnicom; žiroskop ili dodir na mobitelima i tabletima.
+- 8-BITNO SRCE: proceduralna chiptune glazba, plosnata pixel grafika i ritam "još jedna runda".
+
+Bez reklama, bez kupnji u aplikaciji, bez prikupljanja podataka. Samo avioni.
+
+Napomena: za igru protiv drugih treba ti drugi uređaj na istoj mreži.

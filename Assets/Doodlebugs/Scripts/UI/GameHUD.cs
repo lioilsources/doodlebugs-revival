@@ -69,11 +69,8 @@ public class GameHUD : MonoBehaviour
         {
             if (_pixelFont == null)
             {
-                _pixelFont = Resources.Load<Font>("Fonts/PressStart2P");
-                if (_pixelFont == null)
-                {
-                    _pixelFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-                }
+                // Loc swaps in the OS-backed font for languages the pixel font can't draw
+                _pixelFont = Loc.PickFont(Resources.Load<Font>("Fonts/PressStart2P"));
             }
             return _pixelFont;
         }
@@ -685,22 +682,22 @@ public class GameHUD : MonoBehaviour
                 line = $"{ColoredName(killerClientId, killerLocalIdx)} >< {victim}";
                 break;
             case KillCause.Collision:
-                line = $"{victim} MIDAIR CRASH";
+                line = Loc.F("feed.midair", victim);
                 break;
             case KillCause.Ground:
-                line = $"{victim} CRASHED";
+                line = Loc.F("feed.crashed", victim);
                 break;
             case KillCause.OutOfBounds:
-                line = $"{victim} LOST";
+                line = Loc.F("feed.lost", victim);
                 break;
             case KillCause.Slammed when hasKiller:
-                line = $"{ColoredName(killerClientId, killerLocalIdx)} SLAMMED {victim}";
+                line = Loc.F("feed.slammed", ColoredName(killerClientId, killerLocalIdx), victim);
                 break;
             case KillCause.Rammed when hasKiller:
-                line = $"{ColoredName(killerClientId, killerLocalIdx)} RAMMED {victim}";
+                line = Loc.F("feed.rammed", ColoredName(killerClientId, killerLocalIdx), victim);
                 break;
             default:
-                line = $"{victim} DOWN";
+                line = Loc.F("feed.down", victim);
                 break;
         }
 
@@ -874,7 +871,7 @@ public class GameHUD : MonoBehaviour
                 entry.shooting = entry.player.GetComponent<Shooting>();
             }
             entry.weaponText.text = entry.shooting != null
-                ? entry.shooting.CurrentWeapon.DisplayName
+                ? entry.shooting.CurrentWeapon.LocalizedName
                 : "";
         }
 
@@ -1096,7 +1093,7 @@ public class GameHUD : MonoBehaviour
             ? PlayerColorManager.Instance.GetColor(result.WinnerClientId, result.WinnerLocalPlayerIndex)
             : PlayerColorManager.GetColorByIndex((int)result.WinnerClientId + result.WinnerLocalPlayerIndex);
 
-        _resultsWinnerText.text = $"WINNER: {winnerName} ({result.WinnerKills})";
+        _resultsWinnerText.text = Loc.F("results.winner", winnerName, result.WinnerKills);
         _resultsWinnerText.color = winnerColor;
 
         // Standings from current HUD ranking (already sorted by performance)
@@ -1125,7 +1122,7 @@ public class GameHUD : MonoBehaviour
         }
 
         bool runOver = MatchManager.Instance != null && MatchManager.Instance.IsRunOver;
-        _resultsCountdownText.text = runOver ? "RUN OVER!" : "HANGAR OPENING...";
+        _resultsCountdownText.text = runOver ? Loc.T("results.run_over") : Loc.T("results.hangar_opening");
         _resultsOverlay.SetActive(true);
     }
 
@@ -1162,13 +1159,13 @@ public class GameHUD : MonoBehaviour
         var bg = _podiumOverlay.AddComponent<Image>();
         bg.color = new Color(0f, 0f, 0f, 0.88f);
 
-        CreatePodiumText("Title", "RUN OVER", 34, new Vector2(0, 130), new Color(1f, 0.85f, 0.3f));
+        CreatePodiumText("Title", Loc.T("podium.run_over"), 34, new Vector2(0, 130), new Color(1f, 0.85f, 0.3f));
 
         Color winnerColor = PlayerColorManager.Instance != null
             ? PlayerColorManager.Instance.GetColor(winnerClientId, winnerLocalIdx)
             : PlayerColorManager.GetColorByIndex((int)winnerClientId + winnerLocalIdx);
         CreatePodiumText("Champion",
-            $"CHAMPION: {ResolvePlayerName(winnerClientId, winnerLocalIdx)}", 22, new Vector2(0, 70), winnerColor);
+            Loc.F("podium.champion", ResolvePlayerName(winnerClientId, winnerLocalIdx)), 22, new Vector2(0, 70), winnerColor);
 
         // Standings by round wins
         var mm = MatchManager.Instance;
@@ -1181,7 +1178,7 @@ public class GameHUD : MonoBehaviour
             for (int i = 0; i < entries.Count; i++)
             {
                 MatchManager.ParticipantIdentity(entries[i].Key, out ulong cid, out int idx);
-                lines.Add($"{i + 1}. {ResolvePlayerName(cid, idx)}  {entries[i].Value} WINS");
+                lines.Add($"{i + 1}. {ResolvePlayerName(cid, idx)}  " + Loc.F("podium.wins", entries[i].Value));
             }
         }
         var standings = CreatePodiumText("Standings", string.Join("\n", lines), 14,
@@ -1190,7 +1187,7 @@ public class GameHUD : MonoBehaviour
         standings.GetComponent<RectTransform>().sizeDelta = new Vector2(900, 140);
 
         _podiumCountdownText = CreatePodiumText("Countdown",
-            $"NEW RUN IN {MatchManager.PodiumSeconds}", 16, new Vector2(0, -150),
+            Loc.F("podium.new_run_in", MatchManager.PodiumSeconds), 16, new Vector2(0, -150),
             new Color(1f, 0.85f, 0.3f));
     }
 
@@ -1231,7 +1228,7 @@ public class GameHUD : MonoBehaviour
         var bg = _resultsOverlay.AddComponent<Image>();
         bg.color = new Color(0f, 0f, 0f, 0.75f);
 
-        CreateOverlayText("Title", "ROUND OVER", 32, new Vector2(0, 140), Color.white);
+        CreateOverlayText("Title", Loc.T("results.round_over"), 32, new Vector2(0, 140), Color.white);
         _resultsWinnerText = CreateOverlayText("Winner", "", 22, new Vector2(0, 85), Color.white);
         _resultsWinsText = CreateOverlayText("Wins", "", 12, new Vector2(0, 52),
             new Color(1f, 1f, 1f, 0.7f));
@@ -1260,7 +1257,7 @@ public class GameHUD : MonoBehaviour
             MatchManager.ParticipantIdentity(pair.Key, out ulong cid, out int idx);
             parts.Add($"{ColoredName(cid, idx)} {pair.Value}");
         }
-        return $"WINS (TO {MatchManager.RoundWinsTarget}): " + string.Join(" · ", parts);
+        return Loc.F("results.wins_to", MatchManager.RoundWinsTarget, string.Join(" · ", parts));
     }
 
     private Text CreateOverlayText(string name, string content, int fontSize, Vector2 anchoredPos, Color color)
@@ -1314,7 +1311,7 @@ public class GameHUD : MonoBehaviour
         // Podium countdown when the run is over; HangarScreen ticks itself
         if (_podiumCountdownText != null && _podiumOverlay != null)
         {
-            _podiumCountdownText.text = $"NEW RUN IN {secondsLeft}";
+            _podiumCountdownText.text = Loc.F("podium.new_run_in", secondsLeft);
         }
     }
 
@@ -1366,7 +1363,7 @@ public class GameHUD : MonoBehaviour
         // Match timer (top-center) + round goal below it
         hud.matchTimeText = CreateStaticText(hudObj.transform, "MatchTime", "-:--",
             new Vector2(0.5f, 1), new Vector2(0, -40), 28, Color.white);
-        hud.matchGoalText = CreateStaticText(hudObj.transform, "MatchGoal", $"FIRST TO {MatchManager.KillTarget}",
+        hud.matchGoalText = CreateStaticText(hudObj.transform, "MatchGoal", Loc.F("hud.first_to", MatchManager.KillTarget),
             new Vector2(0.5f, 1), new Vector2(0, -72), 12, new Color(1f, 1f, 1f, 0.6f));
 
         hud.floatingTextPrefab = CreateFloatingTextPrefab();

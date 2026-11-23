@@ -174,7 +174,7 @@ public class TouchControls : MonoBehaviour
             {
                 PlayerPrefs.SetInt(RecoverHintsKey, shown + 1);
                 PlayerPrefs.Save();
-                BannerOverlay.Show("STALL! DOUBLE-TAP STICK", UiTheme.Danger);
+                BannerOverlay.Show(Loc.T("banner.stall"), UiTheme.Danger);
             }
         }
         _wasEngineOff = off;
@@ -368,7 +368,7 @@ public class TouchControls : MonoBehaviour
         PlayerPrefs.SetInt(LeanBannerKey, 1);
         PlayerPrefs.Save();
         int pct = Mathf.RoundToInt(FlightTuning.Active.LeanBonus * 100f);
-        BannerOverlay.Show($"LEAN! +{pct} % TURN", UiTheme.Highlight);
+        BannerOverlay.Show(Loc.F("banner.lean", pct), UiTheme.Highlight);
         Telemetry.Log("lean_first_full", ("scheme", ControlSettings.Scheme), ("bonus_pct", pct));
     }
 
@@ -657,7 +657,7 @@ public class TouchControls : MonoBehaviour
         Color tint;
         string label;
         if (_shooting != null) sprite = _shooting.GetSlotIcon(slot, out tint, out label);
-        else { var w = WeaponProfile.Get(WeaponType.MG); sprite = w.LoadIcon(out tint); label = w.DisplayName; }
+        else { var w = WeaponProfile.Get(WeaponType.MG); sprite = w.LoadIcon(out tint); label = w.LocalizedName; }
         if (sprite != null)
         {
             t.Icon.sprite = sprite;

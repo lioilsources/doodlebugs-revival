@@ -832,7 +832,7 @@ public class PlayerController : NetworkBehaviour, IDamagable
 
         SfxManager.PlayConfirm();
         SfxManager.Haptic(HapticKind.Medium);
-        BannerOverlay.Show("RECOVER!", UiTheme.Highlight);
+        BannerOverlay.Show(Loc.T("banner.recover"), UiTheme.Highlight);
         Telemetry.Log("stall_recover", ("result", "start"));
     }
 

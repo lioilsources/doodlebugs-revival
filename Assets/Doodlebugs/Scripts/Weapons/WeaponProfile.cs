@@ -56,6 +56,11 @@ public class WeaponProfile
     public WeaponCategory Category = WeaponCategory.Weapon;
     public float StatDamage = 0.3f, StatRate = 0.5f, StatRange = 0.5f;   // card bars, 0..1
 
+    /// <summary>UI text in the active language (Resources/Localization).</summary>
+    public string LocalizedName => Loc.T($"weapon.{Type}.name", DisplayName);
+    public string LocalizedDescription => Loc.T($"weapon.{Type}.desc", Description);
+    public string LocalizedVerb => Loc.T("weapon.verb." + Verb.Replace(" & ", "_").Replace(' ', '_'), Verb);
+
     public int Damage = 1;          // per pellet, before the power-up multiplier
     public float Cooldown = 0.4f;   // seconds between shots
     public float ForceMultiplier = 1f;   // scales base bullet force (20); 0 = released with plane speed only

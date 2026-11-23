@@ -72,7 +72,6 @@ hangar.scenes=SCENES
 
 # --- arena picker ---
 scenes.title=ARENA ROTATION
-scenes.sub=drag the grip to reorder - tap a row to drop or restore it
 scenes.premium=PREMIUM
 common.done=DONE
 common.close=CLOSE
@@ -86,30 +85,69 @@ planes.taken=TAKEN
 
 # --- settings ---
 settings.controls=CONTROLS
-settings.joystick=JOYSTICK
 settings.gyro=GYRO
 settings.recenter=RECENTER
-settings.desktop_hint=KEYBOARD: A/D TURN, W/S THROTTLE, SPACE FIRE - GAMEPAD: LEFT STICK + ANY BUTTON
-settings.hint_gyro=TILT TO FLY. RECENTER TAKES YOUR CURRENT HOLD AS LEVEL.
-settings.hint_stick=STICK BOTTOM-RIGHT: UP/DOWN THROTTLE, LEFT/RIGHT TURN.
 
 # --- weapons (WeaponType names) ---
 weapon.MG.name=MG
-weapon.MG.desc=1 bullet, balanced
+weapon.MG.desc=One bullet. Never lets you down.
 weapon.TwinMG.name=TWIN MG
-weapon.TwinMG.desc=2 bullets, fast
+weapon.TwinMG.desc=Two bullets per shot.
 weapon.Flak.name=FLAK
-weapon.Flak.desc=5 pellets, close range
+weapon.Flak.desc=Five pellets. Deadly up close.
 weapon.HeavyFlak.name=HEAVY FLAK
-weapon.HeavyFlak.desc=7 pellets, wider cone
+weapon.HeavyFlak.desc=Seven pellets, wider cone.
 weapon.Bomb.name=AERO BOMB
-weapon.Bomb.desc=digs craters, big boom
-weapon.Sniper.name=SNIPER
-weapon.Sniper.desc=2 dmg, across the map
+weapon.Bomb.desc=Drop it. Digs craters, throws planes.
+weapon.Sniper.name=LANCE
+weapon.Sniper.desc=Hold to charge. Up to 3 damage.
 weapon.Rocket.name=ROCKET
-weapon.Rocket.desc=accelerates, small AoE
+weapon.Rocket.desc=Accelerates. Small blast.
 weapon.Mine.name=MINE
-weapon.Mine.desc=hides in clouds, 3 dmg
+weapon.Mine.desc=Hides in clouds. Arms in 1.2 s.
+weapon.Stinger.name=STINGER
+weapon.Stinger.desc=Shoots out of the tail. Shake them off.
+weapon.Airburst.name=AIRBURST
+weapon.Airburst.desc=Hold to fly it, release to burst.
+weapon.Seeker.name=SEEKER
+weapon.Seeker.desc=Homes in. Clouds and nitro shake it.
+weapon.Bomblet.name=BOMBLET
+weapon.BigOne.name=BIG ONE
+weapon.BigOne.desc=One huge bomb. Siren included.
+weapon.MiniSeeker.name=MINI SEEKER
+weapon.Emp.name=EMP
+weapon.Emp.desc=Kills every engine around you.
+weapon.ClusterBomb.name=CLUSTER
+weapon.ClusterBomb.desc=Splits into four bomblets.
+weapon.HeavyRocket.name=HEAVY ROCKET
+weapon.HeavyRocket.desc=Bigger blast, harder push.
+weapon.TripleMine.name=TRIPLE MINE
+weapon.TripleMine.desc=Three mines in a fan.
+weapon.LanceMk2.name=LANCE MK II
+weapon.LanceMk2.desc=Charged shot pierces planes and clouds.
+weapon.TwinStinger.name=TWIN STINGER
+weapon.TwinStinger.desc=Two bullets out of the tail.
+weapon.AirburstMk2.name=AIRBURST MK II
+weapon.AirburstMk2.desc=Wider burst.
+weapon.TwinSeeker.name=TWIN SEEKER
+weapon.TwinSeeker.desc=Two seekers at once.
+weapon.Swarm.name=SWARM
+weapon.Swarm.desc=Five mini seekers in a fan.
+# card band verbs (WeaponProfile.Verb / GadgetProfile.Verb, spaces and " & " as _)
+weapon.verb.BACKWARDS=BACKWARDS
+weapon.verb.BOOST=BOOST
+weapon.verb.CHARGE=CHARGE
+weapon.verb.DETONATE=DETONATE
+weapon.verb.DODGE=DODGE
+weapon.verb.DROP=DROP
+weapon.verb.FAST_STRAIGHT=FAST & STRAIGHT
+weapon.verb.HOMING=HOMING
+weapon.verb.LURK=LURK
+weapon.verb.SHOCKWAVE=SHOCKWAVE
+weapon.verb.SHOOT=SHOOT
+weapon.verb.SHOTGUN=SHOTGUN
+weapon.verb.SPECIAL=SPECIAL
+weapon.verb.UPGRADE=UPGRADE
 
 # --- projectile elements (ElementProfile.Key) ---
 element.metal=STEEL
@@ -250,3 +288,85 @@ solo.next_round=NEXT ROUND
 lan.add_bot=+ BOT
 lan.remove_bot=- BOT
 lan.nearby_join=PILOT NEARBY · JOIN
+
+# --- hangar screen (UI/HangarScreen, plan 30) ---
+hangar.round_of=ROUND {0} OF {1}
+hangar.arenas=ARENAS · {0}
+hangar.next_arena=NEXT · {0}
+hangar.arena=ARENA
+hangar.keep_corner=KEEP
+hangar.max=MAX
+hangar.cost_pt={0} PT
+hangar.level=LEVEL {0} / {1}
+hangar.you=You
+hangar.in_lobby=IN LOBBY
+hangar.tab.Weapon=WEAPON
+hangar.tab.Gadget=GADGET
+hangar.tab.Upgrades=UPGRADES
+hangar.tab.Plane=PLANE
+hangar.slot.weapon=Weapon
+hangar.slot.gadget=Gadget
+stat.dmg=DMG
+stat.rate=RATE
+stat.range=RANGE
+stat.power=POWER
+stat.cd=CD
+scenes.sub=Tap an arena to drop it or bring it back.
+planes.paint=PAINT
+planes.filter_all=All {0}
+planes.filter_free=Free
+planes.filter_premium=Premium · soon
+planes.yours=YOURS
+
+# --- settings card and theme picker ---
+settings.point=POINT
+settings.rate=RATE
+settings.theme=THEME · {0}
+settings.desktop_hint=KEYBOARD: A / D turn, W / S throttle, SPACE fire, E gadget.\nGAMEPAD: left stick turn, right stick throttle, A / RT fire, LB / LT gadget.
+settings.hint_point=POINT: push the stick where you want to fly. The plane turns there the short way and handles the throttle.
+settings.hint_rate=RATE: stick up / down turns, right / left is throttle. Most precise for aiming.
+settings.hint_gyro=GYRO: tilt to fly. RECENTER takes your current hold as level.
+settings.lean=LEAN
+settings.lean_on=LEAN ON
+settings.lean_off=LEAN OFF
+settings.lean_no_sensor=LEAN needs a motion sensor - this device has none.
+settings.lean_gyro=LEAN is off in GYRO: both read the same hand motion.
+settings.lean_hint=Roll the phone the way the plane turns: up to +{0} % turn rate.
+theme.title=THEME
+theme.sub=Looks only. Every theme plays the same; each device keeps its own.
+
+theme.skyposter=SKY POSTER
+theme.phosphor=PHOSPHOR
+theme.coinop=COIN-OP
+theme.chrome=CHROME
+theme.aqua=AQUA
+theme.flat=FLAT
+theme.clay=CLAY
+theme.lightfield=LIGHTFIELD
+theme.cockpit=COCKPIT
+theme.canopy=CANOPY
+theme.solaria=SOLARIA
+
+# --- gadgets (GadgetType) ---
+gadget.Nitro.name=NITRO
+gadget.Nitro.desc=1.2 s top speed. Relights the engine.
+gadget.BarrelRoll.name=BARREL ROLL
+gadget.BarrelRoll.desc=Shots pass through you for 0.45 s.
+gadget.Thunderclap.name=THUNDERCLAP
+gadget.Thunderclap.desc=Shoves planes away, wipes shots nearby.
+
+# --- banners, kill feed, pickup lines (PowerUp.PickupText) ---
+banner.recover=RECOVER!
+banner.supply_drop=SUPPLY DROP
+banner.stall=STALL! DOUBLE-TAP STICK
+banner.lean=LEAN! +{0} % TURN
+feed.slammed={0} SLAMMED {1}
+feed.rammed={0} RAMMED {1}
+pickup.nitro=NITRO
+pickup.full_repair=FULL REPAIR
+pickup.hull=+HULL
+pickup.shield=+SHIELD
+pickup.handling=+HANDLING
+pickup.damage=DAMAGE x1.5
+pickup.shield_gadget=+SHIELD +GADGET
+pickup.special={0} x{1}

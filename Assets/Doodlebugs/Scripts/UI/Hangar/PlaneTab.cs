@@ -84,15 +84,15 @@ public class PlaneTab : MonoBehaviour
         hl.childControlHeight = false;
         hl.childForceExpandWidth = false;
         hl.childAlignment = TextAnchor.MiddleLeft;
-        Ui.AutoText(head, "Title", "PAINT", UiTheme.Label, 15, UiTheme.OnBackdrop);
+        Ui.AutoText(head, "Title", Loc.T("planes.paint"), UiTheme.Label, 15, UiTheme.OnBackdrop);
         if (!PlaneSkinCatalog.PremiumOffered)
         {
             Ui.AutoText(head, "Count", PlaneSkinCatalog.OfferedCount.ToString(), UiTheme.Label, 15, UiTheme.TextDim);
         }
         else foreach (Filter f in System.Enum.GetValues(typeof(Filter)))
         {
-            string text = f == Filter.All ? "All " + PlaneSkinCatalog.Count
-                        : f == Filter.Free ? "Free" : "Premium · soon";
+            string text = f == Filter.All ? Loc.F("planes.filter_all", PlaneSkinCatalog.Count)
+                        : f == Filter.Free ? Loc.T("planes.filter_free") : Loc.T("planes.filter_premium");
             var (r, bg, label) = Ui.Pill(head, "F_" + f, text, UiTheme.GlassLight, UiTheme.OnBackdrop, 22f);
             var captured = f;
             bg.raycastTarget = true;
@@ -157,15 +157,15 @@ public class PlaneTab : MonoBehaviour
             if (taken) img.color = new Color(1f, 1f, 1f, 0.35f);
             else img.color = UiTheme.Active.ArtTint;
 
-            var name = Ui.Text(card.Face.transform, "Name", def.DisplayName, UiTheme.Display, 18, mine ? UiTheme.OnPick : UiTheme.Ink, TextAnchor.MiddleCenter);
+            var name = Ui.Text(card.Face.transform, "Name", def.LocalizedName, UiTheme.Display, 18, mine ? UiTheme.OnPick : UiTheme.Ink, TextAnchor.MiddleCenter);
             Ui.TopBand(name.rectTransform, 55f, 20f);
             name.horizontalOverflow = HorizontalWrapMode.Overflow;
             var el = ElementProfile.Get(def.Element);
-            var elem = Ui.Text(card.Face.transform, "Element", el.DisplayName, UiTheme.Label, UiTheme.SizeSmall,
+            var elem = Ui.Text(card.Face.transform, "Element", el.LocalizedName, UiTheme.Label, UiTheme.SizeSmall,
                 mine ? UiTheme.OnPick : UiTheme.TextDim, TextAnchor.MiddleCenter);
             Ui.TopBand(elem.rectTransform, 75f, 16f);
 
-            string chip = mine ? "YOURS" : taken ? WhoFlies(id) : null;
+            string chip = mine ? Loc.T("planes.yours") : taken ? WhoFlies(id) : null;
             if (chip != null)
             {
                 var (r, _, _) = Ui.Pill(card.Face.transform, "Chip", chip, UiTheme.Ink, UiTheme.Paper, 18f, 12, UiTheme.Label);
@@ -185,7 +185,7 @@ public class PlaneTab : MonoBehaviour
     private static string WhoFlies(int modelId)
     {
         var mgr = PlaneSkinManager.Instance;
-        if (mgr == null) return "TAKEN";
+        if (mgr == null) return Loc.T("planes.taken");
         foreach (var c in mgr.Claims)
         {
             if (c.ModelId != modelId) continue;
@@ -200,7 +200,7 @@ public class PlaneTab : MonoBehaviour
                 }
             }
         }
-        return "TAKEN";
+        return Loc.T("planes.taken");
     }
 
     private static readonly Dictionary<int, Sprite> _swatchSprites = new();

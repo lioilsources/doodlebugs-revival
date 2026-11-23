@@ -19,9 +19,15 @@ pairing flow (`Prompts/36-CLAUDE-PLAN-solo-first.md`). No analytics, no
 crash reporting, no Game Center (`Telemetry.cs` only logs). Local state
 lives in `PlayerProfile` (`Scripts/Meta/PlayerProfile.cs`, `profile.json`
 in persistentDataPath; `ProfileRecorder` adds the local rows at every round
-end). Strings of the solo-first code go through `Loc`
-(`Scripts/Localization/Loc.cs`) with **only `en.txt`** today - the rest of
-the UI is still hardcoded English; PR #57 brings the other 44 catalogues.
+end). UI strings go through `Loc` (`Scripts/Localization/Loc.cs`, 45
+catalogues in `Resources/Localization`; `tools/l10n/check_catalogues.py`
+must pass): a new string is a key in `en.txt` plus all 44 other
+catalogues - no hardcoded UI text. Theme fonts are Latin-only subsets: a
+catalogue lists the ones lacking its glyphs in `@nofont=`, and `Loc.Cover`
+(called from `UiTheme` font loading) swaps them for the OS font;
+regenerate with `check_catalogues.py --fix-font` (needs fontTools). Text a
+server sends for clients to show (pickup lines) travels as a token and is
+resolved per client (`PowerUp.PickupText`).
 
 **North star:** open the app anywhere, alone, offline → shooting within
 15 s → a reason to play one more round and to come back tomorrow. LAN party

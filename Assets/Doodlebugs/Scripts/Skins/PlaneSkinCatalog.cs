@@ -37,6 +37,7 @@ public static class PlaneSkinCatalog
             BundleId = bundleId;
         }
 
+        public string LocalizedName => Loc.T("skin." + Key, DisplayName);
         public string ResourcePath => $"Sprites/PlaneSkins/skin_{Key}";
 
         // The flat 128x128 material swatch the skin was painted from - what

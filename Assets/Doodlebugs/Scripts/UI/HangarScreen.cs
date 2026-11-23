@@ -136,10 +136,10 @@ public class HangarScreen : MonoBehaviour
         if (ready)
         {
             _localReady = true;
-            if (_mode == MatchManager.HangarMode.LateJoin) SetCta("DEPLOYING", UiTheme.PaperDim, 0, false);
+            if (_mode == MatchManager.HangarMode.LateJoin) SetCta(Loc.T("hangar.deploying"), UiTheme.PaperDim, 0, false);
             else if (_mode != MatchManager.HangarMode.Waiting)
             {
-                SetCta("WAITING", UiTheme.PaperDim, 0, false);
+                SetCta(Loc.T("hangar.waiting_button"), UiTheme.PaperDim, 0, false);
                 foreach (var (card, _) in _cards) card.SetInteractable(false);
             }
         }
@@ -250,11 +250,11 @@ public class HangarScreen : MonoBehaviour
         h.childControlHeight = false;
         h.childForceExpandWidth = false;
 
-        _title = Ui.AutoText(_topRow, "Title", "HANGAR", UiTheme.Display, UiTheme.SizeTitle, UiTheme.OnBackdrop);
+        _title = Ui.AutoText(_topRow, "Title", Loc.T("hangar.title"), UiTheme.Display, UiTheme.SizeTitle, UiTheme.OnBackdrop);
         Ui.BackdropShadow(_title, 3f);
         _title.rectTransform.sizeDelta = new Vector2(120f, 40f);
 
-        _rolePill = Ui.Pill(_topRow, "Role", "HOST", UiTheme.Glass, UiTheme.Highlight);
+        _rolePill = Ui.Pill(_topRow, "Role", Loc.T("hud.host"), UiTheme.Glass, UiTheme.Highlight);
         _roundPill = Ui.Pill(_topRow, "Round", "", UiTheme.Glass, UiTheme.OnBackdrop);
         _nextPill = Ui.Pill(_topRow, "Next", "", UiTheme.Glass, UiTheme.OnBackdrop, 30f);
         _readyPill = Ui.Pill(_topRow, "Ready", "", UiTheme.Glass, ReadableOn(UiTheme.Confirm, UiTheme.Glass));
@@ -325,8 +325,8 @@ public class HangarScreen : MonoBehaviour
         sh2.childControlHeight = true;
         sh2.childForceExpandWidth = true;
         sh2.childForceExpandHeight = true;
-        (_slotWeaponIcon, _slotWeaponDisc, _slotWeaponName) = BuildSlot(slots, "Weapon", UiTheme.Weapon, () => SwitchTab(Tab.Weapon));
-        (_slotGadgetIcon, _slotGadgetDisc, _slotGadgetName) = BuildSlot(slots, "Gadget", UiTheme.Gadget, () => SwitchTab(Tab.Gadget));
+        (_slotWeaponIcon, _slotWeaponDisc, _slotWeaponName) = BuildSlot(slots, Loc.T("hangar.slot.weapon"), UiTheme.Weapon, () => SwitchTab(Tab.Weapon));
+        (_slotGadgetIcon, _slotGadgetDisc, _slotGadgetName) = BuildSlot(slots, Loc.T("hangar.slot.gadget"), UiTheme.Gadget, () => SwitchTab(Tab.Gadget));
         _slotGadget = _slotGadgetName.transform.parent.parent.gameObject;
         _heroHome = _hero.anchoredPosition;
         _planeHome = pr.anchoredPosition;
@@ -368,7 +368,7 @@ public class HangarScreen : MonoBehaviour
             var le = p.Root.gameObject.AddComponent<LayoutElement>();
             le.minWidth = 104f;
             le.preferredWidth = 120f;
-            var label = Ui.Text(p.Face.transform, "Label", t.ToString().ToUpperInvariant(), UiTheme.Label,
+            var label = Ui.Text(p.Face.transform, "Label", Loc.T("hangar.tab." + t), UiTheme.Label,
                 UiTheme.SizeTab, UiTheme.Ink, TextAnchor.MiddleCenter);
             var badge = Ui.Text(p.Face.transform, "Badge", "", UiTheme.BodyStrong, 12, UiTheme.OnPick, TextAnchor.MiddleCenter);
             Ui.Place(badge.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-6f, 0f), new Vector2(20f, 20f));
@@ -402,7 +402,7 @@ public class HangarScreen : MonoBehaviour
         h.childControlHeight = false;
         h.childForceExpandWidth = false;
 
-        _cta = Ui.BigButton(bar, "Cta", "READY", UiTheme.Confirm, PressCta);
+        _cta = Ui.BigButton(bar, "Cta", Loc.T("hangar.ready"), UiTheme.Confirm, PressCta);
         Ui.Place(_cta.Panel.Root, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), Vector2.zero, new Vector2(204f, 54f));
 
         // + BOT / - BOT above the CTA, party host only (Prompts/27 S8)
@@ -556,10 +556,10 @@ public class HangarScreen : MonoBehaviour
         _roster.parent.gameObject.SetActive(!searching);
         _topRow.gameObject.SetActive(!searching);
 
-        _title.text = lateJoin ? "BATTLE IN PROGRESS" : "HANGAR";
+        _title.text = lateJoin ? Loc.T("hangar.battle_in_progress") : Loc.T("hangar.title");
         _readyPill.root.gameObject.SetActive(readyCheck);
         _statusPill.root.gameObject.SetActive(mode == MatchManager.HangarMode.Waiting);
-        _statusPill.label.text = "WAITING FOR PLAYERS...";
+        _statusPill.label.text = Loc.T("hangar.waiting");
         var match = MatchManager.Instance;
         bool solo = match != null && match.IsSoloSession;
         bool partyHostLobby = mode == MatchManager.HangarMode.Waiting &&
@@ -579,11 +579,11 @@ public class HangarScreen : MonoBehaviour
         // CTA per mode
         switch (mode)
         {
-            case MatchManager.HangarMode.Waiting: SetCta("FLY", UiTheme.Gadget, 0, true); break;
-            case MatchManager.HangarMode.LateJoin: SetCta("JOIN", UiTheme.Confirm, seconds, true); break;
+            case MatchManager.HangarMode.Waiting: SetCta(Loc.T("hangar.fly"), UiTheme.Gadget, 0, true); break;
+            case MatchManager.HangarMode.LateJoin: SetCta(Loc.T("hangar.join"), UiTheme.Confirm, seconds, true); break;
             case MatchManager.HangarMode.PreBattle:
             case MatchManager.HangarMode.Intermission:
-                SetCta(solo ? Loc.T("solo.next_round") : "READY", UiTheme.Confirm,
+                SetCta(solo ? Loc.T("solo.next_round") : Loc.T("hangar.ready"), UiTheme.Confirm,
                     seconds > 0 ? seconds : MatchManager.HangarSeconds, true); break;
         }
 
@@ -666,7 +666,7 @@ public class HangarScreen : MonoBehaviour
     {
         if (_rolePill.root == null) return;
         _rolePill.root.gameObject.SetActive(role != Doodlebugs.Network.LocalRole.None);
-        _rolePill.label.text = role == Doodlebugs.Network.LocalRole.Host ? "HOST" : "CLIENT";
+        _rolePill.label.text = role == Doodlebugs.Network.LocalRole.Host ? Loc.T("hud.host") : Loc.T("hud.client");
         _rolePill.label.color = ReadableOn(role == Doodlebugs.Network.LocalRole.Host ? UiTheme.Highlight : UiTheme.Gadget, UiTheme.Glass);
     }
 
@@ -683,19 +683,19 @@ public class HangarScreen : MonoBehaviour
         var mm = MatchManager.Instance;
         int round = 1;
         if (mm != null) foreach (var kv in mm.RoundWins) round += kv.Value;
-        _roundPill.label.text = $"ROUND {round} OF {MatchManager.RoundWinsTarget * 2 - 1}";
+        _roundPill.label.text = Loc.F("hangar.round_of", round, MatchManager.RoundWinsTarget * 2 - 1);
         _roundPill.root.gameObject.SetActive(_mode == MatchManager.HangarMode.Intermission);
 
         var profile = BackgroundManager.Instance != null ? BackgroundManager.Instance.CurrentProfile : null;
-        string arena = profile != null && profile.backgroundSprite != null ? profile.backgroundSprite.name : "ARENA";
+        string arena = profile != null && profile.backgroundSprite != null ? Loc.T("map." + profile.backgroundSprite.name, profile.backgroundSprite.name) : Loc.T("hangar.arena");
         bool host = NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
-        _nextPill.label.text = (host ? "ARENAS · " : "NEXT · ") + arena.ToUpperInvariant();
+        _nextPill.label.text = Loc.F(host ? "hangar.arenas" : "hangar.next_arena", Loc.Upper(arena));
         _nextPill.bg.raycastTarget = host;
 
         var roster = RosterDevices();
         int bots = 0;
         foreach (var r in roster) if (r.Bot) bots++;
-        _readyPill.label.text = $"READY {_readyClients.Count + bots}/{Mathf.Max(1, roster.Count)}";
+        _readyPill.label.text = Loc.F("hangar.ready_count", _readyClients.Count + bots, Mathf.Max(1, roster.Count));
 
         if (mm != null && _tabs.TryGetValue(Tab.Upgrades, out var up))
         {
@@ -791,15 +791,15 @@ public class HangarScreen : MonoBehaviour
             var card = DraftCard.Build(row, new DraftCard.Data
             {
                 Category = UiTheme.Weapon,
-                Verb = w.Verb,
-                Corner = i == 0 ? "KEEP" : "",
+                Verb = w.LocalizedVerb,
+                Corner = i == 0 ? Loc.T("hangar.keep_corner") : "",
                 Icon = icon,
                 Glyph = w.LoadGlyph(),
                 IconTint = tint,
-                Title = w.DisplayName,
-                Description = w.Description,
+                Title = w.LocalizedName,
+                Description = w.LocalizedDescription,
                 Preview = w.Preview,
-                Stats = new[] { ("DMG", w.StatDamage), ("RATE", w.StatRate), ("RANGE", w.StatRange) },
+                Stats = new[] { (Loc.T("stat.dmg"), w.StatDamage), (Loc.T("stat.rate"), w.StatRate), (Loc.T("stat.range"), w.StatRange) },
                 OnClick = () => PickWeapon(id),
             }, i);
             card.SetSelected(id == _pickedWeapon);
@@ -818,13 +818,13 @@ public class HangarScreen : MonoBehaviour
             var card = DraftCard.Build(row, new DraftCard.Data
             {
                 Category = UiTheme.Gadget,
-                Verb = g.Verb,
-                Corner = i == 0 ? "KEEP" : "",
+                Verb = g.LocalizedVerb,
+                Corner = i == 0 ? Loc.T("hangar.keep_corner") : "",
                 Icon = g.LoadIcon(),
                 Glyph = g.LoadGlyph(),
-                Title = g.DisplayName,
-                Description = g.Description,
-                Stats = new[] { ("POWER", g.StatPower), ("RATE", g.StatRate), ("CD", Mathf.Clamp01(1f - g.Cooldown / 12f)) },
+                Title = g.LocalizedName,
+                Description = g.LocalizedDescription,
+                Stats = new[] { (Loc.T("stat.power"), g.StatPower), (Loc.T("stat.rate"), g.StatRate), (Loc.T("stat.cd"), Mathf.Clamp01(1f - g.Cooldown / 12f)) },
                 OnClick = () => PickGadget(id),
             }, i);
             card.SetSelected(id == _pickedGadget);
@@ -850,12 +850,12 @@ public class HangarScreen : MonoBehaviour
             var card = DraftCard.Build(row, new DraftCard.Data
             {
                 Category = UiTheme.Pick,
-                Verb = "UPGRADE",
-                Corner = maxed ? "MAX" : $"{RunUpgrades.CostPoints} PT",
+                Verb = Loc.T("weapon.verb.UPGRADE"),
+                Corner = maxed ? Loc.T("hangar.max") : Loc.F("hangar.cost_pt", RunUpgrades.CostPoints),
                 Icon = Resources.Load<Sprite>("Sprites/PowerUps/" + UpgradeIcons[i]),
                 Title = RunUpgrades.DisplayName(type),
                 Description = RunUpgrades.Description(type),
-                Footer = $"LEVEL {dots}",
+                Footer = Loc.F("hangar.level", level, RunUpgrades.MaxLevel),
                 Disabled = maxed || !affordable,
                 OnClick = () => BuyUpgrade(captured),
             }, i);
@@ -931,13 +931,13 @@ public class HangarScreen : MonoBehaviour
             case MatchManager.HangarMode.LateJoin:
                 if (_localReady) return;
                 _localReady = true;
-                SetCta("DEPLOYING", UiTheme.PaperDim, 0, false);
+                SetCta(Loc.T("hangar.deploying"), UiTheme.PaperDim, 0, false);
                 OwnedPlane()?.RequestDeployServerRpc();
                 break;
             default:
                 if (_localReady) return;
                 _localReady = true;
-                SetCta("WAITING", UiTheme.PaperDim, 0, false);
+                SetCta(Loc.T("hangar.waiting_button"), UiTheme.PaperDim, 0, false);
                 foreach (var (card, _) in _cards) card.SetInteractable(false);
                 OwnedPlane()?.SetHangarReadyServerRpc();
                 SfxManager.PlayConfirm();
@@ -964,7 +964,7 @@ public class HangarScreen : MonoBehaviour
     {
         if (_corner != null) return;
         var mc = MenuCanvas.Instance;
-        var (r, bg, _) = Ui.Pill(mc.Root, "HangarCorner", "HANGAR", UiTheme.Glass, UiTheme.OnBackdrop, 48f, 17, UiTheme.Label);
+        var (r, bg, _) = Ui.Pill(mc.Root, "HangarCorner", Loc.T("hangar.title"), UiTheme.Glass, UiTheme.OnBackdrop, 48f, 17, UiTheme.Label);
         r.anchorMin = r.anchorMax = new Vector2(1f, 1f);
         r.pivot = new Vector2(1f, 1f);
         r.anchoredPosition = new Vector2(-16f, -8f);
@@ -1024,19 +1024,19 @@ public class HangarScreen : MonoBehaviour
 
         _heroPlane.sprite = PlaneModelCatalog.LoadSprite(model, skin);
         var def = PlaneModelCatalog.Get(model);
-        _heroName.text = def.DisplayName.ToUpperInvariant();
+        _heroName.text = Loc.Upper(def.LocalizedName);
         var el = ElementProfile.Get(def.Element);
-        _elementChip.label.text = el.DisplayName;
+        _elementChip.label.text = el.LocalizedName;
         _elementChip.bg.color = el.Tint;
 
         var w = WeaponProfile.Get(weapon);
         SetSlotIcon(_slotWeaponIcon, _slotWeaponDisc, w.LoadGlyph(), w.LoadIcon(out _));
-        _slotWeaponName.text = w.DisplayName;
+        _slotWeaponName.text = w.LocalizedName;
         bool showGadget = _mode != MatchManager.HangarMode.LateJoin;
         _slotGadget.SetActive(showGadget);
         var g = GadgetProfile.Get(gadget);
         SetSlotIcon(_slotGadgetIcon, _slotGadgetDisc, g.LoadGlyph(), g.LoadIcon());
-        _slotGadgetName.text = g.DisplayName;
+        _slotGadgetName.text = g.LocalizedName;
     }
 
     /// <summary>Glyph on the theme's badge; a sprite without a glyph brings its own disc.</summary>
@@ -1173,9 +1173,9 @@ public class HangarScreen : MonoBehaviour
             v.childControlWidth = true;
             v.childControlHeight = true;
             v.childAlignment = TextAnchor.MiddleLeft;
-            Ui.AutoText(col, "Name", !p.Bot && p.Client == me ? "You" : p.Name, UiTheme.BodyStrong, 13, UiTheme.OnBackdrop);
+            Ui.AutoText(col, "Name", !p.Bot && p.Client == me ? Loc.T("hangar.you") : p.Name, UiTheme.BodyStrong, 13, UiTheme.OnBackdrop);
             bool ready = p.Bot || _readyClients.Contains(p.Client);   // nobody waits for a bot
-            string state = readyCheck ? (ready ? "READY" : "PICKING") : _mode == MatchManager.HangarMode.Waiting ? "IN LOBBY" : "";
+            string state = readyCheck ? (ready ? Loc.T("hangar.ready") : Loc.T("hangar.picking")) : _mode == MatchManager.HangarMode.Waiting ? Loc.T("hangar.in_lobby") : "";
             if (state.Length > 0)
                 Ui.AutoText(col, "State", state, UiTheme.Label, 12, ready ? UiTheme.Confirm : UiTheme.Highlight);
         }

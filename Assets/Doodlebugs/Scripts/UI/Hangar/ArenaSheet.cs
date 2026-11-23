@@ -40,9 +40,9 @@ public class ArenaSheet : MonoBehaviour
         Ui.Place(card.Root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(640f, 330f));
         var face = card.Face.transform;
 
-        var title = Ui.Text(face, "Title", "ARENA ROTATION", UiTheme.Display, UiTheme.SizeTitle, UiTheme.Ink);
+        var title = Ui.Text(face, "Title", Loc.T("scenes.title"), UiTheme.Display, UiTheme.SizeTitle, UiTheme.Ink);
         Ui.TopBand(title.rectTransform, 10f, 34f, 18f, 18f);
-        var sub = Ui.Text(face, "Sub", "Tap an arena to drop it or bring it back.", UiTheme.Body, UiTheme.SizeBody, UiTheme.TextDim);
+        var sub = Ui.Text(face, "Sub", Loc.T("scenes.sub"), UiTheme.Body, UiTheme.SizeBody, UiTheme.TextDim);
         Ui.TopBand(sub.rectTransform, 44f, 20f, 18f, 18f);
 
         _grid = Ui.Node(face, "Grid");
@@ -53,7 +53,7 @@ public class ArenaSheet : MonoBehaviour
         g.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         g.constraintCount = 3;
 
-        var done = Ui.BigButton(face, "Done", "DONE", UiTheme.Confirm, Close);
+        var done = Ui.BigButton(face, "Done", Loc.T("common.done"), UiTheme.Confirm, Close);
         Ui.Place(done.Panel.Root, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-14f, 14f), new Vector2(150f, 50f));
 
         BuildTiles();
@@ -88,8 +88,8 @@ public class ArenaSheet : MonoBehaviour
             }
             if (!on) { pic.color = new Color(0.5f, 0.5f, 0.55f, 0.6f); }
 
-            string name = profile.backgroundSprite != null ? profile.backgroundSprite.name : profile.name;
-            var (pill, _, _) = Ui.Pill(tile.Face.transform, "Name", (on ? slot + ". " : "") + name.ToUpperInvariant(),
+            string name = profile.backgroundSprite != null ? Loc.T("map." + profile.backgroundSprite.name, profile.backgroundSprite.name) : profile.name;
+            var (pill, _, _) = Ui.Pill(tile.Face.transform, "Name", (on ? slot + ". " : "") + Loc.Upper(name),
                 UiTheme.Glass, UiTheme.OnBackdrop, 22f, 12, UiTheme.Label);
             pill.anchorMin = pill.anchorMax = new Vector2(0f, 0f);
             pill.pivot = new Vector2(0f, 0f);
