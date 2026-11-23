@@ -60,9 +60,9 @@ public class ThemeSheet : MonoBehaviour
         Ui.Place(card.Root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(780f, 340f));
         var face = card.Face.transform;
 
-        var title = Ui.Text(face, "Title", "THEME", UiTheme.Display, UiTheme.SizeTitle, UiTheme.Ink);
+        var title = Ui.Text(face, "Title", Loc.T("theme.title"), UiTheme.Display, UiTheme.SizeTitle, UiTheme.Ink);
         Ui.TopBand(title.rectTransform, 10f, 36f, 20f, 200f);
-        var sub = Ui.Text(face, "Sub", "Looks only. Every theme plays the same; each device keeps its own.",
+        var sub = Ui.Text(face, "Sub", Loc.T("theme.sub"),
             UiTheme.Body, UiTheme.SizeSmall, UiTheme.TextDim);
         Ui.TopBand(sub.rectTransform, 46f, 18f, 20f, 200f);
 
@@ -83,7 +83,7 @@ public class ThemeSheet : MonoBehaviour
         }
         _activeOutside = null;
 
-        var done = Ui.BigButton(face, "Done", "DONE", UiTheme.Confirm, Close);
+        var done = Ui.BigButton(face, "Done", Loc.T("common.done"), UiTheme.Confirm, Close);
         done.Label.fontSize = Mathf.Max(UiTheme.MinText, Mathf.RoundToInt(22 * UiTheme.ScaleFor(UiTheme.Display)));
         Ui.Place(done.Panel.Root, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-18f, 14f), new Vector2(150f, 48f));
         UiAudit.Check(transform);
@@ -114,7 +114,7 @@ public class ThemeSheet : MonoBehaviour
         var b2 = Ui.Bar(face, "B2", 0.4f, def.BarFill, def.PaperDim);
         Ui.TopBand(b2.transform.parent as RectTransform, 51f, 6f, 6f, 6f);
 
-        var name = Ui.Text(cell, "Name", def.Name, UiTheme.Label, UiTheme.SizeSmall, def.OnBackdrop, TextAnchor.MiddleCenter);
+        var name = Ui.Text(cell, "Name", def.LocalizedName, UiTheme.Label, UiTheme.SizeSmall, def.OnBackdrop, TextAnchor.MiddleCenter);
         Ui.TopBand(name.rectTransform, 3f, 20f, 2f, 2f);
         name.resizeTextForBestFit = true;
         name.resizeTextMinSize = UiTheme.MinText;
@@ -157,6 +157,6 @@ public class ThemeSheet : MonoBehaviour
         SfxManager.PlayConfirm();
         SfxManager.Haptic(HapticKind.Light);
         ThemeSettings.Set(def);
-        BannerOverlay.Show("THEME · " + def.Name, UiTheme.Highlight);
+        BannerOverlay.Show(Loc.F("settings.theme", def.LocalizedName), UiTheme.Highlight);
     }
 }

@@ -155,12 +155,12 @@ public static class UiTheme
     private static Font Load(string name)
     {
         if (string.IsNullOrEmpty(name)) return UiKit.PixelFont;
-        if (_fonts.TryGetValue(name, out var f) && f != null) return f;
+        if (_fonts.TryGetValue(name, out var f) && f != null) return Loc.Cover(f);
         f = Resources.Load<Font>("Fonts/" + name);
         if (f == null) f = Resources.Load<Font>("Fonts/BarlowCondensed-Bold");
         if (f == null) f = UiKit.PixelFont;
         _fonts[name] = f;
-        return f;
+        return Loc.Cover(f);
     }
 
     public static Color Hex(int rgb, float a = 1f) =>

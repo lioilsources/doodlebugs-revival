@@ -691,10 +691,10 @@ public class GameHUD : MonoBehaviour
                 line = Loc.F("feed.lost", victim);
                 break;
             case KillCause.Slammed when hasKiller:
-                line = $"{ColoredName(killerClientId, killerLocalIdx)} SLAMMED {victim}";
+                line = Loc.F("feed.slammed", ColoredName(killerClientId, killerLocalIdx), victim);
                 break;
             case KillCause.Rammed when hasKiller:
-                line = $"{ColoredName(killerClientId, killerLocalIdx)} RAMMED {victim}";
+                line = Loc.F("feed.rammed", ColoredName(killerClientId, killerLocalIdx), victim);
                 break;
             default:
                 line = Loc.F("feed.down", victim);

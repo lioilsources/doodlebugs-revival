@@ -59,7 +59,7 @@ public class WeaponProfile
     /// <summary>UI text in the active language (Resources/Localization).</summary>
     public string LocalizedName => Loc.T($"weapon.{Type}.name", DisplayName);
     public string LocalizedDescription => Loc.T($"weapon.{Type}.desc", Description);
-    public string LocalizedVerb => Loc.T($"weapon.verb.{Verb}", Verb);
+    public string LocalizedVerb => Loc.T("weapon.verb." + Verb.Replace(" & ", "_").Replace(' ', '_'), Verb);
 
     public int Damage = 1;          // per pellet, before the power-up multiplier
     public float Cooldown = 0.4f;   // seconds between shots

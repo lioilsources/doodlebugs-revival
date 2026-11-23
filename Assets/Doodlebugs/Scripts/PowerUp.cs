@@ -246,8 +246,8 @@ public class PowerUp : NetworkBehaviour, IDamagable
             // Four channels: banner + siren + haptic + kill-feed line
             SfxManager.PlayNamed("supply", 0.9f, 0f);
             SfxManager.Haptic(HapticKind.Medium);
-            BannerOverlay.Show("SUPPLY DROP", UiTheme.Highlight, transform.position.x);
-            GameHUD.Instance?.PushFeedLine("SUPPLY DROP");
+            BannerOverlay.Show(Loc.T("banner.supply_drop"), UiTheme.Highlight, transform.position.x);
+            GameHUD.Instance?.PushFeedLine(Loc.T("banner.supply_drop"));
         }
     }
 
@@ -353,21 +353,21 @@ public class PowerUp : NetworkBehaviour, IDamagable
                 case PowerUpType.Nitro:
                     shooting?.ServerRechargeGadget();
                     pc?.ServerBoost(1.5f);
-                    line = "NITRO";
+                    line = "pickup.nitro";
                     break;
                 case PowerUpType.Special:
                     var special = (WeaponType)Mathf.Max(0, NetPayload.Value);
                     shooting?.GiveSpecial(special);
-                    line = WeaponProfile.Get(special).DisplayName + " x" + Mathf.Max(1, WeaponProfile.Get(special).SpecialAmmo);
+                    line = "special:" + special + ":" + Mathf.Max(1, WeaponProfile.Get(special).SpecialAmmo);
                     break;
                 case PowerUpType.FullRepair:
                     planeStats.ServerFullRepair();
-                    line = "FULL REPAIR";
+                    line = "pickup.full_repair";
                     break;
                 default:
                     planeStats.ApplyPowerUp(type);
-                    line = type == PowerUpType.Health ? "+HULL" : type == PowerUpType.Shield ? "+SHIELD"
-                         : type == PowerUpType.Repair ? "+HANDLING" : "DAMAGE x1.5";
+                    line = type == PowerUpType.Health ? "pickup.hull" : type == PowerUpType.Shield ? "pickup.shield"
+                         : type == PowerUpType.Repair ? "pickup.handling" : "pickup.damage";
                     break;
             }
             if (NetIsSupplyDrop.Value) ResolveDrop("taken");
@@ -396,12 +396,28 @@ public class PowerUp : NetworkBehaviour, IDamagable
         if ((PowerUpType)type == PowerUpType.Special) SfxManager.PlayNamed("special", 0.8f, 0f);
         WorldFx.Ring(position, 1.4f, c, 0.25f, 0.2f);
         WorldFx.Puff(position, c, 8);
-        WorldFx.Text(position + Vector3.up * 0.8f, line.ToString(), c, 0.55f, 1f);
+        WorldFx.Text(position + Vector3.up * 0.8f, PickupText(line.ToString()), c, 0.55f, 1f);
         var nm = NetworkManager.Singleton;
         if (nm != null && takerClientId == nm.LocalClientId && !takerIsBot)
         {
             SfxManager.Haptic(HapticKind.Light);
         }
+    }
+
+    /// <summary>The server sends a token, not text, so every client reads the
+    /// pickup line in its own language: a Loc key, "weapon:&lt;WeaponType&gt;" or
+    /// "special:&lt;WeaponType&gt;:&lt;ammo&gt;".</summary>
+    private static string PickupText(string token)
+    {
+        if (string.IsNullOrEmpty(token)) return "";
+        var parts = token.Split(':');
+        if (parts.Length >= 2 && System.Enum.TryParse(parts[1], out WeaponType w))
+        {
+            string name = WeaponProfile.Get(w).LocalizedName;
+            if (parts[0] == "special" && parts.Length == 3) return Loc.F("pickup.special", name, parts[2]);
+            return name;
+        }
+        return Loc.T(token, token);
     }
 
     private void DespawnSelf()

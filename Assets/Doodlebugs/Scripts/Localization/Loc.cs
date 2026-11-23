@@ -105,6 +105,40 @@ public static class Loc
         return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
     }
 
+    private static readonly Dictionary<Font, Font> _covered = new Dictionary<Font, Font>();
+    private static HashSet<char> _activeChars;
+
+    /// <summary><paramref name="font"/> when it can draw every character of the
+    /// active catalogue, else the built-in OS-backed font. The UI themes use
+    /// Latin display faces; a word drawn half in the theme face and half in
+    /// an OS fallback reads as broken, so the whole UI switches instead.</summary>
+    public static Font Cover(Font font)
+    {
+        if (font == null) return null;
+        EnsureLoaded();
+        if (_language == SourceLanguage) return font;
+        if (!_pixelFont) return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (_covered.TryGetValue(font, out var picked) && picked != null) return picked;
+
+        if (_activeChars == null)
+        {
+            _activeChars = new HashSet<char>();
+            foreach (var v in _active.Values)
+                foreach (char c in v + Upper(v))
+                    if (c > 127 && !char.IsWhiteSpace(c)) _activeChars.Add(c);
+        }
+        picked = font;
+        foreach (char c in _activeChars)
+        {
+            if (font.HasCharacter(c)) continue;
+            Debug.Log($"[Loc] {font.name} lacks U+{(int)c:X4} for '{_language}' - using the OS font");
+            picked = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            break;
+        }
+        _covered[font] = picked;
+        return picked;
+    }
+
     /// <summary>Switch language at runtime; already-built UI keeps its text
     /// until it is rebuilt.</summary>
     public static void SetLanguage(string code)
@@ -112,6 +146,8 @@ public static class Loc
         try { PlayerPrefs.SetString(PrefsKey, code ?? ""); } catch { /* prefs unavailable */ }
         _active = null;
         _language = null;
+        _activeChars = null;
+        _covered.Clear();
     }
 
     private static void EnsureLoaded()
