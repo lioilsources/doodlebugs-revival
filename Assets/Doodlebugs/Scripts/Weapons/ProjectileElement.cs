@@ -51,6 +51,8 @@ public class TrailPreset
     public Color ColorEnd = Color.white;
     public float AlphaPeak = 0.75f;
     public ParticleTexture Texture = ParticleTexture.SoftCircle;
+
+    public TrailPreset Clone() => (TrailPreset)MemberwiseClone();
 }
 
 /// <summary>One-shot puff layered under an impact/explosion flipbook.</summary>
@@ -90,6 +92,8 @@ public class ElementProfile
     /// hears the difference between an MG and a sniper (plan D6).</summary>
     public static string SfxGroup(WeaponType weapon)
     {
+        var p = WeaponProfile.Get(weapon);
+        if (p.ExplosionRadius > 0f && p.Type != WeaponType.Flak) return "heavy";
         switch (weapon)
         {
             case WeaponType.Bomb:
@@ -106,6 +110,19 @@ public class ElementProfile
     /// tools/weapons/forms.py.</summary>
     public static string SpriteForm(WeaponType weapon)
     {
+        var form = WeaponProfile.Get(weapon).Form;
+        if (!string.IsNullOrEmpty(form)) return form;
+        switch (weapon)
+        {
+            case WeaponType.ClusterBomb:
+            case WeaponType.Bomblet:
+            case WeaponType.BigOne:
+                return "bomb";
+            case WeaponType.HeavyRocket:
+                return "rocket";
+            case WeaponType.TripleMine:
+                return "mine";
+        }
         switch (weapon)
         {
             case WeaponType.MG:

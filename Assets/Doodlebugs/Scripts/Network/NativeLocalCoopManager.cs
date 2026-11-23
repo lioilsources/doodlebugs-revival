@@ -42,6 +42,10 @@ namespace Doodlebugs.Network
         /// <summary>Raised before switching role mid-flight so the host can shut down NGO.</summary>
         public event Action OnResetNetworking;
 
+        /// <summary>The native path cannot run (no backend, permissions denied).
+        /// ConnectionManager falls back to a LAN host (plan 33 N2).</summary>
+        public event Action<string> OnUnavailable;
+
         private ILocalCoopBackend _backend;
         private string _localId;
         private bool _roleDecided;
@@ -87,6 +91,7 @@ namespace Doodlebugs.Network
             {
                 Debug.LogWarning("[NativeLocalCoop] Native backend unavailable on this platform");
                 OnStatus?.Invoke(Loc.T("status.coop_unsupported"));
+                OnUnavailable?.Invoke("backend_unavailable");
                 return;
             }
 
@@ -102,7 +107,7 @@ namespace Doodlebugs.Network
                 if (!granted)
                 {
                     Debug.LogWarning("[NativeLocalCoop] Required permissions denied - cannot discover players");
-                    OnStatus?.Invoke(Loc.T("status.permissions_denied"));
+                    OnUnavailable?.Invoke("permissions_denied");
                     return;
                 }
 
@@ -120,6 +125,15 @@ namespace Doodlebugs.Network
                 _backend.StartBrowsing();
                 Debug.Log("[NativeLocalCoop] Browsing for an existing lobby");
             });
+        }
+
+        /// <summary>PRACTICE (plan 33 W2): end the browse window now and host.
+        /// False while permissions are still pending or the role is decided.</summary>
+        public bool HostNow()
+        {
+            if (_roleDecided || !_browsing || _backend == null) return false;
+            BecomeHost();
+            return true;
         }
 
         /// <summary>Stop accepting new players (lobby full). Called by ConnectionManager.</summary>

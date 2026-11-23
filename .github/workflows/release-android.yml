@@ -5,6 +5,11 @@ on:
   push:
     tags: ['v*.*.*']
   workflow_dispatch:
+    inputs:
+      aab:
+        description: Also build the signed AAB for Google Play
+        type: boolean
+        default: false
 
 # Per-platform group — release-ios.yml explains why the shared one bit us and
 # why the single runner still keeps the two Unity editors from overlapping.
@@ -16,24 +21,37 @@ jobs:
   android:
     name: Build & Firebase App Distribution
     runs-on: [self-hosted, macos-unity]
-    timeout-minutes: 180
+    # A tag builds the APK and then the AAB (a second Unity build). After an
+    # iOS build the first one reimports for Android, ~2.5 h on the Mac Mini.
+    timeout-minutes: 330
 
     # gh release upload writes to the repo; the default token is read-only.
     permissions:
       contents: write
 
     env:
+      UNITY_LIBRARY_PER_TARGET: "1"   # ci/unity-build.sh: one Library per target
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       FIREBASE_ANDROID_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
-      FIREBASE_GROUPS: testers
+      FIREBASE_GROUPS: alfa   # tester group alias, same in every app (DevConventions shared/stores.md)
       FIREBASE_SA_PATH: ${{ github.workspace }}/.firebase-sa.json
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        # The runner's global git config sets core.hooksPath to a hook
+        # dispatcher (added on the M2 after v2.9.3), and `git lfs install
+        # --local` inside checkout refuses to touch its pre-push hook:
+        # "Hook already exists: pre-push". Point hooksPath back at the
+        # repo's own .git/hooks for this step only; the machine's global
+        # config stays as it is.
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.hooksPath
+          GIT_CONFIG_VALUE_0: .git/hooks
         with:
           lfs: true
           # See release-ios.yml — keeps the gitignored Library/ folder alive.
@@ -107,6 +125,31 @@ jobs:
           APK_PATH: Builds/Android/doodlebugs-signed.apk
           RELEASE_NOTES: "Doodlebugs Revival ${{ steps.version.outputs.version }} (build ${{ github.run_number }})"
         run: bundle exec fastlane android android_beta
+
+      # Google Play takes an App Bundle, Firebase keeps the APK. A second Unity
+      # build with a warm Library is a few minutes; it runs for every tag and
+      # for a manual run that asks for it. Same versionCode as the APK.
+      - name: Build unsigned AAB
+        if: github.ref_type == 'tag' || inputs.aab
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          VERSION_CODE_BASE: 100
+        run: |
+          export BUILD_NUMBER=$(( VERSION_CODE_BASE + GITHUB_RUN_NUMBER ))
+          ./ci/unity-build.sh android Builds/Android/doodlebugs.aab
+
+      - name: Sign AAB
+        if: github.ref_type == 'tag' || inputs.aab
+        run: ./ci/sign-aab.sh Builds/Android/doodlebugs.aab Builds/Android/doodlebugs-signed.aab
+
+      - name: Upload AAB artifact
+        if: github.ref_type == 'tag' || inputs.aab
+        uses: actions/upload-artifact@v6
+        with:
+          name: doodlebugs-android-aab
+          path: Builds/Android/doodlebugs-signed.aab
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6

@@ -164,10 +164,38 @@ public class SfxManager : MonoBehaviour
     public static void PlayMatchEnd() => Instance?.Play(Instance._matchEnd, UiVolume);
     public static void PlayTick() => Instance?.Play(Instance._tick, UiVolume);
 
+    // --- named one-shots (Prompts/28-30): Resources/Sfx/sfx_<key>.wav ------
+    //
+    // Loaded lazily and cached, misses included - a missing clip is silent.
+    private readonly Dictionary<string, AudioClip> _named = new();
+
+    public static void PlayNamed(string key, float volume = UiVolume, float pitchJitter = 0.04f)
+    {
+        var self = Instance;
+        if (self == null) return;
+        if (!self._named.TryGetValue(key, out var clip))
+        {
+            clip = Resources.Load<AudioClip>("Sfx/sfx_" + key);
+            self._named[key] = clip;
+        }
+        self.Play(clip, volume, pitchJitter);
+    }
+
+    public static void PlayWhoosh(float volume = 0.6f) => PlayNamed("whoosh", volume, 0.08f);
+    public static void PlayStall() => PlayNamed("stall", 0.8f, 0.02f);
+    public static void PlayRelight() => PlayNamed("relight", 0.7f, 0.03f);
+    public static void PlayConfirm() => PlayNamed("confirm", UiVolume, 0f);
+
     /// <summary>Vibrate on mobile (own death, big moments). No-op elsewhere.</summary>
-    public static void Haptic()
+    public static void Haptic() => Haptic(HapticKind.Heavy);
+
+    /// <summary>Haptic taxonomy (Prompts/28 §5). Light and Medium are silent
+    /// until the native haptics plugin of Phase 2 lands - the call sites are
+    /// already in place; Heavy and Success use the one vibration Unity has.</summary>
+    public static void Haptic(HapticKind kind)
     {
 #if UNITY_ANDROID || UNITY_IOS
+        if (kind != HapticKind.Heavy && kind != HapticKind.Success) return;
         if (Application.platform == RuntimePlatform.Android ||
             Application.platform == RuntimePlatform.IPhonePlayer)
         {
@@ -175,4 +203,12 @@ public class SfxManager : MonoBehaviour
         }
 #endif
     }
+}
+
+public enum HapticKind
+{
+    Light,
+    Medium,
+    Heavy,
+    Success
 }

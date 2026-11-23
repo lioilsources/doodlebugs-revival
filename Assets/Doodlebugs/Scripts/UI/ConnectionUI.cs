@@ -99,7 +99,7 @@ namespace Doodlebugs.UI
         // The hangar overlay shows the connection status itself - suppress the
         // duplicate corner panel while it covers the screen.
         private static bool HangarCoversScreen =>
-            GameHUD.Instance != null && GameHUD.Instance.IsHangarOpen;
+            HangarScreen.IsOpen;
 
         private void LateUpdate()
         {

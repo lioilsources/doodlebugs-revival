@@ -13,12 +13,12 @@ public class PlaneStats : NetworkBehaviour
     private const int BaseMaxHealth = 3;
     public const int AbsoluteMaxSegments = 5; // base 3 + up to 2 run-upgrade levels
     private const float MaxHandling = 1.0f;
-    private const float MinHandling = 0.3f;
+    private const float MinHandling = 0.85f;   // Prompts/28 D3: softened, not removed
     private const float MaxDamageMultiplier = 2.0f;
     private const float ShieldRegenDelay = 5f;
     private const float ShieldRegenInterval = 3f;
     private const float DamageBoostDuration = 10f;
-    private const float HandlingLossPerDamage = 0.1f;
+    private const float HandlingLossPerDamage = 0.05f;  // per point that reached the hull
 
     // --- Network Variables (server-write) ---
     public NetworkVariable<int> NetShield = new NetworkVariable<int>(BaseMaxShield,
@@ -96,6 +96,22 @@ public class PlaneStats : NetworkBehaviour
 
     public bool IsInvulnerable => NetInvulnerable.Value;
 
+    /// <summary>True during a barrel roll (Prompts/29): shots and knockback pass through.</summary>
+    public NetworkVariable<bool> NetDodging = new NetworkVariable<bool>(false,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    public bool IsDodging => NetDodging.Value;
+
+    private float _dodgeTimer;
+
+    /// <summary>Server: start a barrel roll.</summary>
+    public void BeginDodge(float seconds)
+    {
+        if (!IsServer) return;
+        _dodgeTimer = seconds;
+        NetDodging.Value = true;
+    }
+
     private void Update()
     {
         if (!IsServer) return;
@@ -135,6 +151,17 @@ public class PlaneStats : NetworkBehaviour
             NetDamageBoostRemaining.Value = quantized;
         }
 
+        // Barrel roll countdown
+        if (_dodgeTimer > 0f)
+        {
+            _dodgeTimer -= dt;
+            if (_dodgeTimer <= 0f)
+            {
+                _dodgeTimer = 0f;
+                NetDodging.Value = false;
+            }
+        }
+
         // Invulnerability countdown
         if (_invulnerabilityTimer > 0f)
         {
@@ -157,7 +184,7 @@ public class PlaneStats : NetworkBehaviour
     public bool TakeDamage(int damage)
     {
         if (!IsServer) return false;
-        if (NetInvulnerable.Value) return false;
+        if (NetInvulnerable.Value || NetDodging.Value) return false;
 
         int remaining = damage;
 
@@ -170,9 +197,11 @@ public class PlaneStats : NetworkBehaviour
         // Health takes the rest
         NetHealth.Value = Mathf.Max(0, NetHealth.Value - remaining);
 
-        // Handling degrades with total damage taken
-        float handlingLoss = HandlingLossPerDamage * damage;
-        NetHandling.Value = Mathf.Max(MinHandling, NetHandling.Value - handlingLoss);
+        // Handling degrades only with hull damage - a shield hit costs nothing
+        if (remaining > 0)
+        {
+            NetHandling.Value = Mathf.Max(MinHandling, NetHandling.Value - HandlingLossPerDamage * remaining);
+        }
 
         // Reset shield regen timer
         _shieldRegenCooldown = ShieldRegenDelay;
@@ -211,6 +240,22 @@ public class PlaneStats : NetworkBehaviour
         Debug.Log($"[PlaneStats] Applied {type} power-up to player {OwnerClientId}");
     }
 
+    /// <summary>Server: add shield segments (weapon crate on a maxed weapon).</summary>
+    public void ServerAddShield(int amount)
+    {
+        if (!IsServer) return;
+        NetShield.Value = Mathf.Min(NetShield.Value + amount, NetMaxShield.Value);
+    }
+
+    /// <summary>Server: full repair (supply drop).</summary>
+    public void ServerFullRepair()
+    {
+        if (!IsServer) return;
+        NetShield.Value = NetMaxShield.Value;
+        NetHealth.Value = NetMaxHealth.Value;
+        NetHandling.Value = MaxHandling;
+    }
+
     /// <summary>
     /// Reset all stats to defaults (on respawn). Server-only.
     /// </summary>
@@ -226,6 +271,8 @@ public class PlaneStats : NetworkBehaviour
         _shieldRegenCooldown = 0f;
         _shieldRegenTimer = ShieldRegenInterval;
         _damageBoostTimer = 0f;
+        _dodgeTimer = 0f;
+        NetDodging.Value = false;
 
         // Start invulnerability
         _invulnerabilityTimer = InvulnerabilityDuration;

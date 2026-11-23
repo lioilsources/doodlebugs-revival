@@ -149,6 +149,14 @@ public class CloudManager : MonoBehaviour
     {
         Debug.Log("[CloudManager] Server started - converting to networked clouds");
 
+        // A second hosting in the same app run (host lost, discovery restarted)
+        // found the flag still set and a list of destroyed clouds: no clouds, and
+        // every respawn queued forever behind them (plan 33 N6).
+        _networkedCloudsSpawned = false;
+        _clouds.Clear();
+        _cloudCooldowns.Clear();
+        _respawnQueue.Clear();
+
         // Destroy local preview clouds
         DestroyLocalClouds();
 
@@ -458,7 +466,38 @@ public class CloudManager : MonoBehaviour
     /// </summary>
     public bool AreCloudsReady()
     {
-        return _networkedCloudsSpawned && _clouds.Count > 0;
+        if (!_networkedCloudsSpawned) return false;
+        for (int i = 0; i < _clouds.Count; i++)
+        {
+            if (_clouds[i] != null) return true;
+        }
+        return false;
+    }
+
+    // Spawn margin inside the arena edges, world units.
+    private const float SpawnEdgeMargin = 2f;
+    private const float SpawnGroundMargin = 3f;
+
+    /// <summary>Keep a spawn point inside the flyable arena (plan 33 C2). On a
+    /// 19.5:9 host the top cloud lane (y 15) sits above the Space strip's lower
+    /// edge, so about a quarter of respawns started in Space with a dead engine;
+    /// a cloud near a side wall put a few behind it.</summary>
+    public static Vector3 ClampToArena(Vector3 p)
+    {
+        var space = ArenaBounds.Space;
+        var ground = ArenaBounds.Ground;
+        var left = ArenaBounds.Left;
+        var right = ArenaBounds.Right;
+
+        float maxY = space != null ? space.bounds.min.y - SpawnEdgeMargin : float.PositiveInfinity;
+        float minY = ground != null ? ground.bounds.max.y + SpawnGroundMargin : float.NegativeInfinity;
+        if (minY > maxY) minY = maxY;   // absurdly short arena: stay under Space
+        p.y = Mathf.Clamp(p.y, minY, maxY);
+
+        float minX = left != null ? left.bounds.max.x + SpawnEdgeMargin : float.NegativeInfinity;
+        float maxX = right != null ? right.bounds.min.x - SpawnEdgeMargin : float.PositiveInfinity;
+        if (minX <= maxX) p.x = Mathf.Clamp(p.x, minX, maxX);
+        return p;
     }
 
     /// <summary>
@@ -487,7 +526,7 @@ public class CloudManager : MonoBehaviour
         var cloudPos = _clouds[cloudIndex].transform.position;
         float offsetX = Random.Range(-5f, -2f);
         float offsetY = Random.Range(-1f, 1f);
-        var spawnPos = new Vector3(cloudPos.x + offsetX, cloudPos.y + offsetY, 0f);
+        var spawnPos = ClampToArena(new Vector3(cloudPos.x + offsetX, cloudPos.y + offsetY, 0f));
 
         Debug.Log($"[CloudManager] GetInitialSpawnPosition: cloud {cloudIndex}, pos: {spawnPos}");
         return spawnPos;
@@ -551,7 +590,7 @@ public class CloudManager : MonoBehaviour
         var cloudPos = _clouds[cloudIndex].transform.position;
         float offsetX = Random.Range(-5f, -2f);
         float offsetY = Random.Range(-1f, 1f);
-        var spawnPos = new Vector3(cloudPos.x + offsetX, cloudPos.y + offsetY, 0f);
+        var spawnPos = ClampToArena(new Vector3(cloudPos.x + offsetX, cloudPos.y + offsetY, 0f));
 
         Debug.Log($"[CloudManager] Spawning player at cloud {cloudIndex}, pos: {spawnPos}");
         player.ExecuteRespawnAtPosition(spawnPos);
@@ -561,7 +600,7 @@ public class CloudManager : MonoBehaviour
     {
         int playerIndex = player.LocalPlayerIndex >= 0 ? player.LocalPlayerIndex : (int)player.OwnerClientId;
         float[] positions = { -15f, -8f, 8f, 15f };
-        return new Vector3(positions[playerIndex % positions.Length], 10f, 0f);
+        return ClampToArena(new Vector3(positions[playerIndex % positions.Length], 10f, 0f));
     }
 
     private void Update()

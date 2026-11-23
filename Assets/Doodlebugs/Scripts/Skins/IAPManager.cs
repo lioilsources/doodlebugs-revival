@@ -1,3 +1,7 @@
+// Plan 33 W1: the store products do not exist yet, so the first public
+// release ships without Unity IAP (no BILLING permission, nothing to buy).
+// Define DOODLEBUGS_IAP and re-add com.unity.purchasing to bring it back.
+#if DOODLEBUGS_IAP
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -190,3 +194,4 @@ public class IAPManager : MonoBehaviour, IDetailedStoreListener
     private void SaveCachedEntitlements() =>
         PlayerPrefs.SetString(PrefsKey, string.Join(",", _ownedBundleIds));
 }
+#endif
