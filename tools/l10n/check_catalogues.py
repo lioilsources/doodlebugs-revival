@@ -5,8 +5,10 @@ UI (Assets/Doodlebugs/Resources/Localization/<code>.txt, see Loc.cs):
   - every catalogue has exactly the keys of en.txt, no duplicates
   - every value keeps the {N} placeholders of its English source
   - with fontTools installed: a catalogue whose text needs glyphs the
-    Press Start 2P pixel font lacks must carry "@font=system"
-    (--fix-font adds/removes the line)
+    Press Start 2P pixel font lacks must carry "@font=system", and one that
+    keeps the pixel font lists every UI theme font lacking one of its
+    glyphs in "@nofont=A,B" (Loc.Cover swaps those for the OS font);
+    --fix-font rewrites both lines
 
 Store (fastlane/metadata/{ios,android}/<locale>/*.txt): Apple and Google
 length limits, keywords without spaces after commas.
@@ -22,6 +24,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CAT = ROOT / "Assets/Doodlebugs/Resources/Localization"
 FONT = ROOT / "Assets/Doodlebugs/Resources/Fonts/PressStart2P.ttf"
 META = ROOT / "fastlane/metadata"
+FONTS = ROOT / "Assets/Doodlebugs/Resources/Fonts"
+THEMES = ROOT / "Assets/Doodlebugs/Scripts/UI/Kit/UiThemeCatalog.cs"
 PLACEHOLDER = re.compile(r"\{\d+\}")
 
 IOS_LIMITS = {"name.txt": 30, "subtitle.txt": 30, "keywords.txt": 100,
@@ -29,13 +33,15 @@ IOS_LIMITS = {"name.txt": 30, "subtitle.txt": 30, "keywords.txt": 100,
 ANDROID_LIMITS = {"title.txt": 30, "short_description.txt": 80, "full_description.txt": 4000}
 
 
-def parse(path):
+def parse(path, nofont=None):
     keys, font_system, dupes = {}, False, []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line or line.startswith("#"):
             continue
         if line.startswith("@"):
             font_system |= line.strip() == "@font=system"
+            if nofont is not None and line.startswith("@nofont="):
+                nofont.update(f for f in line.strip()[8:].split(",") if f)
             continue
         if "=" not in line:
             continue
@@ -54,12 +60,15 @@ def check_ui(fix_font):
     try:
         from fontTools.ttLib import TTFont
         cmap = set(TTFont(FONT).getBestCmap())
+        theme_fonts = sorted(set(re.findall(r'Font\w+ = "([\w-]+)"', THEMES.read_text(encoding="utf-8"))))
+        theme_cmaps = {f: set(TTFont(FONTS / f"{f}.ttf").getBestCmap()) for f in theme_fonts}
     except ImportError:
         print("fontTools not installed - skipping the glyph check")
 
     for path in sorted(CAT.glob("*.txt")):
         code = path.stem
-        keys, font_system, dupes = parse(path)
+        listed = set()
+        keys, font_system, dupes = parse(path, listed)
         for k in dupes:
             errors.append(f"{code}: duplicate key {k}")
         for k in en.keys() - keys.keys():
@@ -73,20 +82,28 @@ def check_ui(fix_font):
                 errors.append(f"{code}: empty {k}")
         if cmap is None:
             continue
-        # perm.* go to iOS system dialogs, not the pixel font
-        text = "".join(v for k, v in keys.items() if not k.startswith("perm."))
-        missing = sorted({c for c in text if ord(c) not in cmap and c not in "\n"})
+        # perm.* go to iOS system dialogs, not the UI fonts. Some text is
+        # shown upper-cased (Loc.Upper), so both cases have to be drawable.
+        text = "".join(v + v.upper() for k, v in keys.items() if not k.startswith("perm."))
+        used = {ord(c) for c in text if c not in "\n"}
+        missing = sorted(chr(c) for c in used - cmap)
         needs_system = bool(missing)
-        if needs_system != font_system:
+        no_font = set() if needs_system else {f for f, cm in theme_cmaps.items() if used - cm}
+        if needs_system != font_system or no_font != listed:
             if fix_font:
-                lines = [l for l in path.read_text(encoding="utf-8").splitlines() if l.strip() != "@font=system"]
+                lines = [l for l in path.read_text(encoding="utf-8").splitlines()
+                         if l.strip() != "@font=system" and not l.startswith("@nofont=")]
+                if no_font:
+                    lines.insert(1, "@nofont=" + ",".join(sorted(no_font)))
                 if needs_system:
                     lines.insert(1, "@font=system")
                 path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-                print(f"{code}: @font=system {'added' if needs_system else 'removed'}")
-            else:
+                print(f"{code}: font lines rewritten (system={needs_system}, nofont={len(no_font)})")
+            elif needs_system != font_system:
                 errors.append(f"{code}: pixel font lacks {''.join(missing[:20])!r} - needs @font=system"
                               if needs_system else f"{code}: @font=system but the pixel font covers it")
+            else:
+                errors.append(f"{code}: @nofont is stale (should be {','.join(sorted(no_font)) or 'empty'})")
     return errors
 
 
@@ -115,7 +132,7 @@ def check_store():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--fix-font", action="store_true", help="add/remove @font=system lines")
+    ap.add_argument("--fix-font", action="store_true", help="rewrite the @font=system / @nofont lines")
     args = ap.parse_args()
     errors = check_ui(args.fix_font) + check_store()
     for e in errors:

@@ -105,38 +105,20 @@ public static class Loc
         return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
     }
 
-    private static readonly Dictionary<Font, Font> _covered = new Dictionary<Font, Font>();
-    private static HashSet<char> _activeChars;
+    private static HashSet<string> _noFonts = new HashSet<string>();
 
-    /// <summary><paramref name="font"/> when it can draw every character of the
-    /// active catalogue, else the built-in OS-backed font. The UI themes use
-    /// Latin display faces; a word drawn half in the theme face and half in
-    /// an OS fallback reads as broken, so the whole UI switches instead.</summary>
+    /// <summary><paramref name="font"/>, or the built-in OS-backed font when
+    /// the active catalogue lists it under <c>@nofont=</c> (it lacks a glyph
+    /// of that language - the UI themes use Latin-only display faces). The
+    /// list is computed offline by tools/l10n/check_catalogues.py --fix-font,
+    /// so no word is drawn half in the theme face and half in a fallback.</summary>
     public static Font Cover(Font font)
     {
         if (font == null) return null;
         EnsureLoaded();
-        if (_language == SourceLanguage) return font;
-        if (!_pixelFont) return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (_covered.TryGetValue(font, out var picked) && picked != null) return picked;
-
-        if (_activeChars == null)
-        {
-            _activeChars = new HashSet<char>();
-            foreach (var v in _active.Values)
-                foreach (char c in v + Upper(v))
-                    if (c > 127 && !char.IsWhiteSpace(c)) _activeChars.Add(c);
-        }
-        picked = font;
-        foreach (char c in _activeChars)
-        {
-            if (font.HasCharacter(c)) continue;
-            Debug.Log($"[Loc] {font.name} lacks U+{(int)c:X4} for '{_language}' - using the OS font");
-            picked = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            break;
-        }
-        _covered[font] = picked;
-        return picked;
+        if (!_pixelFont || _noFonts.Contains(font.name))
+            return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        return font;
     }
 
     /// <summary>Switch language at runtime; already-built UI keeps its text
@@ -146,8 +128,6 @@ public static class Loc
         try { PlayerPrefs.SetString(PrefsKey, code ?? ""); } catch { /* prefs unavailable */ }
         _active = null;
         _language = null;
-        _activeChars = null;
-        _covered.Clear();
     }
 
     private static void EnsureLoaded()
@@ -168,13 +148,16 @@ public static class Loc
         }
 
         bool pixel = true;
-        _active = code == SourceLanguage ? _source : Load(code, out pixel);
+        var noFonts = new HashSet<string>();
+        _active = code == SourceLanguage ? _source : Load(code, out pixel, out noFonts);
         if (_active == null)
         {
             code = SourceLanguage;
             _active = _source;
             pixel = true;
+            noFonts = new HashSet<string>();
         }
+        _noFonts = noFonts;
 
         _language = code;
         _pixelFont = pixel;
@@ -182,9 +165,12 @@ public static class Loc
         catch (CultureNotFoundException) { _culture = CultureInfo.InvariantCulture; }
     }
 
-    private static Dictionary<string, string> Load(string code, out bool pixelFont)
+    private static Dictionary<string, string> Load(string code, out bool pixelFont) => Load(code, out pixelFont, out _);
+
+    private static Dictionary<string, string> Load(string code, out bool pixelFont, out HashSet<string> noFonts)
     {
         pixelFont = true;
+        noFonts = new HashSet<string>(StringComparer.Ordinal);
         var asset = Resources.Load<TextAsset>("Localization/" + code);
         if (asset == null) return null;
 
@@ -195,7 +181,11 @@ public static class Loc
             if (line.Length == 0 || line[0] == '#') continue;
             if (line[0] == '@')
             {
-                if (line.Trim() == "@font=system") pixelFont = false;
+                var directive = line.Trim();
+                if (directive == "@font=system") pixelFont = false;
+                else if (directive.StartsWith("@nofont=", StringComparison.Ordinal))
+                    foreach (var f in directive.Substring(8).Split(','))
+                        if (f.Trim().Length > 0) noFonts.Add(f.Trim());
                 continue;
             }
             int eq = line.IndexOf('=');
