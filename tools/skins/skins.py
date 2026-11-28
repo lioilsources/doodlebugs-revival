@@ -145,7 +145,7 @@ SKINS = {
     # file stems and stay; display names live in PlaneSkinCatalog / Loc. -----
     "gotham_night": dict(id=39, prompt=(
         "dark crinkled metal texture, deep charcoal black with a subtle "
-        "hammered pattern, moody night finish, no emblem")),
+        "uniform hammered pattern, moody night finish")),
     "dream_pink": dict(id=40, prompt=(
         "glossy bubblegum pink plastic texture, bright toy-like sheen, "
         "playful finish")),
@@ -159,14 +159,14 @@ SKINS = {
         "soft pastel blue and cream texture, playful cartoon cloud pattern, "
         "gentle rounded shapes")),
     "sponge_yellow": dict(id=44, prompt=(
-        "bright cheerful lemon yellow texture with small round fizz "
-        "bubbles, glossy cartoon finish")),
+        "bright cheerful lemon yellow glossy paint, smooth surface with "
+        "fine diagonal light streaks, cartoon finish")),
     "villain_purple": dict(id=45, prompt=(
         "deep sinister purple and green texture, sharp jagged edge motif, "
         "cartoon supervillain finish")),
     "brick_hero": dict(id=46, prompt=(
-        "glossy painted wooden toy block texture, primary red and yellow "
-        "squares with bevelled edges, no studs")),
+        "glossy painted wooden toy block texture, smooth flat-faced red "
+        "and yellow squares with bevelled edges")),
     "arcade_pixel": dict(id=47, prompt=(
         "chunky 8-bit pixel art texture, bold magenta and cyan blocky "
         "pattern, retro arcade cabinet finish")),

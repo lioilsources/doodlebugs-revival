@@ -184,7 +184,7 @@ def composite_skin(pattern_img, masks):
     return out
 
 
-def render_pattern_on_spark(key, dry_run=False):
+def render_pattern_on_spark(key, dry_run=False, seed_bump=0):
     prompt = S.prompt_for(key)
     if prompt is None:
         return None
@@ -192,7 +192,10 @@ def render_pattern_on_spark(key, dry_run=False):
         print(f"## {key}\n{prompt}\n")
         return None
 
-    seed = S.DEFAULT_SEED + S.SKINS[key]["id"]
+    # seed_bump: another seed for the same prompt when a render shows
+    # something it must not (logo, borrowed motif) - pass the same value again
+    # to reproduce that render.
+    seed = S.DEFAULT_SEED + S.SKINS[key]["id"] + 1000 * seed_bump
     graph = backend.flux_graph(prompt, (768, 768), seed, steps=20, guidance=3.5,
                                negative=backend.NEG_BG)
     graph["13"] = {"class_type": "SaveImage",
@@ -219,7 +222,7 @@ def cmd_render(a):
     if unknown:
         sys.exit(f"unknown skin key(s): {unknown}")
 
-    if not a.dry_run:
+    if not a.dry_run and not a.no_free:
         backend.free_models()
 
     done = 0
@@ -235,7 +238,7 @@ def cmd_render(a):
         if out_path.exists() and not a.force:
             continue
 
-        pattern = render_pattern_on_spark(key, dry_run=a.dry_run)
+        pattern = render_pattern_on_spark(key, dry_run=a.dry_run, seed_bump=a.seed_bump)
         if pattern is None:
             continue
 
@@ -343,6 +346,8 @@ def main():
     p.add_argument("--keys", help="comma list (default: all 50)")
     p.add_argument("--force", action="store_true", help="re-render even if the output already exists")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--no-free", action="store_true", help="skip ComfyUI /free (another batch is using the box)")
+    p.add_argument("--seed-bump", type=int, default=0, help="seed + 1000*N: a different take of the same prompt")
     p.set_defaults(fn=cmd_render)
 
     p = sub.add_parser("swatches")

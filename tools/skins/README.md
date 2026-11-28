@@ -67,9 +67,11 @@ Hero Pack skins (Night Raid, Bubblegum Pink, Hero Comic...) carry own,
 neutral names and must not imitate a franchise: no borrowed name,
 character, logo or signature mark (2026-11-28: Gotham Night, Dream Pink,
 Galaxy Saber, Koala Pastel, Sponge Yellow and Brick Hero were renamed; the
-keys stayed because they are file stems). The current `gotham_night` swatch
-still shows a bat emblem and `brick_hero` toy-brick studs - re-render both
-from the neutral prompts below.
+keys stayed because they are file stems). `gotham_night`, `brick_hero` and
+`sponge_yellow` were re-rendered from the neutral prompts (no bat emblem, no
+brick studs, no sponge pores). If a render shows a borrowed motif again,
+`render --keys <key> --force --seed-bump N` takes another seed; pass
+`--no-free` while someone else's batch is on SPARK.
 
 ## What still needs a human
 
