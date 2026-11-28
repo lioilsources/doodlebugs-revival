@@ -94,20 +94,20 @@ public static class PlaneSkinCatalog
         new(37, "dragon_scale",   "Dragon Scale",        "Cosmic",      true, "cosmic_pack"),
         new(38, "phoenix_flame",  "Phoenix Flame",       "Cosmic",      true, "cosmic_pack"),
 
-        // Franchise-flavoured: mood/palette homage only - no borrowed names,
-        // characters, logos or signature marks. Same rule tools/ads/PROMPTS.md
-        // and tools/backgrounds/themes.py already follow.
-        new(39, "gotham_night",   "Gotham Night",        "Homage",      true, "homage_pack"),
-        new(40, "dream_pink",     "Dream Pink",          "Homage",      true, "homage_pack"),
-        new(41, "hero_comic",     "Hero Comic",          "Homage",      true, "homage_pack"),
-        new(42, "galaxy_saber",   "Galaxy Saber",        "Homage",      true, "homage_pack"),
-        new(43, "koala_pastel",   "Koala Pastel",        "Homage",      true, "homage_pack"),
-        new(44, "sponge_yellow",  "Sponge Yellow",       "Homage",      true, "homage_pack"),
-        new(45, "villain_purple", "Villain Purple",      "Homage",      true, "homage_pack"),
-        new(46, "brick_hero",     "Brick Hero",          "Homage",      true, "homage_pack"),
-        new(47, "arcade_pixel",   "Arcade Pixel",        "Homage",      true, "homage_pack"),
-        new(48, "retro_wave",     "Retro Wave",          "Homage",      true, "homage_pack"),
-        new(49, "tiger_stripe",   "Tiger Stripe",        "Homage",      true, "homage_pack"),
+        // Hero Pack (store id skins_homage_pack; keys stay, they are file
+        // stems). Own, neutral names - no borrowed names, characters, logos or
+        // signature marks (2026-11-28: six franchise-flavoured names renamed).
+        new(39, "gotham_night",    "Night Raid",         "Hero",      true, "homage_pack"),
+        new(40, "dream_pink",      "Bubblegum Pink",     "Hero",      true, "homage_pack"),
+        new(41, "hero_comic",      "Hero Comic",         "Hero",      true, "homage_pack"),
+        new(42, "galaxy_saber",    "Starship Grey",      "Hero",      true, "homage_pack"),
+        new(43, "koala_pastel",    "Pastel Clouds",      "Hero",      true, "homage_pack"),
+        new(44, "sponge_yellow",   "Lemon Fizz",         "Hero",      true, "homage_pack"),
+        new(45, "villain_purple",  "Villain Purple",     "Hero",      true, "homage_pack"),
+        new(46, "brick_hero",      "Toy Block",          "Hero",      true, "homage_pack"),
+        new(47, "arcade_pixel",    "Arcade Pixel",       "Hero",      true, "homage_pack"),
+        new(48, "retro_wave",      "Retro Wave",         "Hero",      true, "homage_pack"),
+        new(49, "tiger_stripe",    "Tiger Stripe",       "Hero",      true, "homage_pack"),
     };
 
     private static Dictionary<int, PlaneSkinDef> _byId;

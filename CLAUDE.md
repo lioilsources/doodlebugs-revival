@@ -455,7 +455,7 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
   shipped — canard never passed the gate; all free) × `PlaneSkinCatalog`
   (50 liveries: 12 free + 38 premium in 4 packs sold through `IAPManager`,
   Unity IAP 5.5 `PurchasingController`, non-consumable ids
-  `skins_<camo|metallic|cosmic|homage>_pack` at $0.99 and `skins_all_packs`
+  `skins_<camo|metallic|cosmic|homage>_pack` (homage = Hero Pack) at $0.99 and `skins_all_packs`
   at $1.99 - the only price tiers. `DOODLEBUGS_IAP` is a Player Settings
   define for iOS and Android only; desktop hides premium paints. BUY cards,
   RESTORE PURCHASES and purchase feedback live in `UI/Hangar/PaintShop.cs`). Both are server-write NetworkVariables on `PlaneAppearance`

@@ -51,7 +51,7 @@ bundle of more than two packs $1.99. Nothing else.
 | `skins_camo_pack` | Non-consumable | $0.99 | Camo Pack | 9 camouflage paints for every plane. |
 | `skins_metallic_pack` | Non-consumable | $0.99 | Metallic Pack | 9 metallic paints for every plane. |
 | `skins_cosmic_pack` | Non-consumable | $0.99 | Cosmic Pack | 9 cosmic paints for every plane. |
-| `skins_homage_pack` | Non-consumable | $0.99 | Homage Pack | 11 tribute paints for every plane. |
+| `skins_homage_pack` | Non-consumable | $0.99 | Hero Pack | 11 bold hero paints for every plane. |
 | `skins_all_packs` | Non-consumable | $1.99 | All 4 Packs | All 38 premium paints in one pack. |
 
 Cosmetic only: no paint changes a fight, every plane, weapon and gadget is

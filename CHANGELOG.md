@@ -1,7 +1,7 @@
 # Changelog
 
 ## [2.14.0] - 2026-11-28
-- Paint packs on sale (iOS, Android): Camo, Metallic, Cosmic and Homage
+- Paint packs on sale (iOS, Android): Camo, Metallic, Cosmic and Hero
   ($0.99 each) and All 4 Packs ($1.99), non-consumable, cosmetic only.
   Unity IAP 5.5.1 (`PurchasingController`), `DOODLEBUGS_IAP` defined for
   iOS and Android; desktop builds stay without the store.
@@ -10,6 +10,9 @@
   pack and equips it. RESTORE PURCHASES next to the PAINT title. Purchase
   feedback: banner, sound, haptic, paints unlock at once.
 - "Premium · soon" filter is just "Premium".
+- The Homage pack is the Hero Pack (store id `skins_homage_pack` unchanged);
+  six paints with franchise-flavoured names got own names: Night Raid,
+  Bubblegum Pink, Starship Grey, Pastel Clouds, Lemon Fizz, Toy Block.
 - UI in 45 languages (PR #57 merged into this release); every new shop
   string translated.
 - Store texts in every locale: solo against bots (PLAY / PARTY), the

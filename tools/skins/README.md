@@ -58,14 +58,18 @@ setup) — no duplicated SPARK plumbing.
 `skins.py` — 50 entries, ids/keys match
 `Assets/Doodlebugs/Scripts/Skins/PlaneSkinCatalog.cs` exactly (keep both in
 sync by hand). 12 free starter skins, 38 premium in 4 bundles (camo,
-metallic, cosmic, homage) — see `IAPManager.SkinBundles` for the bundle
+metallic, cosmic, hero; the hero bundle keeps the store id
+`skins_homage_pack`) — see `IAPManager.SkinBundles` for the bundle
 split and `PlaneSkinCatalog`'s header comment for why bundles instead of 38
 individual store products.
 
-Franchise-flavoured "homage" skins (Gotham Night, Dream Pink, Hero Comic...)
-follow the same rule as `tools/ads/PROMPTS.md` and
-`tools/backgrounds/themes.py`: mood/palette only, never a borrowed name,
-character, logo or signature mark.
+Hero Pack skins (Night Raid, Bubblegum Pink, Hero Comic...) carry own,
+neutral names and must not imitate a franchise: no borrowed name,
+character, logo or signature mark (2026-11-28: Gotham Night, Dream Pink,
+Galaxy Saber, Koala Pastel, Sponge Yellow and Brick Hero were renamed; the
+keys stayed because they are file stems). The current `gotham_night` swatch
+still shows a bat emblem and `brick_hero` toy-brick studs - re-render both
+from the neutral prompts below.
 
 ## What still needs a human
 

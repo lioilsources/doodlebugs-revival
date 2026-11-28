@@ -140,15 +140,15 @@ SKINS = {
         "phoenix flame texture, licking flames in red orange and gold, "
         "glowing ember highlights")),
 
-    # --- Homage pack (11, premium) — mood/palette only, no borrowed names,
-    # characters, logos or signature marks (same rule as tools/ads/PROMPTS.md
-    # and tools/backgrounds/themes.py's franchise arenas). --------------------
+    # --- Hero pack (11, premium, store id skins_homage_pack) — own neutral
+    # names, no borrowed names, characters, logos or signature marks. Keys are
+    # file stems and stay; display names live in PlaneSkinCatalog / Loc. -----
     "gotham_night": dict(id=39, prompt=(
-        "dark gothic metal texture, deep charcoal black with subtle bat-wing "
-        "motif etching, moody noir finish")),
+        "dark crinkled metal texture, deep charcoal black with a subtle "
+        "hammered pattern, moody night finish, no emblem")),
     "dream_pink": dict(id=40, prompt=(
-        "glossy candy pink plastic texture, bright toy-like sheen, "
-        "playful dreamhouse finish")),
+        "glossy bubblegum pink plastic texture, bright toy-like sheen, "
+        "playful finish")),
     "hero_comic": dict(id=41, prompt=(
         "comic book halftone dot texture, bold red and blue with black ink "
         "outlines, pow-action energy pattern")),
@@ -159,14 +159,14 @@ SKINS = {
         "soft pastel blue and cream texture, playful cartoon cloud pattern, "
         "gentle rounded shapes")),
     "sponge_yellow": dict(id=44, prompt=(
-        "bright cheerful yellow textured pattern, small square pores like a "
-        "sea sponge, cartoon underwater finish")),
+        "bright cheerful lemon yellow texture with small round fizz "
+        "bubbles, glossy cartoon finish")),
     "villain_purple": dict(id=45, prompt=(
         "deep sinister purple and green texture, sharp jagged edge motif, "
         "cartoon supervillain finish")),
     "brick_hero": dict(id=46, prompt=(
-        "glossy plastic brick-stud texture, primary red and yellow blocks, "
-        "toy construction finish")),
+        "glossy painted wooden toy block texture, primary red and yellow "
+        "squares with bevelled edges, no studs")),
     "arcade_pixel": dict(id=47, prompt=(
         "chunky 8-bit pixel art texture, bold magenta and cyan blocky "
         "pattern, retro arcade cabinet finish")),
