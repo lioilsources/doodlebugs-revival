@@ -144,7 +144,7 @@ PlayerSettings:
   loadStoreDebugModeEnabled: 0
   visionOSBundleVersion: 1.0
   tvOSBundleVersion: 1.0
-  bundleVersion: 2.13.0
+  bundleVersion: 2.14.0
   preloadedAssets:
   - {fileID: 11400000, guid: a743f78c72329483eae2e6abed1d8af1, type: 2}
   metroInputSource: 0
@@ -875,7 +875,9 @@ PlayerSettings:
   webGLCloseOnQuit: 0
   webWasm2023: 0
   webEnableSubmoduleStrippingCompatibility: 0
-  scriptingDefineSymbols: {}
+  scriptingDefineSymbols:
+    Android: DOODLEBUGS_IAP
+    iPhone: DOODLEBUGS_IAP;IAP_DISABLE_IDFA
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend: {}

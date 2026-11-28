@@ -18,6 +18,9 @@ public class GadgetProfile
 {
     public GadgetType Type;
     public string DisplayName;
+    public string LocalizedName => Loc.T($"gadget.{Type}.name", DisplayName);
+    public string LocalizedDescription => Loc.T($"gadget.{Type}.desc", Description);
+    public string LocalizedVerb => Loc.T("weapon.verb." + Verb.Replace(" & ", "_").Replace(' ', '_'), Verb);
     public string Description;
     public string Verb;
     public float Cooldown;

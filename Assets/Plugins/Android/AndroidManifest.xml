@@ -23,6 +23,11 @@
     <!-- API 33+ replacement for location-gated Wi-Fi scanning -->
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" />
 
+    <!-- Google Play Billing (paint packs, Unity IAP). The billing library adds
+         it through the manifest merge too; declared here so it never depends
+         on that. -->
+    <uses-permission android:name="com.android.vending.BILLING" />
+
     <!-- The permissions above imply required hardware; without these Google Play
          would hide the game from devices lacking any of it (plan 33 W4). The
          game plays solo and over Wi-Fi without Bluetooth or GPS. -->

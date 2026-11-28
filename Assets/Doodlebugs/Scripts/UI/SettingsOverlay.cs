@@ -23,7 +23,7 @@ public class SettingsOverlay : MonoBehaviour
     private float _lastTitleTap;
 
     private static readonly ControlScheme[] Schemes = { ControlScheme.Pointer, ControlScheme.Joystick, ControlScheme.Gyro };
-    private static readonly string[] SchemeNames = { "POINT", "RATE", "GYRO" };
+    private static string[] SchemeNames => new[] { Loc.T("settings.point"), Loc.T("settings.rate"), Loc.T("settings.gyro") };
 
     public static SettingsOverlay Create(Canvas _ = null)
     {
@@ -94,7 +94,7 @@ public class SettingsOverlay : MonoBehaviour
         Ui.Place(card.Root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(560f, 320f));
         var face = card.Face.transform;
 
-        var title = Ui.Text(face, "Title", "SETTINGS", UiTheme.Display, UiTheme.SizeTitle, UiTheme.Ink);
+        var title = Ui.Text(face, "Title", Loc.T("hangar.settings"), UiTheme.Display, UiTheme.SizeTitle, UiTheme.Ink);
         Ui.TopBand(title.rectTransform, 12f, 36f, 20f, 20f);
         title.raycastTarget = true;
         var tap = title.gameObject.AddComponent<Button>();
@@ -104,7 +104,7 @@ public class SettingsOverlay : MonoBehaviour
         // THEME (Prompts/31 §3.5): the picker sheet
         var theme = Ui.Card(face, "Theme", UiTheme.Frame, UiTheme.RadiusButton, 4f);
         Ui.Place(theme.Root, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-18f, -10f), new Vector2(230f, 48f));
-        var themeLabel = Ui.Text(theme.Face.transform, "Label", "THEME · " + UiTheme.Active.Name, UiTheme.Label, 16,
+        var themeLabel = Ui.Text(theme.Face.transform, "Label", Loc.F("settings.theme", UiTheme.Active.LocalizedName), UiTheme.Label, 16,
             UiTheme.FrameText, TextAnchor.MiddleCenter);
         themeLabel.resizeTextForBestFit = true;
         themeLabel.resizeTextMinSize = UiTheme.MinText;
@@ -114,7 +114,7 @@ public class SettingsOverlay : MonoBehaviour
         bool mobile = InputManager.Instance != null && InputManager.Instance.IsMobile();
         if (mobile)
         {
-            var label = Ui.Text(face, "ControlsLabel", "CONTROLS", UiTheme.Label, 15, UiTheme.TextDim);
+            var label = Ui.Text(face, "ControlsLabel", Loc.T("settings.controls"), UiTheme.Label, 15, UiTheme.TextDim);
             Ui.TopBand(label.rectTransform, 58f, 20f, 20f, 20f);
 
             var row = Ui.Node(face, "Options");
@@ -138,7 +138,7 @@ public class SettingsOverlay : MonoBehaviour
             _hint = Ui.Text(face, "Hint", "", UiTheme.Body, 14, UiTheme.TextDim, TextAnchor.UpperLeft);
             Ui.TopBand(_hint.rectTransform, 150f, 60f, 20f, 20f);
 
-            var recenter = Ui.BigButton(face, "Recenter", "RECENTER", UiTheme.Gadget, Recenter);
+            var recenter = Ui.BigButton(face, "Recenter", Loc.T("settings.recenter"), UiTheme.Gadget, Recenter);
             recenter.Label.fontSize = 20;
             Ui.Place(recenter.Panel.Root, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(20f, 18f), new Vector2(170f, 48f));
             _recenter = recenter.Panel.Root.gameObject;
@@ -148,12 +148,12 @@ public class SettingsOverlay : MonoBehaviour
         else
         {
             var hint = Ui.Text(face, "DesktopHint",
-                "KEYBOARD: A / D turn, W / S throttle, SPACE fire, E gadget.\nGAMEPAD: left stick turn, right stick throttle, A / RT fire, LB / LT gadget.",
+                Loc.T("settings.desktop_hint"),
                 UiTheme.Body, 15, UiTheme.TextDim, TextAnchor.UpperLeft);
             Ui.TopBand(hint.rectTransform, 64f, 120f, 20f, 20f);
         }
 
-        var close = Ui.BigButton(face, "Close", "CLOSE", UiTheme.Confirm, Close);
+        var close = Ui.BigButton(face, "Close", Loc.T("common.close"), UiTheme.Confirm, Close);
         close.Label.fontSize = 22;
         Ui.Place(close.Panel.Root, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-18f, 18f), new Vector2(150f, 48f));
         UiAudit.Check(_panel.transform);
@@ -185,9 +185,9 @@ public class SettingsOverlay : MonoBehaviour
         }
         _hint.text = scheme switch
         {
-            ControlScheme.Pointer => "POINT: push the stick where you want to fly. The plane turns there the short way and handles the throttle.",
-            ControlScheme.Joystick => "RATE: stick up / down turns, right / left is throttle. Most precise for aiming.",
-            _ => "GYRO: tilt to fly. RECENTER takes your current hold as level.",
+            ControlScheme.Pointer => Loc.T("settings.hint_point"),
+            ControlScheme.Joystick => Loc.T("settings.hint_rate"),
+            _ => Loc.T("settings.hint_gyro"),
         };
         _recenter.SetActive(scheme == ControlScheme.Gyro);
         RefreshLeanRow();
@@ -212,7 +212,7 @@ public class SettingsOverlay : MonoBehaviour
     {
         _leanToggle = Ui.Card(face, "Lean", UiTheme.Paper, UiTheme.RadiusButton, 4f);
         Ui.Place(_leanToggle.Root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(20f, -204f), new Vector2(150f, 48f));
-        _leanLabel = Ui.Text(_leanToggle.Face.transform, "Label", "LEAN", UiTheme.Display, 22,
+        _leanLabel = Ui.Text(_leanToggle.Face.transform, "Label", Loc.T("settings.lean"), UiTheme.Display, 22,
             UiTheme.Ink, TextAnchor.MiddleCenter);
         Ui.Press(_leanToggle.Face, ToggleLean);
 
@@ -233,12 +233,12 @@ public class SettingsOverlay : MonoBehaviour
 
         _leanToggle.SetFace(!usable ? UiTheme.PaperDim : on ? UiTheme.Pick : UiTheme.Paper);
         _leanToggle.SetShadow(on ? 6f : 3f);
-        _leanLabel.text = on ? "LEAN ON" : "LEAN OFF";
+        _leanLabel.text = on ? Loc.T("settings.lean_on") : Loc.T("settings.lean_off");
         _leanLabel.color = !usable ? UiTheme.TextDim : on ? UiTheme.OnPick : UiTheme.Ink;
         int pct = Mathf.RoundToInt(FlightTuning.Active.LeanBonus * 100f);
-        _leanHint.text = !sensor ? "LEAN needs a motion sensor - this device has none."
-            : gyro ? "LEAN is off in GYRO: both read the same hand motion."
-            : $"Roll the phone the way the plane turns: up to +{pct} % turn rate.";
+        _leanHint.text = !sensor ? Loc.T("settings.lean_no_sensor")
+            : gyro ? Loc.T("settings.lean_gyro")
+            : Loc.F("settings.lean_hint", pct);
     }
 
     private void ToggleLean()

@@ -111,7 +111,7 @@ platform :ios do
     deliver(
       api_key: asc_api_key,
       app_version: version,
-      metadata_path: File.join(ROOT, "fastlane/metadata"),
+      metadata_path: File.join(ROOT, "fastlane/metadata/ios"),   # android/ is for Play
       screenshots_path: File.join(ROOT, "fastlane/screenshots"),
       overwrite_screenshots: true,
       skip_binary_upload: true,

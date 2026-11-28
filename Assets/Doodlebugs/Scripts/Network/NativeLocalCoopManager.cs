@@ -90,7 +90,7 @@ namespace Doodlebugs.Network
             if (_backend == null || !_backend.IsAvailable)
             {
                 Debug.LogWarning("[NativeLocalCoop] Native backend unavailable on this platform");
-                OnStatus?.Invoke("Local co-op not supported here");
+                OnStatus?.Invoke(Loc.T("status.coop_unsupported"));
                 OnUnavailable?.Invoke("backend_unavailable");
                 return;
             }
@@ -99,7 +99,7 @@ namespace Doodlebugs.Network
             // discovery can work at all; the browse window must not start ticking
             // while the user is still answering the system dialogs.
             int token = ++_beginToken;
-            OnStatus?.Invoke($"{UI.ConnectionUI.GameVersion}  •  Searching for nearby players...");
+            OnStatus?.Invoke($"{UI.ConnectionUI.GameVersion}  •  " + Loc.T("status.searching_nearby"));
             _backend.EnsurePermissions(granted =>
             {
                 if (token != _beginToken) return; // Stop()/Begin() cycled meanwhile
@@ -261,7 +261,7 @@ namespace Doodlebugs.Network
             _browsing = false;
 
             Transport.Configure(_backend, isServer: true, hostPeerId: null);
-            OnStatus?.Invoke("Created lobby. Waiting for players...");
+            OnStatus?.Invoke(Loc.T("status.lobby_created"));
             Debug.Log("[NativeLocalCoop] No lobby found -> creating one (host)");
 
             // ConnectionManager performs StartHost() synchronously here.
@@ -288,7 +288,7 @@ namespace Doodlebugs.Network
             _backend.OnPeerDisconnected += HandleClientSessionFailed;
 
             Transport.Configure(_backend, isServer: false, hostPeerId: hostPeerId);
-            OnStatus?.Invoke("Joining lobby...");
+            OnStatus?.Invoke(Loc.T("status.joining_lobby"));
             Debug.Log($"[NativeLocalCoop] Joining existing lobby host={hostPeerId}");
 
             // ConnectionManager performs StartClient() synchronously here.
@@ -342,7 +342,7 @@ namespace Doodlebugs.Network
             Debug.LogWarning($"[NativeLocalCoop] Could not join lobby host={_clientHostPeerId} - restarting discovery");
             _ignoredPeerId = _clientHostPeerId;
             _ignoredPeerUntil = Time.realtimeSinceStartup + FAILED_PEER_COOLDOWN_SECONDS;
-            OnStatus?.Invoke("Join failed - searching again...");
+            OnStatus?.Invoke(Loc.T("status.join_failed"));
             OnResetNetworking?.Invoke(); // NGO client shuts down asynchronously
             Stop();
             Invoke(nameof(RestartDiscoveryFlow), 0.5f);

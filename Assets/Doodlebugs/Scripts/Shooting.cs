@@ -80,11 +80,11 @@ public class Shooting : NetworkBehaviour
         if (IsGadgetSlot(slot))
         {
             tint = Color.white;
-            label = Gadget.DisplayName;
+            label = Gadget.LocalizedName;
             return Gadget.LoadIcon();
         }
         var w = GetWeapon(slot);
-        label = w.DisplayName;
+        label = w.LocalizedName;
         return w.LoadIcon(out tint);
     }
 
@@ -462,11 +462,11 @@ public class Shooting : NetworkBehaviour
         if (next.HasValue)
         {
             NetWeaponId.Value = (int)next.Value;
-            return WeaponProfile.Get(next.Value).DisplayName;
+            return "weapon:" + next.Value;
         }
         playerController?.PlaneStats?.ServerAddShield(1);
         ServerRechargeGadget();
-        return "+SHIELD +GADGET";
+        return "pickup.shield_gadget";
     }
 
     /// <summary>Supply-drop special: replaces slot 0 for its ammo. Server-only.</summary>

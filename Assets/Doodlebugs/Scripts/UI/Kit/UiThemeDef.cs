@@ -22,6 +22,7 @@ public class UiThemeDef
     public int Id;
     public string Key;
     public string Name;
+    public string LocalizedName => Loc.T("theme." + Key, Name);
 
     // --- colours. A "B" colour with alpha 0 = no gradient. ------------------
     public Color Line;          // outlines and hard shadows

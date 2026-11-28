@@ -11,7 +11,8 @@ Instructions for Claude Code when working in this repository.
 The product plan lives in `ROADMAP.md` (Czech). Read it before proposing or
 planning any feature; it defines phases, KPIs and open decisions D1–D9.
 
-**Status:** v2.13.0 tagged 2026-11-22; CI ships every `v*.*.*` tag to
+**Status:** v2.13.0 tagged 2026-11-22, 2.14.0 (paint packs IAP + 45
+languages) on `feat/iap`; CI ships every `v*.*.*` tag to
 TestFlight / Firebase App Distribution. Store submission is plan 33. Boot
 shows Home (PLAY / PARTY, `HangarScreen`'s Searching view): PLAY is a solo
 session against combat bots on loopback, PARTY is the LAN / Multipeer
@@ -19,9 +20,15 @@ pairing flow (`Prompts/36-CLAUDE-PLAN-solo-first.md`). No analytics, no
 crash reporting, no Game Center (`Telemetry.cs` only logs). Local state
 lives in `PlayerProfile` (`Scripts/Meta/PlayerProfile.cs`, `profile.json`
 in persistentDataPath; `ProfileRecorder` adds the local rows at every round
-end). Strings of the solo-first code go through `Loc`
-(`Scripts/Localization/Loc.cs`) with **only `en.txt`** today - the rest of
-the UI is still hardcoded English; PR #57 brings the other 44 catalogues.
+end). UI strings go through `Loc` (`Scripts/Localization/Loc.cs`, 45
+catalogues in `Resources/Localization`; `tools/l10n/check_catalogues.py`
+must pass): a new string is a key in `en.txt` plus all 44 other
+catalogues - no hardcoded UI text. Theme fonts are Latin-only subsets: a
+catalogue lists the ones lacking its glyphs in `@nofont=`, and `Loc.Cover`
+(called from `UiTheme` font loading) swaps them for the OS font;
+regenerate with `check_catalogues.py --fix-font` (needs fontTools). Text a
+server sends for clients to show (pickup lines) travels as a token and is
+resolved per client (`PowerUp.PickupText`).
 
 **North star:** open the app anywhere, alone, offline → shooting within
 15 s → a reason to play one more round and to come back tomorrow. LAN party
@@ -446,9 +453,12 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 
 - A plane's look = (shape, skin): `PlaneModelCatalog` (16 concepts, 15
   shipped — canard never passed the gate; all free) × `PlaneSkinCatalog`
-  (50 liveries: 12 free + 4 IAP bundles via `IAPManager`, store products not
-  created yet so premium skins are effectively unbuyable — the paywall is
-  deliberately inert until then). Both are server-write NetworkVariables on `PlaneAppearance`
+  (50 liveries: 12 free + 38 premium in 4 packs sold through `IAPManager`,
+  Unity IAP 5.5 `PurchasingController`, non-consumable ids
+  `skins_<camo|metallic|cosmic|homage>_pack` at $0.99 and `skins_all_packs`
+  at $1.99 - the only price tiers. `DOODLEBUGS_IAP` is a Player Settings
+  define for iOS and Android only; desktop hides premium paints. BUY cards,
+  RESTORE PURCHASES and purchase feedback live in `UI/Hangar/PaintShop.cs`). Both are server-write NetworkVariables on `PlaneAppearance`
   (`NetModelId` / `NetSkinId`); hangar picks go through
   `RequestSelectModelServerRpc` / `RequestSelectSkinServerRpc`.
   `PlaneSkinManager` (scene NetworkObject — `Doodlebugs → Setup Plane Skin

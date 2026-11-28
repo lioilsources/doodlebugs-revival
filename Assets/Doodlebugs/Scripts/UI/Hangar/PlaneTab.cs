@@ -6,8 +6,10 @@ using UnityEngine.UI;
 /// PLANE tab (Prompts/30 §4): a strip of shapes (one-of-a-kind per match,
 /// taken ones show who flies them) above a strip of paints. Every tap goes
 /// to the server like before; the big plane in the hangar's left column
-/// shows the result. Premium paints are hidden unless the build has the
-/// store (PlaneSkinCatalog.PremiumOffered, plan 33 W1).
+/// shows the result. Premium paints show only in builds with the store
+/// (PlaneSkinCatalog.PremiumOffered: iOS and Android); a locked pack gets a
+/// BUY card with the store price and the head row a RESTORE PURCHASES pill
+/// (both from PaintShop).
 /// </summary>
 public class PlaneTab : MonoBehaviour
 {
@@ -24,7 +26,21 @@ public class PlaneTab : MonoBehaviour
     // freed the composites the new tab already showed (plan 33 U2).
     private static int _live;
 
-    private void Awake() => _live++;
+    private void Awake()
+    {
+        _live++;
+#if DOODLEBUGS_IAP
+        var iap = IAPManager.Instance;
+        if (iap != null)
+        {
+            iap.OnEntitlementsChanged += OnStoreChanged;
+            iap.OnPricesChanged += OnStoreChanged;
+        }
+#endif
+    }
+
+    // A purchase or the store's prices arrive while the tab is open
+    private void OnStoreChanged() => _refreshAt = Time.unscaledTime;
 
     public static PlaneTab Build(RectTransform parent)
     {
@@ -84,21 +100,27 @@ public class PlaneTab : MonoBehaviour
         hl.childControlHeight = false;
         hl.childForceExpandWidth = false;
         hl.childAlignment = TextAnchor.MiddleLeft;
-        Ui.AutoText(head, "Title", "PAINT", UiTheme.Label, 15, UiTheme.OnBackdrop);
+        Ui.AutoText(head, "Title", Loc.T("planes.paint"), UiTheme.Label, 15, UiTheme.OnBackdrop);
         if (!PlaneSkinCatalog.PremiumOffered)
         {
             Ui.AutoText(head, "Count", PlaneSkinCatalog.OfferedCount.ToString(), UiTheme.Label, 15, UiTheme.TextDim);
         }
         else foreach (Filter f in System.Enum.GetValues(typeof(Filter)))
         {
-            string text = f == Filter.All ? "All " + PlaneSkinCatalog.Count
-                        : f == Filter.Free ? "Free" : "Premium · soon";
+            string text = f == Filter.All ? Loc.F("planes.filter_all", PlaneSkinCatalog.Count)
+                        : f == Filter.Free ? Loc.T("planes.filter_free") : Loc.T("planes.filter_premium");
             var (r, bg, label) = Ui.Pill(head, "F_" + f, text, UiTheme.GlassLight, UiTheme.OnBackdrop, 22f);
             var captured = f;
             bg.raycastTarget = true;
             Ui.Press(bg, () => { _filter = captured; Refresh(); });
             _filterPills.Add((r.gameObject, label));
         }
+#if DOODLEBUGS_IAP
+        // Own node: the head row's layout group would line it up with the filters
+        var right = Ui.Node(root, "PaintHeadRight");
+        Ui.TopBand(right, 108f, 22f);
+        PaintShop.RestorePill(right);
+#endif
 
         _paintContent = Strip(root, "Paints", 134f, 52f, 8f);
     }
@@ -157,15 +179,15 @@ public class PlaneTab : MonoBehaviour
             if (taken) img.color = new Color(1f, 1f, 1f, 0.35f);
             else img.color = UiTheme.Active.ArtTint;
 
-            var name = Ui.Text(card.Face.transform, "Name", def.DisplayName, UiTheme.Display, 18, mine ? UiTheme.OnPick : UiTheme.Ink, TextAnchor.MiddleCenter);
+            var name = Ui.Text(card.Face.transform, "Name", def.LocalizedName, UiTheme.Display, 18, mine ? UiTheme.OnPick : UiTheme.Ink, TextAnchor.MiddleCenter);
             Ui.TopBand(name.rectTransform, 55f, 20f);
             name.horizontalOverflow = HorizontalWrapMode.Overflow;
             var el = ElementProfile.Get(def.Element);
-            var elem = Ui.Text(card.Face.transform, "Element", el.DisplayName, UiTheme.Label, UiTheme.SizeSmall,
+            var elem = Ui.Text(card.Face.transform, "Element", el.LocalizedName, UiTheme.Label, UiTheme.SizeSmall,
                 mine ? UiTheme.OnPick : UiTheme.TextDim, TextAnchor.MiddleCenter);
             Ui.TopBand(elem.rectTransform, 75f, 16f);
 
-            string chip = mine ? "YOURS" : taken ? WhoFlies(id) : null;
+            string chip = mine ? Loc.T("planes.yours") : taken ? WhoFlies(id) : null;
             if (chip != null)
             {
                 var (r, _, _) = Ui.Pill(card.Face.transform, "Chip", chip, UiTheme.Ink, UiTheme.Paper, 18f, 12, UiTheme.Label);
@@ -185,7 +207,7 @@ public class PlaneTab : MonoBehaviour
     private static string WhoFlies(int modelId)
     {
         var mgr = PlaneSkinManager.Instance;
-        if (mgr == null) return "TAKEN";
+        if (mgr == null) return Loc.T("planes.taken");
         foreach (var c in mgr.Claims)
         {
             if (c.ModelId != modelId) continue;
@@ -200,7 +222,7 @@ public class PlaneTab : MonoBehaviour
                 }
             }
         }
-        return "TAKEN";
+        return Loc.T("planes.taken");
     }
 
     private static readonly Dictionary<int, Sprite> _swatchSprites = new();
@@ -219,18 +241,31 @@ public class PlaneTab : MonoBehaviour
     private void BuildPaints(int model, int skin)
     {
         foreach (Transform c in _paintContent) Destroy(c.gameObject);
+#if DOODLEBUGS_IAP
+        var iap = IAPManager.Instance;
+        bool firstPremium = true;
+#endif
         for (int i = 0; i < PlaneSkinCatalog.Count; i++)
         {
             var def = PlaneSkinCatalog.Get(i);
             if (def.IsPremium && !PlaneSkinCatalog.PremiumOffered) continue;
+            if (_filter == Filter.Free && def.IsPremium) continue;
+            if (_filter == Filter.Premium && !def.IsPremium) continue;
 #if DOODLEBUGS_IAP
-            var iap = IAPManager.Instance;
-            bool unlocked = iap == null || iap.IsSkinUnlocked(i);
+            bool unlocked = !def.IsPremium || (iap != null && iap.IsSkinUnlocked(i));
+            var bundle = IAPManager.BundleForSkin(i);
+            if (def.IsPremium && iap != null)
+            {
+                // ALL PACKS first, while it saves money (three or four packs
+                // left); then a BUY card in front of each locked pack.
+                if (firstPremium && iap.UnownedPackCount >= 3) PaintShop.BuyCard(_paintContent, IAPManager.AllPacks);
+                firstPremium = false;
+                if (bundle.HasValue && bundle.Value.SkinIds[0] == i && !iap.Owns(bundle.Value))
+                    PaintShop.BuyCard(_paintContent, bundle.Value);
+            }
 #else
             bool unlocked = true;
 #endif
-            if (_filter == Filter.Free && def.IsPremium) continue;
-            if (_filter == Filter.Premium && !def.IsPremium) continue;
             bool mine = i == skin;
 
             var r = Ui.Node(_paintContent, "Paint_" + def.Key);
@@ -263,7 +298,16 @@ public class PlaneTab : MonoBehaviour
                 var lk = Ui.Sprite(r, "Lock", UiSprites.Lock);
                 lk.color = UiTheme.Ink;
                 Ui.Inset(lk.rectTransform, 12, 12, 12, 12);
-                continue;   // D4: nothing to buy yet
+#if DOODLEBUGS_IAP
+                // Tapping a locked paint buys its pack and equips it
+                if (bundle.HasValue)
+                {
+                    var b = bundle.Value;
+                    int want = i;
+                    Ui.Press(face, () => PaintShop.Buy(b, want));
+                }
+#endif
+                continue;
             }
             if (!mine)
             {
@@ -273,7 +317,9 @@ public class PlaneTab : MonoBehaviour
         }
     }
 
-    private void Select(int id, bool model)
+    /// <summary>Asks the server to put shape / paint <paramref name="id"/> on
+    /// this device's planes (also PaintShop, after a purchase).</summary>
+    public static void SendPick(int id, bool model)
     {
         foreach (var p in FindObjectsByType<PlayerController>(FindObjectsSortMode.None))
         {
@@ -283,6 +329,11 @@ public class PlaneTab : MonoBehaviour
             if (model) a.RequestSelectModelServerRpc(id);
             else a.RequestSelectSkinServerRpc(id);
         }
+    }
+
+    private void Select(int id, bool model)
+    {
+        SendPick(id, model);
         SfxManager.PlayConfirm();
         SfxManager.Haptic(HapticKind.Light);
         Telemetry.Log(model ? "plane_pick" : "skin_pick", ("id", id));
@@ -292,6 +343,14 @@ public class PlaneTab : MonoBehaviour
 
     private void OnDestroy()
     {
+#if DOODLEBUGS_IAP
+        var iap = IAPManager.Instance;
+        if (iap != null)
+        {
+            iap.OnEntitlementsChanged -= OnStoreChanged;
+            iap.OnPricesChanged -= OnStoreChanged;
+        }
+#endif
         if (--_live > 0) return;   // a newer tab still shows these previews
         // Free the composited previews, keep what planes wear
         var worn = new List<(int, int)>();
