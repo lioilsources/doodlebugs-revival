@@ -226,6 +226,7 @@ public class StoreShotDirector : MonoBehaviour
     private void OnDeath(PlayerController victim, ulong killer, int killerIdx, bool credited, KillCause cause)
     {
         if (_deathAt < 0f) _deathAt = Time.realtimeSinceStartup;
+        Mark("boom");   // a recording gets its explosion sounds laid here
     }
 
     private void OnRunEnded(ulong _) => _runEnded = true;
