@@ -11,7 +11,8 @@ Instructions for Claude Code when working in this repository.
 The product plan lives in `ROADMAP.md` (Czech). Read it before proposing or
 planning any feature; it defines phases, KPIs and open decisions D1–D9.
 
-**Status:** v2.13.0 tagged 2026-11-22; CI ships every `v*.*.*` tag to
+**Status:** v2.13.0 tagged 2026-11-22, 2.14.0 (paint packs IAP + 45
+languages) on `feat/iap`; CI ships every `v*.*.*` tag to
 TestFlight / Firebase App Distribution. Store submission is plan 33. Boot
 shows Home (PLAY / PARTY, `HangarScreen`'s Searching view): PLAY is a solo
 session against combat bots on loopback, PARTY is the LAN / Multipeer
@@ -452,9 +453,12 @@ All network prefabs must be registered in `Assets/Doodlebugs/Prefabs/NetworkPref
 
 - A plane's look = (shape, skin): `PlaneModelCatalog` (16 concepts, 15
   shipped — canard never passed the gate; all free) × `PlaneSkinCatalog`
-  (50 liveries: 12 free + 4 IAP bundles via `IAPManager`, store products not
-  created yet so premium skins are effectively unbuyable — the paywall is
-  deliberately inert until then). Both are server-write NetworkVariables on `PlaneAppearance`
+  (50 liveries: 12 free + 38 premium in 4 packs sold through `IAPManager`,
+  Unity IAP 5.5 `PurchasingController`, non-consumable ids
+  `skins_<camo|metallic|cosmic|homage>_pack` at $0.99 and `skins_all_packs`
+  at $1.99 - the only price tiers. `DOODLEBUGS_IAP` is a Player Settings
+  define for iOS and Android only; desktop hides premium paints. BUY cards,
+  RESTORE PURCHASES and purchase feedback live in `UI/Hangar/PaintShop.cs`). Both are server-write NetworkVariables on `PlaneAppearance`
   (`NetModelId` / `NetSkinId`); hangar picks go through
   `RequestSelectModelServerRpc` / `RequestSelectSkinServerRpc`.
   `PlaneSkinManager` (scene NetworkObject — `Doodlebugs → Setup Plane Skin

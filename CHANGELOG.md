@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.14.0] - 2026-11-28
+- Paint packs on sale (iOS, Android): Camo, Metallic, Cosmic and Homage
+  ($0.99 each) and All 4 Packs ($1.99), non-consumable, cosmetic only.
+  Unity IAP 5.5.1 (`PurchasingController`), `DOODLEBUGS_IAP` defined for
+  iOS and Android; desktop builds stay without the store.
+- PLANE tab: the 38 premium paints are back, locked ones behind a green BUY
+  card with the store's localised price; tapping a locked paint buys its
+  pack and equips it. RESTORE PURCHASES next to the PAINT title. Purchase
+  feedback: banner, sound, haptic, paints unlock at once.
+- "Premium · soon" filter is just "Premium".
+- UI in 45 languages (PR #57 merged into this release); every new shop
+  string translated.
+- Store texts in every locale: solo against bots (PLAY / PARTY), the
+  optional paint packs instead of "no in-app purchases".
+- Android manifest declares `com.android.vending.BILLING`.
+- `ios_store_media` lane reads `fastlane/metadata/ios` (per-locale texts).
+
 ## [31/03/2026]
 - Foreground tile shatter effect on bullet hit — tiles break apart on projectile collision
 - Fix invisible parallax foreground caused by wrong tile pivot offset
