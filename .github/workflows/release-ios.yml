@@ -102,6 +102,11 @@ jobs:
           BUILD_VERSION: ${{ steps.version.outputs.version }}
         run: ./ci/unity-build.sh ios Builds/iOS
 
+      # The Unity build can run for over an hour without touching the
+      # keychain; unlock it again so codesign finds it open.
+      - name: Unlock signing keychain again
+        run: ./ci/unlock-keychain.sh --unlock-only
+
       - name: Archive, export and upload to TestFlight
         run: bundle exec fastlane ios ios_beta
 

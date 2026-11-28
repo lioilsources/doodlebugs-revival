@@ -21,11 +21,21 @@
 set -euo pipefail
 
 : "${IOS_KEYCHAIN_PASSWORD:?IOS_KEYCHAIN_PASSWORD is required}"
-: "${IOS_P12_BASE64:?IOS_P12_BASE64 is required}"
-: "${IOS_P12_PASSWORD:?IOS_P12_PASSWORD is required}"
 
 KEYCHAIN_NAME="doodlebugs-ci.keychain-db"
 KEYCHAIN_PATH="$HOME/Library/Keychains/$KEYCHAIN_NAME"
+
+# --unlock-only: the keychain from the earlier step already exists; unlock it
+# again and restart its inactivity timer just before codesign needs the key.
+if [[ "${1:-}" == "--unlock-only" ]]; then
+  security unlock-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+  security set-keychain-settings -t 14400 -u "$KEYCHAIN_PATH"
+  echo "keychain unlocked again: $KEYCHAIN_PATH"
+  exit 0
+fi
+
+: "${IOS_P12_BASE64:?IOS_P12_BASE64 is required}"
+: "${IOS_P12_PASSWORD:?IOS_P12_PASSWORD is required}"
 
 # A leftover keychain from a crashed run would still hold an old certificate.
 security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
@@ -33,9 +43,14 @@ security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 security create-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security unlock-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-# -t 3600 -u: relock after an hour of inactivity instead of the 5-minute default,
-# so the keychain does not lock itself midway through a long Unity/Xcode build.
-security set-keychain-settings -t 3600 -u "$KEYCHAIN_PATH"
+# -t 14400 -u: relock after four hours of inactivity instead of the 5-minute
+# default. Nothing reads the keychain between this step and codesign at the end
+# of the archive: a cold Unity build (1 h) plus the Xcode compile (45 min)
+# outlasted the old one-hour timeout and codesign died with
+# errSecInternalComponent (2.14 branch build, 2026-11-28). The workflow also
+# unlocks again right before archiving (--unlock-only). The keychain is
+# deleted at the end of every job (lock-keychain.sh).
+security set-keychain-settings -t 14400 -u "$KEYCHAIN_PATH"
 
 # xcodebuild only searches keychains on the user search list. Keep the login
 # keychain in the list so anything else on the machine keeps working.
