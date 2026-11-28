@@ -7,6 +7,11 @@ on:
   push:
     tags: ['v*.*.*']
   workflow_dispatch:
+    inputs:
+      storeshots:
+        description: Store shots - iOS Simulator app with StoreShotDirector (Prompts/34), no TestFlight
+        type: boolean
+        default: false
 
 # One group PER platform, not one shared "unity-build". GitHub keeps at most
 # one *pending* run per group, so when a tag push queued both mobile jobs
@@ -18,7 +23,9 @@ on:
 # registration, and a runner executes one job at a time, so iOS and Android
 # serialize on the runner instead of on a group that also cancels runs.
 concurrency:
-  group: unity-build-ios
+  # Store-shot runs get their own group so they never cancel a pending release
+  # (and the reverse); the single runner still serializes them.
+  group: ${{ inputs.storeshots && 'unity-storeshots-ios' || 'unity-build-ios' }}
   cancel-in-progress: false
 
 env:
@@ -27,6 +34,7 @@ env:
 jobs:
   ios:
     name: Build & TestFlight
+    if: ${{ !inputs.storeshots }}
     runs-on: [self-hosted, macos-unity]
     timeout-minutes: 180
 
@@ -121,3 +129,49 @@ jobs:
       - name: Remove signing material
         if: always()
         run: ./ci/lock-keychain.sh
+
+  # workflow_dispatch with storeshots=true: the unsigned iOS Simulator app for
+  # tools/store/shoot_simulator.sh (SKIP_UNITY=1 after unzipping it into
+  # Builds/iOS-shots-dd/Build/Products/Release-iphonesimulator/).
+  storeshots:
+    name: Store shots simulator app
+    if: ${{ inputs.storeshots }}
+    runs-on: [self-hosted, macos-unity]
+    timeout-minutes: 180
+    env:
+      UNITY_LIBRARY_PER_TARGET: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.hooksPath
+          GIT_CONFIG_VALUE_0: .git/hooks
+        with:
+          lfs: true
+          clean: false
+
+      - name: Export simulator Xcode project
+        run: ./ci/unity-build.sh ios-storeshots Builds/iOS-shots
+
+      - name: Build simulator app
+        run: |
+          rm -rf Builds/iOS-shots-dd Builds/storeshots-sim.zip
+          xcodebuild -project Builds/iOS-shots/Unity-iPhone.xcodeproj -scheme Unity-iPhone \
+            -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath Builds/iOS-shots-dd CODE_SIGNING_ALLOWED=NO -quiet build
+          APP="$(find Builds/iOS-shots-dd/Build/Products -maxdepth 2 -name '*.app' -type d | head -1)"
+          [[ -n "$APP" ]] || { echo "no simulator .app" >&2; exit 1; }
+          ditto -c -k --keepParent "$APP" Builds/storeshots-sim.zip
+          ls -lh Builds/storeshots-sim.zip
+
+      - name: Upload simulator app
+        uses: actions/upload-artifact@v6
+        with:
+          name: doodlebugs-storeshots-sim
+          path: Builds/storeshots-sim.zip
+          retention-days: 7
+
+      - name: Free disk
+        if: always()
+        run: rm -rf Builds/iOS-shots Builds/iOS-shots-dd Builds/storeshots-sim.zip

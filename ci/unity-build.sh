@@ -38,11 +38,13 @@ fi
 # scripts mid-run, so the target has to be right from the start.
 case "$PLATFORM" in
   ios)     BUILD_METHOD="BuildIOS"     BUILD_TARGET="iOS" ;;
+  # Simulator app with StoreShotDirector (Prompts/34), never shipped
+  ios-storeshots) BUILD_METHOD="BuildIOSStoreShots" BUILD_TARGET="iOS" ;;
   android) BUILD_METHOD="BuildAndroid" BUILD_TARGET="Android"
            # Unity wants a file path; .aab builds an App Bundle for Google Play
            # (BuildScript switches on the suffix). A bare directory gets an APK.
            [[ "$OUTPUT" == *.apk || "$OUTPUT" == *.aab ]] || OUTPUT="${OUTPUT%/}/doodlebugs.apk" ;;
-  *)       echo "unknown platform '$PLATFORM' (expected ios or android)" >&2; exit 2 ;;
+  *)       echo "unknown platform '$PLATFORM' (expected ios, ios-storeshots or android)" >&2; exit 2 ;;
 esac
 
 # ── Locate the editor ────────────────────────────────────────────────────────
