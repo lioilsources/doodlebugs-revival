@@ -100,9 +100,9 @@ public class GameSetup : MonoBehaviour
         }
 
 #if DOODLEBUGS_IAP
-        // Plane skin entitlements (store init is best-effort - IAPManager
-        // falls back to its PlayerPrefs cache if Unity IAP isn't configured yet)
-        IAPManager.GetOrCreate();
+        // Paint pack entitlements (store init is best-effort - IAPManager
+        // falls back to its PlayerPrefs cache offline) + purchase feedback
+        PaintShop.Hook(IAPManager.GetOrCreate());
 #endif
     }
 

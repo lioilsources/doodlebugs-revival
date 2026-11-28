@@ -117,8 +117,8 @@ public static class PlaneSkinCatalog
     public static int Count => All.Length;
 
     /// <summary>Premium skins are offered (shown, locked until bought) only in
-    /// builds with the store (DOODLEBUGS_IAP). Without it they are hidden
-    /// everywhere, not shown locked (plan 33 R2/W1).</summary>
+    /// builds with the store (DOODLEBUGS_IAP, set for iOS and Android). Without
+    /// it (desktop) they are hidden everywhere, not shown locked.</summary>
 #if DOODLEBUGS_IAP
     public const bool PremiumOffered = true;
 #else

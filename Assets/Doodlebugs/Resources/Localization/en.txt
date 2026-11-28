@@ -315,7 +315,7 @@ scenes.sub=Tap an arena to drop it or bring it back.
 planes.paint=PAINT
 planes.filter_all=All {0}
 planes.filter_free=Free
-planes.filter_premium=Premium · soon
+planes.filter_premium=Premium
 planes.yours=YOURS
 
 # --- settings card and theme picker ---
@@ -370,3 +370,19 @@ pickup.handling=+HANDLING
 pickup.damage=DAMAGE x1.5
 pickup.shield_gadget=+SHIELD +GADGET
 pickup.special={0} x{1}
+
+# --- paint shop (UI/Hangar/PaintShop.cs, Skins/IAPManager.cs) ---
+shop.pack.camo=Camo Pack
+shop.pack.metallic=Metallic Pack
+shop.pack.cosmic=Cosmic Pack
+shop.pack.homage=Homage Pack
+shop.pack.all=All 4 Packs
+shop.buy=BUY {0}
+shop.restore=Restore Purchases
+shop.restoring=Restoring purchases...
+shop.restored=Purchases restored
+shop.nothing_to_restore=No purchases to restore
+shop.unlocked=Unlocked: {0}
+shop.failed=Purchase failed
+shop.pending=Waiting for approval
+shop.unavailable=Store unavailable
