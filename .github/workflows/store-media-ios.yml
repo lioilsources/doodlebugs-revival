@@ -1,6 +1,6 @@
 name: App Store media
 
-# Uploads the store texts (fastlane/metadata) and screenshots
+# Uploads the store texts (fastlane/metadata/ios) and screenshots
 # (fastlane/screenshots) to an App Store version. No binary, no submission:
 # picking the build and pressing "Add for Review" stays a human step.
 on:
